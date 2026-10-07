@@ -14,6 +14,8 @@ public interface IAppDbContext
     DbSet<AiAction> AiActions { get; }
     DbSet<Baseline> Baselines { get; }
     DbSet<BaselineItem> BaselineItems { get; }
+    DbSet<StatusUpdate> StatusUpdates { get; }
+    DbSet<ProjectSnapshot> ProjectSnapshots { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

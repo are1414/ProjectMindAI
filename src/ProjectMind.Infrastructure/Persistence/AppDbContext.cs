@@ -15,6 +15,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<AiAction> AiActions => Set<AiAction>();
     public DbSet<Baseline> Baselines => Set<Baseline>();
     public DbSet<BaselineItem> BaselineItems => Set<BaselineItem>();
+    public DbSet<StatusUpdate> StatusUpdates => Set<StatusUpdate>();
+    public DbSet<ProjectSnapshot> ProjectSnapshots => Set<ProjectSnapshot>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder) =>
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);

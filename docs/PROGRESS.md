@@ -4,6 +4,30 @@ Her oturum sonunda en üste yeni kayıt eklenir. Format: yapılanlar · varsayı
 
 ---
 
+## 2026-10-07 (15) — Faz 5: Takip ve analiz (EVM, AHP sağlık skoru, risk, S-eğrisi)
+
+- `StatusUpdates` (her durum/%/saat değişikliği) ve `ProjectSnapshots` (proje × gün tekil) tabloları — migration
+  `AddStatusHistoryAndSnapshots`. Faz 6 ML veri seti bu iki tablodan beslenecek.
+- `Analytics/EarnedValue`: efor bazlı EVM + Earned Schedule (PV eğrisi işleri iş günlerine eşit yayar; ES doğrusal ara değer;
+  tahmini bitiş = PD / SPI(t)); para birimi değerleri saat × saatlik maliyet. Baseline artık tam eforu saklar (D19).
+- `Analytics/Ahp`: kuvvet yöntemiyle özvektör, λmax, CI, CR (Saaty RI). Varsayılan 5×5 matris tutarlı (CR ≈ 0,003).
+- `ProjectHealth` (D20), `RiskRules`, `ProjectStatusService` (EVM + sağlık + uyarılar + günlük snapshot).
+- AI: `get_project_status` salt okunur aracı; prompt chat-v6. `NumberGuard`: cevaptaki sayılar bağlam/araç sonuçlarıyla
+  karşılaştırılır (Türkçe/ISO tarih, binlik/ondalık, yuvarlama, yüzde dönüşümü; ≤10 tam sayı ve WBS kodları serbest);
+  bulunmayanlar cevap altında işaretlenir (D18). CLAUDE.md kuralı buna göre güncellendi.
+- Arayüz: proje panelinde ilk sekme **Durum**: sağlık kartı (skor, seviye ikon+metin, AHP ağırlıklı bileşenler, CR),
+  EVM kartları (SPI(t), CPI, tamamlanma, tahmini bitiş, EAC saat ve maliyet), uyarılar, S-eğrisi (PV/EV/AC, dataviz referans
+  paletinin ilk üç rengi, 2px çizgi, açıklama + uç etiketleri, bugün çizgisi, üzerine gelince değerler; "Tablo olarak göster").
+- Testler 98/98: EVM ve ES elle hesaplanan senaryo (PV 24, EV 22, AC 24, SPI(t) 0,92, tahmin 9 Kasım), proje bitince SPI'nin
+  1'e dönüp SPI(t)'nin gecikmeyi göstermesi, AHP Saaty örneği (0,637/0,258/0,105, CR 0,033), tutarsız matris, sağlık/risk
+  kuralları, NumberGuard, DB entegrasyonu (geçmiş kaydı, EVM, günlük tek snapshot).
+- Görsel kontrol: test veritabanına geçmiş snapshot'lar eklenerek Durum sekmesi Playwright ile incelendi; bulunan sorunlar
+  (kritik uyarıyla "İyi" görünmesi, ondalık biçimi, başlık odak çerçevesi) düzeltildi.
+
+**Sıradaki adım**: Faz 6 — sentetik proje üreteci, haftalık snapshot veri seti, ML.NET gecikme modeli ve EVM ile karşılaştırma.
+
+---
+
 ## 2026-10-07 (14) — Faz 4: Otomatik planlama (CPM + kaynak kısıtlı çizelge + baseline)
 
 - `Planning/`: `WorkCalendar` (Pzt–Cum), `CriticalPath` (ileri/geri geçiş, bolluk, kritik yol, döngü tespiti),

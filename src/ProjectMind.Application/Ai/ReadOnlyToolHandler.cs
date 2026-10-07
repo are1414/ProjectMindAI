@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using ProjectMind.Application.Abstractions;
+using ProjectMind.Application.Analytics;
 using ProjectMind.Application.Common;
 using ProjectMind.Application.MissingWork;
 using ProjectMind.Application.Planning;
@@ -8,7 +9,8 @@ using ProjectMind.Application.Planning;
 namespace ProjectMind.Application.Ai;
 
 /// <summary>Veri değiştirmeyen araçları çalıştırır; sonuç modele JSON olarak döner, öneri kartı oluşmaz.</summary>
-public sealed class ReadOnlyToolHandler(IAppDbContext db, MissingWorkService missingWork, ScheduleService schedules)
+public sealed class ReadOnlyToolHandler(
+    IAppDbContext db, MissingWorkService missingWork, ScheduleService schedules, ProjectStatusService statuses)
 {
     public async Task<ToolExecutionResult> ExecuteAsync(int sessionId, string toolName, CancellationToken ct)
     {
@@ -77,6 +79,46 @@ public sealed class ReadOnlyToolHandler(IAppDbContext db, MissingWorkService mis
                     peopleUtilizationPercent = p.Plan.Loads.Select(l => new { l.Name, l.AssignedHours, l.UtilizationPercent }),
                     warnings = p.Plan.Warnings,
                     latestBaselineFinish = p.LatestBaseline?.PlannedFinish
+                };
+                return new ToolExecutionResult(JsonSerializer.Serialize(payload, AiJson.Options), false);
+            }
+            case AiTools.GetProjectStatus:
+            {
+                if (projectId is not { } id)
+                    return new ToolExecutionResult("Henüz proje yok; önce proje oluşturulmalı.", true);
+
+                var s = await statuses.GetAsync(id, ct);
+                var e = s.Evm;
+                var payload = new
+                {
+                    statusDate = s.StatusDate,
+                    hasBaseline = s.Baseline is not null,
+                    evm = e is null ? null : new
+                    {
+                        unit = "saat (efor)",
+                        budgetAtCompletion = e.BudgetAtCompletion,
+                        plannedValue = e.PlannedValue,
+                        earnedValue = e.EarnedValue,
+                        actualCost = e.ActualCost,
+                        scheduleVariance = e.ScheduleVariance,
+                        costVariance = e.CostVariance,
+                        spi = e.Spi,
+                        cpi = e.Cpi,
+                        spiTime = e.SpiTime,
+                        estimateAtCompletion = e.EstimateAtCompletion,
+                        percentComplete = e.PercentComplete,
+                        plannedFinish = e.PlannedFinish,
+                        forecastFinish = e.ForecastFinish,
+                        budgetAtCompletionCost = e.BudgetAtCompletionCost,
+                        estimateAtCompletionCost = e.EstimateAtCompletionCost
+                    },
+                    targetEndDate = s.Overview.Project.TargetEndDate,
+                    healthScore = s.Health.Score,
+                    healthLevel = s.Health.Level?.ToString(),
+                    healthComponents = s.Health.Components.Select(c => new { criterion = c.Criterion.ToString(), c.Weight, c.Score }),
+                    ahpConsistencyRatio = s.Health.Ahp.ConsistencyRatio,
+                    scopeGrowthPercent = s.ScopeGrowthPercent,
+                    alerts = s.Alerts.Select(a => new { severity = a.Severity.ToString(), a.Title, a.Detail })
                 };
                 return new ToolExecutionResult(JsonSerializer.Serialize(payload, AiJson.Options), false);
             }

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using ProjectMind.Application.Ai;
+using ProjectMind.Application.Analytics;
 using ProjectMind.Application.Chat;
 using ProjectMind.Application.Dependencies;
 using ProjectMind.Application.MissingWork;
@@ -25,6 +26,8 @@ public static class DependencyInjection
         services.AddScoped<ChatService>();
         services.AddScoped<MissingWorkService>();
         services.AddScoped<ScheduleService>();
+        services.AddScoped<ProjectStatusService>();
+        services.AddOptions<HealthOptions>();
         services.AddScoped<ReadOnlyToolHandler>();
         services.AddSingleton(TimeProvider.System);
         return services;

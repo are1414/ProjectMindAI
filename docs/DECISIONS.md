@@ -21,6 +21,9 @@ Bu kararlar ancak proje sahibinin açık onayıyla değişir. Değişirse eski k
 | D15 | Eksik iş önerisi **hibrit**: kural/şablon tabanlı + LLM. AI önerisi yönetici onayı olmadan eklenmez. | Açıklanabilirlik + kontrol. |
 | D17 | **(2026-10-07) Chat odaklı kullanım:** proje, iş, kişi, bağımlılık sohbetten yönetilir. AI araç çağrısı = öneri kartı (AiAction); proje yöneticisi Uygula/Vazgeç der. Sohbet kayıtları saklanır. | Proje sahibi isteği; kabul oranı akademik ölçüm. |
 | D16 | Kod İngilizce, dokümantasyon Türkçe. | — |
+| D18 | **(2026-10-07) Sayı doğrulayıcı (NumberGuard)** cevabı reddetmez; bağlamda/araç sonuçlarında olmayan sayıları cevabın altında "Doğrulanamayan sayılar" olarak işaretler. | Tam ret, zararsız sayılarda (adet, sıra) sohbeti kullanılamaz yapıyordu; görünür uyarı şeffaflığı korur. |
+| D19 | **(2026-10-07) EVM efor (saat) bazlıdır**; para birimi değerleri saat × saatlik maliyetten türetilir. Baseline'da işin **tam** eforu saklanır (plan kalan eforla yapılır). Baseline'dan sonra eklenen işler EV/AC'ye girmez, kapsam büyümesi olarak ölçülür. | Yazılım projelerinde efor birincil kaynak; EV = baseline eforu × %tamamlanma tutarlı kalır. |
+| D20 | **(2026-10-07) Sağlık skoru bileşenleri:** Takvim = SPI(t), Maliyet = CPI (1'de tavan), Kapsam = 100 − 2×büyüme%, Kaynak = kişisi olmayan kalan efor payı, Risk = bloke/gecikmiş kalan efor payı. Ağırlıklar AHP (CR < 0,10). Kritik uyarı varken seviye en fazla "Dikkat". | Açıklanabilir, ayarlanabilir (`Health` bölümü). |
 
 ## YAPILMAYACAKLAR (eklenmesi yasak)
 

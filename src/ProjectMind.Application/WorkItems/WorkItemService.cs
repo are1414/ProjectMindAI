@@ -6,7 +6,7 @@ using ProjectMind.Domain.Enums;
 
 namespace ProjectMind.Application.WorkItems;
 
-public sealed class WorkItemService(IAppDbContext db)
+public sealed class WorkItemService(IAppDbContext db, TimeProvider? clock = null)
 {
     private const int FullyComplete = 100;
 
@@ -29,6 +29,8 @@ public sealed class WorkItemService(IAppDbContext db)
         Apply(item, request);
         db.WorkItems.Add(item);
         await db.SaveChangesAsync(ct);
+        if (item.Status != WorkItemStatus.NotStarted || item.PercentComplete > 0 || item.ActualHours > 0)
+            await RecordProgressAsync(item, ct);
         return WorkItemResponse.From(item);
     }
 
@@ -36,8 +38,12 @@ public sealed class WorkItemService(IAppDbContext db)
     {
         var item = await FindAsync(projectId, id, ct);
         await ValidateAsync(projectId, id, request, ct);
+        var progressChanged = item.Status != request.Status || item.PercentComplete != request.PercentComplete
+                              || item.ActualHours != request.ActualHours;
         Apply(item, request);
         await db.SaveChangesAsync(ct);
+        if (progressChanged)
+            await RecordProgressAsync(item, ct);
         return WorkItemResponse.From(item);
     }
 
@@ -56,6 +62,21 @@ public sealed class WorkItemService(IAppDbContext db)
         db.WorkItemDependencies.RemoveRange(dependencies);
         var items = await db.WorkItems.Where(w => subtree.Contains(w.Id)).ToListAsync(ct);
         db.WorkItems.RemoveRange(items);
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>İlerleme geçmişi (EVM trendi ve ML veri seti için).</summary>
+    private async Task RecordProgressAsync(WorkItem item, CancellationToken ct)
+    {
+        db.StatusUpdates.Add(new StatusUpdate
+        {
+            WorkItemId = item.Id,
+            ProjectId = item.ProjectId,
+            Date = DateOnly.FromDateTime((clock ?? TimeProvider.System).GetLocalNow().DateTime),
+            Status = item.Status,
+            PercentComplete = item.PercentComplete,
+            ActualHours = item.ActualHours
+        });
         await db.SaveChangesAsync(ct);
     }
 

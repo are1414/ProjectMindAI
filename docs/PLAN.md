@@ -2,7 +2,7 @@
 
 **Akademik başlık:** Yapay Zekâ Destekli Yazılım Proje Planlama ve Karar Destek Sistemi: Zamanlama, Kaynak ve Kapsam Yönetimi Üzerine Bir Uygulama
 
-**Aktif faz: FAZ 5 — Takip ve analiz**
+**Aktif faz: FAZ 6 — Veri ve ML**
 
 ## Ürün akışı (tek kullanıcı: proje yöneticisi)
 
@@ -66,13 +66,14 @@
 - [x] Gantt ekranı (kritik yol / bolluk / kişisiz / üst iş), kişi doluluk tablosu, maliyet-bütçe, hedefe göre sapma
 - [x] AI: preview_schedule (salt okunur, tarih/maliyet soruları), apply_schedule (kart)
 
-### FAZ 5 — Takip ve analiz
-- [ ] StatusUpdate (durum, % tamamlanma, harcanan saat)
-- [ ] Snapshot (her güncellemede proje metrikleri)
-- [ ] EVM: PV, EV, AC, SPI, CPI, EAC, Earned Schedule ile tahmini bitiş
-- [ ] Sağlık skoru (AHP ağırlıkları configuration'da)
-- [ ] Kural tabanlı risk uyarıları (aşırı doluluk, kritik yolda gecikme, bloke iş)
-- [ ] Dashboard
+### FAZ 5 — Takip ve analiz ✅
+- [x] StatusUpdate (durum, % tamamlanma, harcanan saat — her değişiklikte)
+- [x] Snapshot (günde bir, durum hesaplandığında güncellenir)
+- [x] EVM: PV, EV, AC, SPI, CPI, EAC, Earned Schedule (SPI(t)) ile tahmini bitiş — efor bazlı + maliyet
+- [x] Sağlık skoru (AHP; ikili karşılaştırma matrisi `Health` ayarında, CR kontrolü)
+- [x] Kural tabanlı risk uyarıları (SPI/CPI eşikleri, hedef tarih, kapsam büyümesi, bloke, gecikmiş iş, kaynak)
+- [x] Dashboard: Durum sekmesi (sağlık, EVM kartları, uyarılar, S-eğrisi + tablo görünümü)
+- [x] AI: get_project_status aracı; NumberGuard (doğrulanamayan sayıları işaretler)
 
 ### FAZ 6 — Veri ve ML
 - [ ] Sentetik proje üreteci (gürültü + gizli değişken, formül ezberini önlemek için)

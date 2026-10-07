@@ -1,0 +1,299 @@
+@inject AppScope Scope
+
+@if (_error is not null)
+{
+    <div class="inline-error">@_error</div>
+}
+
+@if (_status is null)
+{
+    <div class="loading">Durum hesaplanıyor…</div>
+}
+else
+{
+    var s = _status;
+    var currency = s.Overview.Project.Currency;
+    <div class="status-grid">
+        <section class="health-card">
+            <span class="kpi-label">Proje sağlığı</span>
+            @if (s.Health.Score is { } score)
+            {
+                <div class="health-score">@Format.Number(score)<small>/100</small></div>
+                <div class="status-pill status-@LevelCss(s.Health.Level)">@LevelIcon(s.Health.Level) @LevelText(s.Health.Level)</div>
+            }
+            else
+            {
+                <div class="muted">Henüz hesaplanamıyor.</div>
+            }
+            <ul class="components">
+                @foreach (var c in s.Health.Components)
+                {
+                    <li title="AHP ağırlığı %@Format.Number(c.Weight * 100)">
+                        <span class="component-name">@CriterionText(c.Criterion)</span>
+                        <span class="component-bar"><span style="width:@(c.Score ?? 0)%"></span></span>
+                        <span class="component-value">@(c.Score is { } v ? Format.Number(v) : "—")</span>
+                    </li>
+                }
+            </ul>
+            <div class="muted small" title="AHP tutarlılık oranı; 0,10'un altı tutarlı kabul edilir">
+                AHP ağırlıkları · CR @s.Health.Ahp.ConsistencyRatio.ToString("0.000", System.Globalization.CultureInfo.GetCultureInfo("tr-TR")) @(s.Health.Ahp.IsConsistent ? "✓" : "⚠ tutarsız")
+            </div>
+        </section>
+
+        <section class="kpis">
+            @if (s.Evm is { } e)
+            {
+                <div class="stat" title="Kazanılmış takvim / geçen süre. 1'in altı: plana göre geride.">
+                    <span>Takvim performansı SPI(t)</span><strong>@Index(e.SpiTime)</strong>
+                    <em class="@IndexCss(e.SpiTime)">@IndexHint(e.SpiTime, "plandan geride", "planda veya önde")</em>
+                </div>
+                <div class="stat" title="Kazanılan değer / harcanan efor. 1'in altı: planlanandan fazla efor harcanıyor.">
+                    <span>Efor performansı CPI</span><strong>@Index(e.Cpi)</strong>
+                    <em class="@IndexCss(e.Cpi)">@IndexHint(e.Cpi, "fazla efor harcanıyor", "verimli")</em>
+                </div>
+                <div class="stat" title="EV / BAC"><span>Tamamlanma</span><strong>%@Format.Number(e.PercentComplete)</strong>
+                    <em class="muted">@Format.Number(e.EarnedValue) / @Format.Number(e.BudgetAtCompletion) saat</em></div>
+                <div class="stat" title="Earned Schedule ile tahmini bitiş">
+                    <span>Tahmini bitiş</span><strong>@Format.Date(e.ForecastFinish)</strong>
+                    <em class="@(e.ForecastFinish > s.Overview.Project.TargetEndDate ? "late" : "ontime")">hedef @Format.Date(s.Overview.Project.TargetEndDate)</em>
+                </div>
+                <div class="stat" title="BAC / CPI"><span>Tahmini toplam efor (EAC)</span>
+                    <strong>@(e.EstimateAtCompletion is { } eac ? $"{Format.Number(eac)} saat" : "—")</strong>
+                    <em class="muted">plan @Format.Number(e.BudgetAtCompletion) saat</em></div>
+                <div class="stat"><span>Tahmini maliyet</span>
+                    <strong>@(e.EstimateAtCompletionCost is { } c ? Format.Money(c, currency) : "—")</strong>
+                    <em class="muted">plan @Format.Money(e.BudgetAtCompletionCost, currency)</em></div>
+            }
+            else
+            {
+                <div class="empty-kpi">
+                    İlerleme ölçümü (EVM) için önce <strong>Plan</strong> sekmesinden planı uygulayıp baseline kaydedin.
+                    Sonra işlerin ilerlemesini sohbetten ("Login API %60 bitti, 12 saat harcandı") veya İşler sekmesinden girin.
+                </div>
+            }
+        </section>
+    </div>
+
+    <h2>Uyarılar <span class="count">@s.Alerts.Count</span></h2>
+    @if (s.Alerts.Count == 0)
+    {
+        <p class="muted">✓ Şu an uyarı yok.</p>
+    }
+    else
+    {
+        <ul class="alerts">
+            @foreach (var a in s.Alerts)
+            {
+                <li class="alert alert-@a.Severity.ToString().ToLowerInvariant()">
+                    <span class="alert-icon">@SeverityIcon(a.Severity)</span>
+                    <span><strong>@a.Title</strong> <span class="muted">(@SeverityText(a.Severity))</span><br />@a.Detail</span>
+                </li>
+            }
+        </ul>
+    }
+
+    @if (s.Evm is { } evm)
+    {
+        <div class="section-head">
+            <h2>S-eğrisi (saat)</h2>
+            <button class="btn btn-sm" @onclick="() => _showTable = !_showTable">@(_showTable ? "Grafik" : "Tablo olarak göster")</button>
+        </div>
+        @if (_showTable)
+        {
+            <table class="table table-compact">
+                <thead><tr><th>Tarih</th><th class="num">PV (plan)</th><th class="num">EV (kazanılan)</th><th class="num">AC (harcanan)</th><th class="num">Sağlık</th></tr></thead>
+                <tbody>
+                    @foreach (var h in s.History)
+                    {
+                        <tr><td>@Format.Date(h.Date)</td><td class="num">@Format.Number(h.PlannedValue)</td><td class="num">@Format.Number(h.EarnedValue)</td><td class="num">@Format.Number(h.ActualCost)</td><td class="num">@(h.HealthScore is { } hs ? Format.Number(hs) : "—")</td></tr>
+                    }
+                </tbody>
+            </table>
+        }
+        else
+        {
+            var chart = BuildChart(s, evm);
+            <div class="scurve">
+                <div class="legend">
+                    <span><i class="key key-pv"></i> PV · planlanan</span>
+                    <span><i class="key key-ev"></i> EV · kazanılan</span>
+                    <span><i class="key key-ac"></i> AC · harcanan</span>
+                </div>
+                <div class="scurve-plot" @onmouseleave="() => _hover = null">
+                    <svg viewBox="0 0 @W @H" preserveAspectRatio="none" role="img" aria-label="Planlanan, kazanılan ve harcanan eforun zamana göre birikimli değişimi">
+                        @foreach (var (y, label) in chart.YTicks)
+                        {
+                            <g>
+                                <line class="grid" x1="@PadL" x2="@(W - PadR)" y1="@F(y)" y2="@F(y)" />
+                                <text class="axis" x="@(PadL - 6)" y="@F(y + 3)" text-anchor="end">@label</text>
+                            </g>
+                        }
+                        @foreach (var (x, label) in chart.XTicks)
+                        {
+                            <g><text class="axis" x="@F(x)" y="@(H - 6)" text-anchor="middle">@label</text></g>
+                        }
+                        @if (chart.TodayX is { } tx)
+                        {
+                            <line class="today" x1="@F(tx)" x2="@F(tx)" y1="@PadT" y2="@(H - PadB)" />
+                        }
+                        <polyline class="line line-pv" points="@chart.Pv" />
+                        <polyline class="line line-ev" points="@chart.Ev" />
+                        <polyline class="line line-ac" points="@chart.Ac" />
+                        @foreach (var p in chart.EvPoints)
+                        {
+                            <circle class="dot dot-ev" cx="@F(p.X)" cy="@F(p.Y)" r="4" />
+                        }
+                        @foreach (var p in chart.AcPoints)
+                        {
+                            <circle class="dot dot-ac" cx="@F(p.X)" cy="@F(p.Y)" r="4" />
+                        }
+                        @foreach (var label in chart.EndLabels)
+                        {
+                            <g><text class="end-label" x="@F(label.X + 6)" y="@F(label.Y + 3)">@label.Text</text></g>
+                        }
+                        @if (_hover is { } hv && hv < chart.Days)
+                        {
+                            <line class="crosshair" x1="@F(chart.X(hv))" x2="@F(chart.X(hv))" y1="@PadT" y2="@(H - PadB)" />
+                        }
+                        @for (var day = 0; day < chart.Days; day++)
+                        {
+                            var d = day;
+                            <rect class="hit" x="@F(chart.X(d) - chart.Step / 2)" y="@PadT" width="@F(Math.Max(chart.Step, 1))" height="@(H - PadT - PadB)"
+                                  @onmouseenter="() => _hover = d" />
+                        }
+                    </svg>
+                    @if (_hover is { } h2 && h2 < chart.Days)
+                    {
+                        var tip = chart.Tooltip(h2);
+                        <div class="tooltip" style="left:@F(chart.X(h2) / W * 100)%">
+                            <strong>@Format.Date(tip.Date)</strong><br />
+                            <i class="key key-pv"></i> PV @Format.Number(tip.Pv)<br />
+                            @if (tip.Ev is { } tev) { <i class="key key-ev"></i> <text>EV @Format.Number(tev)</text><br /> }
+                            @if (tip.Ac is { } tac) { <i class="key key-ac"></i> <text>AC @Format.Number(tac)</text> }
+                        </div>
+                    }
+                </div>
+                <p class="muted small">Dikey çizgi: bugün. EV ve AC her gün durum hesaplandığında kaydedilen ölçümlerden gelir.</p>
+            </div>
+        }
+    }
+}
+
+@code {
+    [Parameter, EditorRequired] public int ProjectId { get; set; }
+    [Parameter] public ProjectOverview? Overview { get; set; }
+
+    private const double W = 640, H = 240, PadL = 44, PadR = 92, PadT = 10, PadB = 24;
+    private const int XTickStep = 5, YTickCount = 4;
+
+    private ProjectStatusReport? _status;
+    private ProjectOverview? _loadedFor;
+    private string? _error;
+    private bool _showTable;
+    private int? _hover;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (ReferenceEquals(_loadedFor, Overview) && _status is not null)
+            return;
+        _loadedFor = Overview;
+        try
+        {
+            _status = await Scope.RunAsync<ProjectStatusService, ProjectStatusReport>(s => s.GetAsync(ProjectId, CancellationToken.None));
+            _error = null;
+        }
+        catch (BusinessRuleException ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private static string F(double v) => v.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+    private static string Index(decimal? v) => v is { } x ? x.ToString("0.00", System.Globalization.CultureInfo.GetCultureInfo("tr-TR")) : "—";
+    private static string IndexCss(decimal? v) => v is null ? "muted" : v < 1 ? "late" : "ontime";
+    private static string IndexHint(decimal? v, string bad, string good) => v is null ? "henüz veri yok" : v < 1 ? bad : good;
+
+    private static string LevelCss(HealthLevel? l) => l switch { HealthLevel.Good => "good", HealthLevel.Warning => "warning", _ => "critical" };
+    private static string LevelIcon(HealthLevel? l) => l switch { HealthLevel.Good => "✓", HealthLevel.Warning => "▲", _ => "✕" };
+    private static string LevelText(HealthLevel? l) => l switch { HealthLevel.Good => "İyi", HealthLevel.Warning => "Dikkat", _ => "Kritik" };
+    private static string SeverityIcon(AlertSeverity s) => s switch { AlertSeverity.Critical => "✕", AlertSeverity.Warning => "▲", _ => "ℹ" };
+    private static string SeverityText(AlertSeverity s) => s switch { AlertSeverity.Critical => "kritik", AlertSeverity.Warning => "dikkat", _ => "bilgi" };
+    private static string CriterionText(HealthCriterion c) => c switch
+    {
+        HealthCriterion.Schedule => "Takvim",
+        HealthCriterion.Cost => "Efor / maliyet",
+        HealthCriterion.Scope => "Kapsam",
+        HealthCriterion.Resource => "Kaynak",
+        _ => "Risk"
+    };
+
+    private sealed record Point(double X, double Y);
+    private sealed record EndLabel(double X, double Y, string Text);
+    private sealed record Tip(DateOnly Date, decimal Pv, decimal? Ev, decimal? Ac);
+
+    private sealed class Chart
+    {
+        public required int Days { get; init; }
+        public required double Step { get; init; }
+        public required Func<int, double> X { get; init; }
+        public required string Pv { get; init; }
+        public required string Ev { get; init; }
+        public required string Ac { get; init; }
+        public required List<Point> EvPoints { get; init; }
+        public required List<Point> AcPoints { get; init; }
+        public required List<EndLabel> EndLabels { get; init; }
+        public required List<(double Y, string Label)> YTicks { get; init; }
+        public required List<(double X, string Label)> XTicks { get; init; }
+        public required double? TodayX { get; init; }
+        public required Func<int, Tip> Tooltip { get; init; }
+    }
+
+    private static Chart BuildChart(ProjectStatusReport s, EvmResult e)
+    {
+        var calendar = new WorkCalendar(e.PlannedStart);
+        int Index(DateOnly date) => WorkCalendar.WorkdaysBetween(calendar.FirstDay, date);
+
+        var history = s.History.Select(h => (Day: Index(h.Date), h)).Where(x => x.Day >= 0).ToList();
+        var forecastDay = e.ForecastFinish is { } f ? Index(f) : 0;
+        var days = Math.Max(Math.Max((int)e.PlannedDurationDays, Index(s.StatusDate) + 1), forecastDay + 1);
+        var maxY = (double)new[] { e.BudgetAtCompletion, history.Select(x => x.h.ActualCost).DefaultIfEmpty(0).Max(), history.Select(x => x.h.EarnedValue).DefaultIfEmpty(0).Max() }.Max();
+        maxY = maxY <= 0 ? 1 : maxY * 1.05;
+
+        var plotW = W - PadL - PadR;
+        var step = days > 1 ? plotW / (days - 1) : plotW;
+        double X(int d) => PadL + (days > 1 ? d * plotW / (days - 1) : 0);
+        double Y(decimal v) => H - PadB - (double)v / maxY * (H - PadT - PadB);
+        decimal PvAt(int d) => d < 0 ? 0 : d >= e.PlannedCurve.Count ? e.BudgetAtCompletion : e.PlannedCurve[d];
+
+        string Line(IEnumerable<Point> pts) => string.Join(" ", pts.Select(p => $"{F(p.X)},{F(p.Y)}"));
+        var pv = Enumerable.Range(0, days).Select(d => new Point(X(d), Y(PvAt(d)))).ToList();
+        var ev = history.Select(x => new Point(X(x.Day), Y(x.h.EarnedValue))).ToList();
+        var ac = history.Select(x => new Point(X(x.Day), Y(x.h.ActualCost))).ToList();
+
+        var labels = new List<EndLabel> { new(pv[^1].X, pv[^1].Y, "PV") };
+        if (ev.Count > 0) labels.Add(new(ev[^1].X, ev[^1].Y, "EV"));
+        if (ac.Count > 0) labels.Add(new(ac[^1].X, ac[^1].Y, "AC"));
+
+        var yTicks = Enumerable.Range(0, YTickCount + 1)
+            .Select(i => maxY * i / YTickCount)
+            .Select(v => (Y((decimal)v), Format.Number(Math.Round((decimal)v))))
+            .ToList();
+        var xTicks = Enumerable.Range(0, days).Where(d => d % XTickStep == 0)
+            .Select(d => (X(d), calendar.ToDate(d).ToString("dd.MM"))).ToList();
+        var today = Index(s.StatusDate);
+
+        return new Chart
+        {
+            Days = days, Step = step, X = X,
+            Pv = Line(pv), Ev = Line(ev), Ac = Line(ac),
+            EvPoints = ev.Count <= 30 ? ev : [], AcPoints = ac.Count <= 30 ? ac : [],
+            EndLabels = labels, YTicks = yTicks, XTicks = xTicks,
+            TodayX = today >= 0 && today < days ? X(today) : null,
+            Tooltip = d =>
+            {
+                var point = history.LastOrDefault(x => x.Day == d);
+                return new Tip(calendar.ToDate(d), PvAt(d), point.h?.EarnedValue, point.h?.ActualCost);
+            }
+        };
+    }
+}

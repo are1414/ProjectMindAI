@@ -144,6 +144,11 @@ public sealed class ChatService(
             var result = await model.CompleteTurnAsync(request, executor, ct);
             reply = string.IsNullOrWhiteSpace(result.Text) ? "Önerilerimi aşağıda görebilirsiniz." : result.Text.Trim();
             modelName = result.Model;
+
+            var evidence = string.Join("\n", [request.UserMessage, .. history.Select(h => h.Content), .. executor.Evidence]);
+            var unverified = NumberGuard.FindUnverified(reply, evidence);
+            if (unverified.Count > 0)
+                reply += $"\n\n⚠ Doğrulanamayan sayılar: {string.Join(", ", unverified)} — bu değerler sistem verisinde yok, kontrol edin.";
         }
         catch (ChatModelException ex)
         {
@@ -173,15 +178,24 @@ public sealed class ChatService(
     {
         public List<int> CreatedActionIds { get; } = [];
 
+        /// <summary>Bu turda modele dönen araç sonuçları ve kart özetleri (sayı doğrulaması için kanıt).</summary>
+        public List<string> Evidence { get; } = [];
+
         public async Task<ToolExecutionResult> ExecuteAsync(string toolName, JsonElement input, CancellationToken ct)
         {
             try
             {
+                Evidence.Add(input.GetRawText());
                 if (AiTools.ReadOnly.Contains(toolName))
-                    return await readOnlyTools.ExecuteAsync(sessionId, toolName, ct);
+                {
+                    var readOnly = await readOnlyTools.ExecuteAsync(sessionId, toolName, ct);
+                    Evidence.Add(readOnly.Content);
+                    return readOnly;
+                }
 
                 var action = await actions.ProposeAsync(sessionId, toolName, input, ct);
                 CreatedActionIds.Add(action.Id);
+                Evidence.Add(action.Summary);
                 return new ToolExecutionResult(
                     $"Öneri #{action.Id} oluşturuldu ve kullanıcı onayı bekliyor: {action.Summary}", false);
             }

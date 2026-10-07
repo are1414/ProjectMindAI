@@ -20,9 +20,10 @@ public static class AiTools
     public const string CheckMissingWork = "check_missing_work";
     public const string PreviewSchedule = "preview_schedule";
     public const string ApplySchedule = "apply_schedule";
+    public const string GetProjectStatus = "get_project_status";
 
     /// <summary>Veri değiştirmeyen, sadece bilgi döndüren araçlar (öneri kartı oluşturmaz).</summary>
-    public static readonly IReadOnlySet<string> ReadOnly = new HashSet<string> { CheckMissingWork, PreviewSchedule };
+    public static readonly IReadOnlySet<string> ReadOnly = new HashSet<string> { CheckMissingWork, PreviewSchedule, GetProjectStatus };
 
     /// <summary>Toplu uygulamada sıra: önce proje, sonra kişiler, işler, bağımlılıklar, silmeler.</summary>
     public static int ApplyOrder(string toolName) => toolName switch
@@ -148,6 +149,12 @@ public static class AiTools
         new(PreviewSchedule,
             "Otomatik planı hesaplar (veri değiştirmez): kritik yol, kaynak kısıtlı tahmini bitiş, hedefe göre sapma, " +
             "kişi doluluğu, maliyet ve uyarılar. Tarih/süre/maliyet sorularında ve plan yorumlamada kullan; sayıları buradan al.",
+            Schema(new { })),
+
+        new(GetProjectStatus,
+            "Projenin güncel durumunu döndürür (veri değiştirmez): baseline'a göre EVM (PV, EV, AC, SPI, CPI, SPI(t), " +
+            "EAC, tahmini bitiş), AHP ağırlıklı sağlık skoru ve bileşenleri, risk uyarıları. 'Proje ne durumda', 'gecikiyor mu', " +
+            "'neden', 'en büyük risk ne' gibi sorularda kullan.",
             Schema(new { })),
 
         new(ApplySchedule,

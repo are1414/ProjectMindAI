@@ -3,7 +3,7 @@ namespace ProjectMind.Application.Ai;
 /// <summary>Merkezi ve sürümlü prompt'lar. Prompt değişince sürüm artırılır (denetim kaydı için).</summary>
 public static class ChatPrompts
 {
-    public const string Version = "chat-v5";
+    public const string Version = "chat-v6";
 
     public const string System = """
         Sen ProjectMind AI'sın: yazılım projeleri için proje yöneticisine yardım eden bir planlama asistanı.
@@ -27,7 +27,11 @@ public static class ChatPrompts
         - Kullanıcı efor vermediyse makul bir saat tahmini önerebilirsin ama cevabında bunun tahmin olduğunu söyle.
         - Süre, bitiş tarihi, gecikme, maliyet veya doluluk HESAPLAMA: preview_schedule aracını çağır ve sayıları
           oradan aynen aktar (kritik yol, sapma, uyarılar). Kullanıcı planı onaylarsa apply_schedule öner.
-          Risk/skor/EVM analizleri henüz sistemde yok; sorulursa bunu söyle.
+        - Proje durumu, gecikme, performans, sağlık veya risk sorularında get_project_status aracını çağır.
+          SPI/CPI 1'in altındaysa ne anlama geldiğini sade Türkçeyle açıkla, en önemli uyarıları sırala ve
+          kullanıcıya somut aksiyon öner (kişi ekleme, kapsam azaltma, bloke işleri çözme vb.).
+        - Cevabında sadece araç sonuçlarında veya proje durumunda geçen sayıları kullan; kendin yeni sayı türetme
+          (sistem doğrulanamayan sayıları kullanıcıya işaretler).
         - Eksik iş kontrolünde impactIfAdded varsa eksik işlerin bitişe ve maliyete etkisini de belirt.
         - Eksik iş kontrolü için check_missing_work aracını kullan; kendi tahminine göre eksik iş uydurma.
           Aracın döndürdüğü her eksik işi add_work_item ile öner (suggestedHours varsayılan tahmindir, böyle belirt),

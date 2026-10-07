@@ -31,8 +31,14 @@ public abstract class ServiceTestBase : IDisposable
         new(new ProjectService(Db), new PersonService(Db), new WorkItemService(Db), new DependencyService(Db));
 
     /// <summary>Testlerde "bugün" proje başlangıcından önce: plan proje başlangıç tarihinden başlar.</summary>
-    protected ScheduleService NewScheduleService() =>
-        new(Db, NewOverviewService(), new FixedClock(new DateTimeOffset(2026, 10, 1, 9, 0, 0, TimeSpan.Zero)));
+    private static readonly DateTimeOffset Today = new(2026, 10, 1, 9, 0, 0, TimeSpan.Zero);
+
+    protected ScheduleService NewScheduleService(DateTimeOffset? now = null) =>
+        new(Db, NewOverviewService(), new FixedClock(now ?? Today));
+
+    protected ProjectMind.Application.Analytics.ProjectStatusService NewStatusService(DateTimeOffset? now = null) =>
+        new(Db, NewScheduleService(now), new FixedClock(now ?? Today),
+            Microsoft.Extensions.Options.Options.Create(new ProjectMind.Application.Analytics.HealthOptions()));
 
     protected AiActionService NewActionService() =>
         new(Db, new ProjectService(Db), new PersonService(Db), new WorkItemService(Db), new DependencyService(Db),
@@ -50,7 +56,7 @@ public abstract class ServiceTestBase : IDisposable
         var overview = NewOverviewService();
         return new ChatService(Db, model, NewActionService(),
             new ReadOnlyToolHandler(Db, new ProjectMind.Application.MissingWork.MissingWorkService(overview, NewScheduleService()),
-                NewScheduleService()), new ProjectService(Db),
+                NewScheduleService(), NewStatusService()), new ProjectService(Db),
             new ProjectContextBuilder(Db, overview, TimeProvider.System), new AiOptions());
     }
 

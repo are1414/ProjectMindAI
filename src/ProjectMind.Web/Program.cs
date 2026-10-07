@@ -18,6 +18,8 @@ var connectionString = builder.Configuration.GetConnectionString("Default")
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(connectionString);
 builder.Services.Configure<AiOptions>(builder.Configuration.GetSection(AiOptions.SectionName));
+builder.Services.Configure<ProjectMind.Application.Analytics.HealthOptions>(
+    builder.Configuration.GetSection(ProjectMind.Application.Analytics.HealthOptions.SectionName));
 builder.Services.PostConfigure<AiOptions>(o =>
 {
     var legacyKey = string.IsNullOrWhiteSpace(o.ApiKey) ? null : o.ApiKey.Trim();

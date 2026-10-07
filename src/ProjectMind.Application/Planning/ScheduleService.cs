@@ -76,13 +76,15 @@ public sealed class ScheduleService(IAppDbContext db, ProjectOverviewService ove
             parent.PlannedEnd = leaves.Max(w => w.PlannedEnd);
         }
 
+        // Baseline'da işin TAM eforu saklanır: EVM'de EV = baseline eforu × %tamamlanma.
         var cost = preview.Overview.People.ToDictionary(p => p.Id, p => p.HourlyCost);
+        var fullHours = preview.Overview.WorkItems.ToDictionary(w => w.Id, w => w.EstimatedHours);
         db.Baselines.Add(new Baseline
         {
             ProjectId = projectId,
             PlannedStart = plan.Start,
             PlannedFinish = plan.Finish,
-            TotalHours = plan.TotalHours,
+            TotalHours = plan.Activities.Sum(a => fullHours[a.Id]),
             PlannedCost = plan.PlannedCost,
             Items = plan.Activities.Select(a => new BaselineItem
             {
@@ -90,7 +92,7 @@ public sealed class ScheduleService(IAppDbContext db, ProjectOverviewService ove
                 Name = a.Name,
                 PlannedStart = a.Start,
                 PlannedEnd = a.Finish,
-                Hours = a.Hours,
+                Hours = fullHours[a.Id],
                 AssigneeId = a.AssigneeId,
                 HourlyCost = a.AssigneeId is { } p ? cost.GetValueOrDefault(p) : 0
             }).ToList()

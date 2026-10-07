@@ -130,3 +130,34 @@ internal sealed class BaselineItemConfiguration : IEntityTypeConfiguration<Basel
         b.Property(x => x.HourlyCost).HasPrecision(18, 2);
     }
 }
+
+internal sealed class StatusUpdateConfiguration : IEntityTypeConfiguration<StatusUpdate>
+{
+    public void Configure(EntityTypeBuilder<StatusUpdate> b)
+    {
+        b.Property(x => x.Status).HasConversion<string>().HasMaxLength(50);
+        b.Property(x => x.ActualHours).HasPrecision(8, 2);
+        b.HasIndex(x => new { x.ProjectId, x.Date });
+        // İş silinince geçmişi de silinir. ProjectId sadece indeks (proje silmede işler zaten siliniyor).
+        b.HasOne<WorkItem>().WithMany()
+            .HasForeignKey(x => x.WorkItemId).OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+internal sealed class ProjectSnapshotConfiguration : IEntityTypeConfiguration<ProjectSnapshot>
+{
+    public void Configure(EntityTypeBuilder<ProjectSnapshot> b)
+    {
+        b.HasIndex(x => new { x.ProjectId, x.Date }).IsUnique();
+        foreach (var p in new[] { nameof(ProjectSnapshot.PlannedValue), nameof(ProjectSnapshot.EarnedValue),
+                     nameof(ProjectSnapshot.ActualCost), nameof(ProjectSnapshot.BudgetAtCompletion),
+                     nameof(ProjectSnapshot.EstimateAtCompletion), nameof(ProjectSnapshot.ScopeHours) })
+            b.Property(p).HasPrecision(12, 2);
+        foreach (var p in new[] { nameof(ProjectSnapshot.Spi), nameof(ProjectSnapshot.Cpi), nameof(ProjectSnapshot.SpiTime) })
+            b.Property(p).HasPrecision(6, 3);
+        b.Property(x => x.PercentComplete).HasPrecision(5, 1);
+        b.Property(x => x.HealthScore).HasPrecision(5, 1);
+        b.HasOne<Project>().WithMany()
+            .HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Cascade);
+    }
+}

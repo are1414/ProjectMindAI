@@ -31,12 +31,17 @@ else
     </div>
 
     <nav class="tabs">
+        <button class="tab @(_tab == Tab.Status ? "active" : "")" @onclick="() => _tab = Tab.Status">Durum</button>
         <button class="tab @(_tab == Tab.Work ? "active" : "")" @onclick="() => _tab = Tab.Work">İşler (@Overview.WorkItems.Count)</button>
         <button class="tab @(_tab == Tab.Plan ? "active" : "")" @onclick="() => _tab = Tab.Plan">Plan (Gantt)</button>
         <button class="tab @(_tab == Tab.Team ? "active" : "")" @onclick="() => _tab = Tab.Team">Ekip (@Overview.People.Count)</button>
     </nav>
 
-    @if (_tab == Tab.Plan)
+    @if (_tab == Tab.Status)
+    {
+        <StatusPanel ProjectId="Overview.Project.Id" Overview="Overview" />
+    }
+    else if (_tab == Tab.Plan)
     {
         <PlanPanel ProjectId="Overview.Project.Id" Overview="Overview" OnDataChanged="OnDataChanged" />
     }
@@ -185,9 +190,9 @@ else
 
     private enum Field { Name, Hours, Percent }
 
-    private enum Tab { Work, Plan, Team }
+    private enum Tab { Status, Work, Plan, Team }
 
-    private Tab _tab = Tab.Work;
+    private Tab _tab = Tab.Status;
 
     // Açık olan üst işler; varsayılan: hepsi kapalı (sadece üst seviye görünür, sayfa kısa kalır).
     private readonly HashSet<int> _expanded = [];
