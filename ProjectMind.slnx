@@ -1,9 +1,9 @@
 <Solution>
   <Folder Name="/src/">
-    <Project Path="src/ProjectMind.Api/ProjectMind.Api.csproj" />
     <Project Path="src/ProjectMind.Application/ProjectMind.Application.csproj" />
     <Project Path="src/ProjectMind.Domain/ProjectMind.Domain.csproj" />
     <Project Path="src/ProjectMind.Infrastructure/ProjectMind.Infrastructure.csproj" />
+    <Project Path="src/ProjectMind.Web/ProjectMind.Web.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/ProjectMind.Tests/ProjectMind.Tests.csproj" />

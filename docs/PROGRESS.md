@@ -4,6 +4,33 @@ Her oturum sonunda en üste yeni kayıt eklenir. Format: yapılanlar · varsayı
 
 ---
 
+## 2026-10-07 (2) — Faz 2: tek MVC web uygulamasına geçiş
+
+**Karar değişikliği (proje sahibi isteği)**: Ayrı Web API + React yerine tek ASP.NET Core MVC uygulaması;
+ML de Python yerine ML.NET ile uygulama içinde (D3, D5, D6, D7 güncellendi).
+
+**Yapılanlar**
+- `ProjectMind.Api` kaldırıldı, `ProjectMind.Web` (MVC + Razor + Bootstrap 5) eklendi. Application servisleri aynen kullanılıyor.
+- Sayfalar: `/projects` (liste), `/projects/new`, `/projects/{id}` (detay: işler + bağımlılıklar + kişiler),
+  `/projects/{id}/edit`, `/projects/{id}/people/new|{id}/edit`, `/projects/{id}/work-items/new|{id}/edit`, silme formları
+- İstek DTO'ları form bağlamaya uygun sınıflara çevrildi, Türkçe `Display` etiketleri; enum'lara Türkçe görünen adlar
+- Kişi becerileri çoklu checkbox → flags enum'a birleştiriliyor
+- NotFoundException → 404 sayfası; iş kuralı hataları formda gösteriliyor
+- Testler: 20/20 (birim 10, servis 6, web form 4 — gerçek form gönderimi + antiforgery)
+- Bootstrap/jQuery şablonundan sadece kullanılan min dosyalar tutuldu (9.5 MB → 0.5 MB)
+
+**Varsayımlar**
+- Form sayıları kültürden bağımsız (nokta ondalık) bağlanır; gösterim Türkçe biçimle (`Display` yardımcısı).
+- Migration değişmedi (`has-pending-model-changes`: değişiklik yok).
+
+**Bilinen sorunlar / sınırlar**
+- Uygulama bu ortamda SQL Server olmadığı için tarayıcıda çalıştırılmadı; sayfalar testlerde SQLite ile render ediliyor.
+  Lokal makinede `docker compose up -d` + `dotnet ef database update` + `dotnet run` ile doğrulanmalı.
+
+**Sıradaki adım**: Faz 3 — eksik iş önerisi (TaskTemplate + kural tabanlı eşleştirme + Kabul/Reddet).
+
+---
+
 ## 2026-10-07 — Faz 0 + Faz 1 tamamlandı
 
 **Yapılanlar**

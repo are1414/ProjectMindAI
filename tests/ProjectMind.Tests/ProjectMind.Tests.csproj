@@ -21,7 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\ProjectMind.Api\ProjectMind.Api.csproj" />
+    <ProjectReference Include="..\..\src\ProjectMind.Web\ProjectMind.Web.csproj" />
   </ItemGroup>
 
 </Project>

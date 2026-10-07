@@ -11,10 +11,10 @@ using ProjectMind.Infrastructure.Persistence;
 namespace ProjectMind.Tests.Integration;
 
 /// <summary>
-/// API'yi bellek içi SQLite ile ayağa kaldırır. Gerçek SQL Server gerektirmez;
+/// Web uygulamasını bellek içi SQLite ile ayağa kaldırır. Gerçek SQL Server gerektirmez;
 /// SQL Server'a özgü davranış (cascade yolları vb.) migration ile ayrıca doğrulanmalıdır.
 /// </summary>
-public sealed class ApiFactory : WebApplicationFactory<Program>
+public sealed class WebFactory : WebApplicationFactory<Program>
 {
     private readonly SqliteConnection _connection = new("DataSource=:memory:");
 

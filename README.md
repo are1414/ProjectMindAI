@@ -17,7 +17,7 @@ Gereksinimler: .NET 10 SDK, Docker.
 ```bash
 docker compose up -d                       # SQL Server
 dotnet tool restore                        # dotnet-ef
-dotnet ef database update -p src/ProjectMind.Infrastructure -s src/ProjectMind.Api
-dotnet run --project src/ProjectMind.Api   # API + /scalar (OpenAPI arayüzü)
+dotnet ef database update -p src/ProjectMind.Infrastructure -s src/ProjectMind.Web
+dotnet run --project src/ProjectMind.Web   # tarayıcıda açılan adres → /projects
 dotnet test                                # testler
 ```

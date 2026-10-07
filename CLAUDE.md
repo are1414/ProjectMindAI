@@ -29,7 +29,7 @@ Başka bir AI kullanıyorsan bu dosyanın içeriğini ilk mesaj olarak ver.
 
 ## 3. Ürün içindeki AI kuralları (runtime)
 
-- **LLM hiçbir sayıyı hesaplamaz.** Tarih, süre, maliyet, skor, olasılık → C# (veya Python ML servisi) hesaplar.
+- **LLM hiçbir sayıyı hesaplamaz.** Tarih, süre, maliyet, skor, olasılık → C# / ML.NET hesaplar.
 - LLM'e veritabanı gönderilmez; `ContextBuilder` sadece gerekli özet JSON'u hazırlar.
 - LLM cevabı her zaman **JSON şema** ile istenir ve doğrulanır. Geçersiz cevap kullanıcıya gösterilmez.
 - LLM cevabındaki her sayı, gönderilen context'te bulunmalıdır (sayı doğrulayıcı). Bulunmayan sayı → cevap reddedilir.
@@ -40,7 +40,8 @@ Başka bir AI kullanıyorsan bu dosyanın içeriğini ilk mesaj olarak ver.
 ## 4. Teknik kurallar
 
 - .NET 10, C#, nullable açık, async + `CancellationToken`.
-- Katmanlar: `Domain` ← `Application` ← `Infrastructure` ← `Api`. Controller'da iş mantığı ve EF sorgusu yok.
+- **Tek web uygulaması** (ASP.NET Core MVC + Razor). Ayrı Web API, React/npm, Python servisi yok.
+- Katmanlar: `Domain` ← `Application` ← `Infrastructure` ← `Web`. Controller'da iş mantığı ve EF sorgusu yok; controller sadece servisi çağırır ve view döner.
 - Veritabanı: SQL Server + EF Core migrations. Şema değişikliği = yeni migration (eski migration düzenlenmez).
 - Kod ve tanımlayıcılar İngilizce; dokümantasyon ve kullanıcıya dönük metinler Türkçe.
 - Magic number yok; eşikler/ağırlıklar configuration'dan veya isimli sabitlerden gelir.
@@ -48,7 +49,7 @@ Başka bir AI kullanıyorsan bu dosyanın içeriğini ilk mesaj olarak ver.
 ## 5. Bir iş ne zaman "bitti" sayılır (Definition of Done)
 
 - [ ] Aktif fazın ilgili maddesi karşılandı, kapsam dışı ekleme yok
-- [ ] `dotnet build` uyarısız/hatasız, `dotnet test` yeşil (frontend varsa `npm run build` + lint)
+- [ ] `dotnet build` uyarısız/hatasız, `dotnet test` yeşil 
 - [ ] Hesaplama içeren kodun birim testi var
 - [ ] `docs/PLAN.md` checkbox'ı işaretlendi
 - [ ] `docs/PROGRESS.md`'ye kayıt eklendi (ne yapıldı, varsayımlar, bilinen sorunlar, sıradaki adım)
@@ -56,4 +57,4 @@ Başka bir AI kullanıyorsan bu dosyanın içeriğini ilk mesaj olarak ver.
 
 ## 6. Oturum sonu raporu (her oturumda)
 
-Kısa liste: yapılanlar · değişen dosyalar · yeni API'ler · DB değişiklikleri · test sonucu · bilinen sorunlar · sıradaki adım.
+Kısa liste: yapılanlar · değişen dosyalar · yeni sayfalar · DB değişiklikleri · test sonucu · bilinen sorunlar · sıradaki adım.

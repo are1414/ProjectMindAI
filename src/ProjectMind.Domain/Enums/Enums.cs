@@ -1,64 +1,66 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace ProjectMind.Domain.Enums;
 
 public enum ProjectType
 {
-    WebApplication,
-    MobileApplication,
-    DesktopApplication,
-    Integration,
-    DataAnalytics,
-    Other
+    [Display(Name = "Web uygulaması")] WebApplication,
+    [Display(Name = "Mobil uygulama")] MobileApplication,
+    [Display(Name = "Masaüstü uygulama")] DesktopApplication,
+    [Display(Name = "Entegrasyon")] Integration,
+    [Display(Name = "Veri / Analitik")] DataAnalytics,
+    [Display(Name = "Diğer")] Other
 }
 
 public enum ProjectStatus
 {
-    Planning,
-    Active,
-    OnHold,
-    Completed,
-    Cancelled
+    [Display(Name = "Planlama")] Planning,
+    [Display(Name = "Aktif")] Active,
+    [Display(Name = "Beklemede")] OnHold,
+    [Display(Name = "Tamamlandı")] Completed,
+    [Display(Name = "İptal")] Cancelled
 }
 
 /// <summary>Bir kişinin sahip olabileceği beceriler. Kişi birden fazla beceriye sahip olabilir.</summary>
 [Flags]
 public enum Skill
 {
-    None = 0,
-    Analysis = 1,
-    Design = 2,
-    Backend = 4,
-    Frontend = 8,
-    Database = 16,
-    DevOps = 32,
-    Test = 64,
-    Documentation = 128,
-    ProjectManagement = 256
+    [Display(Name = "Yok")] None = 0,
+    [Display(Name = "Analiz")] Analysis = 1,
+    [Display(Name = "Tasarım")] Design = 2,
+    [Display(Name = "Backend")] Backend = 4,
+    [Display(Name = "Frontend")] Frontend = 8,
+    [Display(Name = "Veritabanı")] Database = 16,
+    [Display(Name = "DevOps / Sunucu")] DevOps = 32,
+    [Display(Name = "Test")] Test = 64,
+    [Display(Name = "Dokümantasyon")] Documentation = 128,
+    [Display(Name = "Proje yönetimi")] ProjectManagement = 256
 }
 
 /// <summary>Proje yaşam döngüsü fazı; eksik iş tespiti (Faz 3) bu alanı kullanır.</summary>
 public enum WorkPhase
 {
-    Analysis,
-    Design,
-    Infrastructure,
-    Development,
-    Test,
-    Closing
+    [Display(Name = "Analiz")] Analysis,
+    [Display(Name = "Tasarım")] Design,
+    [Display(Name = "Altyapı")] Infrastructure,
+    [Display(Name = "Geliştirme")] Development,
+    [Display(Name = "Test")] Test,
+    [Display(Name = "Kapanış")] Closing
 }
 
 public enum Priority
 {
-    Low,
-    Medium,
-    High,
-    Critical
+    [Display(Name = "Düşük")] Low,
+    [Display(Name = "Orta")] Medium,
+    [Display(Name = "Yüksek")] High,
+    [Display(Name = "Kritik")] Critical
 }
 
 public enum WorkItemStatus
 {
-    NotStarted,
-    InProgress,
-    Blocked,
-    Done,
-    Cancelled
+    [Display(Name = "Başlamadı")] NotStarted,
+    [Display(Name = "Devam ediyor")] InProgress,
+    [Display(Name = "Bloke")] Blocked,
+    [Display(Name = "Bitti")] Done,
+    [Display(Name = "İptal")] Cancelled
 }

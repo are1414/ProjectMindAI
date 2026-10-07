@@ -60,14 +60,14 @@ public sealed class PersonService(IAppDbContext db)
 
     private static void Validate(PersonRequest request)
     {
-        if (!SkillRules.IsValidSet(request.Skills))
+        if (!SkillRules.IsValidSet(request.CombinedSkills))
             throw new BusinessRuleException("Kişinin en az bir geçerli becerisi olmalıdır.");
     }
 
     private static void Apply(Person person, PersonRequest request)
     {
         person.Name = request.Name.Trim();
-        person.Skills = request.Skills;
+        person.Skills = request.CombinedSkills;
         person.WeeklyCapacityHours = request.WeeklyCapacityHours;
         person.HourlyCost = request.HourlyCost;
     }

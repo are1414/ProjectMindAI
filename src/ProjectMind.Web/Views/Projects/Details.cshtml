@@ -1,0 +1,148 @@
+@model ProjectDetailsViewModel
+@{
+    var p = Model.Project;
+    ViewData["Title"] = p.Name;
+}
+
+<div class="d-flex justify-content-between align-items-start mb-3">
+    <div>
+        <a asp-action="Index" class="small text-decoration-none">← Projeler</a>
+        <h1 class="h3 mb-1">@p.Name</h1>
+        <div class="text-muted">
+            @Display.Name(p.Type) · <span class="badge text-bg-secondary">@Display.Name(p.Status)</span>
+        </div>
+    </div>
+    <div class="d-flex gap-2">
+        <a asp-action="Edit" asp-route-id="@p.Id" class="btn btn-outline-secondary btn-sm">Düzenle</a>
+        <form asp-action="Delete" asp-route-id="@p.Id" method="post"
+              onsubmit="return confirm('Proje ve tüm verileri silinecek. Emin misiniz?');">
+            <button type="submit" class="btn btn-outline-danger btn-sm">Sil</button>
+        </form>
+    </div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(p.Description))
+{
+    <p>@p.Description</p>
+}
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3"><div class="card card-body"><div class="small text-muted">Başlangıç</div><div class="fs-5">@Display.Date(p.StartDate)</div></div></div>
+    <div class="col-6 col-md-3"><div class="card card-body"><div class="small text-muted">Hedef bitiş</div><div class="fs-5">@Display.Date(p.TargetEndDate)</div></div></div>
+    <div class="col-6 col-md-3"><div class="card card-body"><div class="small text-muted">Bütçe</div><div class="fs-5">@Display.Money(p.Budget, p.Currency)</div></div></div>
+    <div class="col-6 col-md-3"><div class="card card-body"><div class="small text-muted">Toplam tahmini efor</div><div class="fs-5">@Display.Number(Model.TotalEstimatedHours) saat</div></div></div>
+</div>
+
+<section id="work-items" class="mb-5">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <h2 class="h5 mb-0">İşler (@Model.WorkItems.Count)</h2>
+        <a asp-controller="WorkItems" asp-action="Create" asp-route-projectId="@p.Id" class="btn btn-primary btn-sm">+ İş ekle</a>
+    </div>
+    @if (Model.WorkItems.Count == 0)
+    {
+        <p class="text-muted border rounded p-3">2. adım: Yapılacak işleri ekleyin (analiz, backend, test, dokümantasyon…).</p>
+    }
+    else
+    {
+        <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle">
+            <thead><tr><th>İş</th><th>Faz</th><th>Beceri</th><th>Öncelik</th><th class="text-end">Efor (s)</th><th>Atanan</th><th>Durum</th><th class="text-end">%</th><th></th></tr></thead>
+            <tbody>
+            @foreach (var w in Model.WorkItems)
+            {
+                <tr>
+                    <td>@w.Name</td>
+                    <td>@Display.Name(w.Phase)</td>
+                    <td>@Display.Name(w.RequiredSkill)</td>
+                    <td>@Display.Name(w.Priority)</td>
+                    <td class="text-end">@w.EstimatedHours</td>
+                    <td>@Model.PersonName(w.AssigneeId)</td>
+                    <td>@Display.Name(w.Status)</td>
+                    <td class="text-end">@w.PercentComplete</td>
+                    <td class="text-end text-nowrap">
+                        <a asp-controller="WorkItems" asp-action="Edit" asp-route-projectId="@p.Id" asp-route-id="@w.Id" class="btn btn-link btn-sm">Düzenle</a>
+                        <form asp-controller="WorkItems" asp-action="Delete" asp-route-projectId="@p.Id" asp-route-id="@w.Id" method="post" class="d-inline"
+                              onsubmit="return confirm('İş ve bağımlılıkları silinecek. Emin misiniz?');">
+                            <button type="submit" class="btn btn-link btn-sm text-danger">Sil</button>
+                        </form>
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+        </div>
+    }
+</section>
+
+<section id="dependencies" class="mb-5">
+    <h2 class="h5">Bağımlılıklar (@Model.Dependencies.Count)</h2>
+    <p class="small text-muted">Bitiş → Başlangıç: sağdaki iş, soldaki iş bitmeden başlayamaz.</p>
+    @if (Model.WorkItems.Count >= 2)
+    {
+        var options = Model.WorkItems.Select(w => new SelectListItem(w.Name, w.Id.ToString())).ToList();
+        <form asp-controller="Dependencies" asp-action="Create" asp-route-projectId="@p.Id" method="post" class="row g-2 align-items-end mb-3">
+            <div class="col-md-5">
+                <label class="form-label small" for="PredecessorId">Önce bitmesi gereken iş</label>
+                <select id="PredecessorId" name="PredecessorId" asp-items="options" class="form-select form-select-sm"></select>
+            </div>
+            <div class="col-md-5">
+                <label class="form-label small" for="SuccessorId">Sonra başlayacak iş</label>
+                <select id="SuccessorId" name="SuccessorId" asp-items="options" class="form-select form-select-sm"></select>
+            </div>
+            <div class="col-md-2"><button type="submit" class="btn btn-outline-primary btn-sm w-100">Ekle</button></div>
+        </form>
+    }
+    else
+    {
+        <p class="text-muted small">Bağımlılık tanımlamak için en az iki iş gerekir.</p>
+    }
+    @if (Model.Dependencies.Count > 0)
+    {
+        <ul class="list-group">
+        @foreach (var d in Model.Dependencies)
+        {
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                <span>@Model.WorkItemName(d.PredecessorId) <span class="text-muted">→</span> @Model.WorkItemName(d.SuccessorId)</span>
+                <form asp-controller="Dependencies" asp-action="Delete" asp-route-projectId="@p.Id" asp-route-id="@d.Id" method="post">
+                    <button type="submit" class="btn btn-link btn-sm text-danger">Kaldır</button>
+                </form>
+            </li>
+        }
+        </ul>
+    }
+</section>
+
+<section id="people" class="mb-5">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <h2 class="h5 mb-0">Kişiler (@Model.People.Count)</h2>
+        <a asp-controller="People" asp-action="Create" asp-route-projectId="@p.Id" class="btn btn-primary btn-sm">+ Kişi ekle</a>
+    </div>
+    @if (Model.People.Count == 0)
+    {
+        <p class="text-muted border rounded p-3">Ekip üyelerini, becerilerini ve haftalık kapasitelerini ekleyin.</p>
+    }
+    else
+    {
+        <table class="table table-sm table-hover align-middle">
+            <thead><tr><th>Ad</th><th>Beceriler</th><th class="text-end">Kapasite (s/hafta)</th><th class="text-end">Saatlik maliyet</th><th></th></tr></thead>
+            <tbody>
+            @foreach (var person in Model.People)
+            {
+                <tr>
+                    <td>@person.Name</td>
+                    <td>@Display.Flags(person.Skills)</td>
+                    <td class="text-end">@person.WeeklyCapacityHours</td>
+                    <td class="text-end">@Display.Money(person.HourlyCost, p.Currency)</td>
+                    <td class="text-end text-nowrap">
+                        <a asp-controller="People" asp-action="Edit" asp-route-projectId="@p.Id" asp-route-id="@person.Id" class="btn btn-link btn-sm">Düzenle</a>
+                        <form asp-controller="People" asp-action="Delete" asp-route-projectId="@p.Id" asp-route-id="@person.Id" method="post" class="d-inline"
+                              onsubmit="return confirm('Kişi silinecek, atandığı işler boşa çıkacak. Emin misiniz?');">
+                            <button type="submit" class="btn btn-link btn-sm text-danger">Sil</button>
+                        </form>
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+</section>

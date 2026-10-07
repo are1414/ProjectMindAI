@@ -1,0 +1,86 @@
+@model WorkItemRequest
+@{
+    ProjectResponse project = ViewBag.Project;
+    IReadOnlyList<PersonResponse> people = ViewBag.People;
+    int? workItemId = ViewBag.WorkItemId;
+    var isEdit = workItemId is not null;
+    ViewData["Title"] = isEdit ? "İşi düzenle" : "Yeni iş";
+    var skillItems = Enum.GetValues<Skill>().Where(s => s != Skill.None)
+        .Select(s => new SelectListItem(Display.Name(s), s.ToString(), s == Model.RequiredSkill));
+    var peopleItems = people.Select(x => new SelectListItem($"{x.Name} ({Display.Flags(x.Skills)})", x.Id.ToString()));
+}
+
+<a asp-controller="Projects" asp-action="Details" asp-route-id="@project.Id" class="small text-decoration-none">← @project.Name</a>
+<h1 class="h3 mb-3">@ViewData["Title"]</h1>
+
+<form asp-action="@(isEdit ? "Edit" : "Create")" asp-route-projectId="@project.Id" asp-route-id="@workItemId"
+      method="post" class="card card-body">
+    <div asp-validation-summary="ModelOnly" class="alert alert-danger"></div>
+    <div class="row g-3">
+        <div class="col-md-8">
+            <label asp-for="Name" class="form-label"></label>
+            <input asp-for="Name" class="form-control" />
+            <span asp-validation-for="Name" class="text-danger small"></span>
+        </div>
+        <div class="col-md-4">
+            <label asp-for="EstimatedHours" class="form-label"></label>
+            <input asp-for="EstimatedHours" class="form-control" step="0.5" />
+            <span asp-validation-for="EstimatedHours" class="text-danger small"></span>
+        </div>
+        <div class="col-12">
+            <label asp-for="Description" class="form-label"></label>
+            <textarea asp-for="Description" class="form-control" rows="2"></textarea>
+        </div>
+        <div class="col-md-4">
+            <label asp-for="Phase" class="form-label"></label>
+            <select asp-for="Phase" asp-items="Html.GetEnumSelectList<WorkPhase>()" class="form-select"></select>
+        </div>
+        <div class="col-md-4">
+            <label asp-for="RequiredSkill" class="form-label"></label>
+            <select asp-for="RequiredSkill" asp-items="skillItems" class="form-select"></select>
+        </div>
+        <div class="col-md-4">
+            <label asp-for="Priority" class="form-label"></label>
+            <select asp-for="Priority" asp-items="Html.GetEnumSelectList<Priority>()" class="form-select"></select>
+        </div>
+        <div class="col-md-4">
+            <label asp-for="AssigneeId" class="form-label"></label>
+            <select asp-for="AssigneeId" asp-items="peopleItems" class="form-select">
+                <option value="">— Atanmadı —</option>
+            </select>
+        </div>
+        <div class="col-md-4">
+            <label asp-for="PlannedStart" class="form-label"></label>
+            <input asp-for="PlannedStart" type="date" class="form-control" />
+        </div>
+        <div class="col-md-4">
+            <label asp-for="PlannedEnd" class="form-label"></label>
+            <input asp-for="PlannedEnd" type="date" class="form-control" />
+        </div>
+    </div>
+
+    <h2 class="h6 mt-4">Gerçekleşme</h2>
+    <div class="row g-3">
+        <div class="col-md-4">
+            <label asp-for="Status" class="form-label"></label>
+            <select asp-for="Status" asp-items="Html.GetEnumSelectList<WorkItemStatus>()" class="form-select"></select>
+        </div>
+        <div class="col-md-4">
+            <label asp-for="PercentComplete" class="form-label"></label>
+            <input asp-for="PercentComplete" class="form-control" min="0" max="100" />
+            <span asp-validation-for="PercentComplete" class="text-danger small"></span>
+        </div>
+        <div class="col-md-4">
+            <label asp-for="ActualHours" class="form-label"></label>
+            <input asp-for="ActualHours" class="form-control" step="0.5" />
+            <span asp-validation-for="ActualHours" class="text-danger small"></span>
+        </div>
+    </div>
+
+    <div class="mt-4">
+        <button type="submit" class="btn btn-primary">Kaydet</button>
+        <a asp-controller="Projects" asp-action="Details" asp-route-id="@project.Id" asp-fragment="work-items" class="btn btn-link">Vazgeç</a>
+    </div>
+</form>
+
+@section Scripts { <partial name="_ValidationScriptsPartial" /> }

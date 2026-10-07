@@ -6,11 +6,11 @@ Bu kararlar ancak proje sahibinin açık onayıyla değişir. Değişirse eski k
 |---|---|---|
 | D1 | Ürün adı **ProjectMind AI** | — |
 | D2 | **Tek kullanıcı** (proje yöneticisi). Login / rol / JWT yok. | Akademik değer katmıyor, süre yiyor. |
-| D3 | Backend: **.NET 10**, ASP.NET Core Web API (controller tabanlı) | Proje sahibinin uzmanlık alanı. |
+| D3 | ~~ASP.NET Core Web API~~ → **(2026-10-07) Tek .NET 10 web uygulaması: ASP.NET Core MVC (Razor view, sunucu tarafı render).** Ayrı API katmanı yazılmaz. | Kapsamı dar tutmak; proje sahibinin uzmanlığı. |
 | D4 | Veritabanı: **Microsoft SQL Server**, EF Core migrations. Lokal ortam için `docker-compose` ile SQL Server. | Proje sahibi tercihi. |
-| D5 | Katmanlar: Domain / Application / Infrastructure / Api + Tests. Mikroservis yok. | Sade Clean Architecture yeterli. |
-| D6 | Frontend: React + TypeScript + Vite | Yaygın, hızlı. |
-| D7 | ML: Python + scikit-learn, küçük FastAPI servisi (Faz 6'da) | Akademik standart araçlar. |
+| D5 | Katmanlar: Domain / Application / Infrastructure / **Web** + Tests. Mikroservis yok. | Sade Clean Architecture yeterli. |
+| D6 | ~~React + TypeScript~~ → **(2026-10-07) Arayüz Razor view + Bootstrap 5.** Grafik/Gantt gerekince sadece küçük JS kütüphanesi (CDN değil, `wwwroot/lib`). npm/SPA yok. | Tek proje, tek dil. |
+| D7 | ~~Python FastAPI servisi~~ → **(2026-10-07) ML uygulama içinde ML.NET ile.** Python sadece opsiyonel olarak çevrimdışı analiz/grafik için (uygulamanın parçası değil). | Her şey tek .NET projesinde kalsın. |
 | D8 | LLM: `IAIService` soyutlaması; sağlayıcılar **Mock** (varsayılan), Ollama, Claude/OpenAI | Maliyet kontrolü, karşılaştırma imkânı. |
 | D9 | LLM sadece **açıklar/önerir**; tüm sayısal hesaplar deterministik kod veya ML servisinde. | Halüsinasyonu önler, savunulabilir. |
 | D10 | Baseline yöntem: **EVM / Earned Schedule**. ML modeli buna karşı kıyaslanır. | Mühendislik yönetimi bağlantısı. |
@@ -23,4 +23,4 @@ Bu kararlar ancak proje sahibinin açık onayıyla değişir. Değişirse eski k
 
 ## YAPILMAYACAKLAR (eklenmesi yasak)
 
-Login/Identity/JWT · çoklu kullanıcı/rol · mikroservis · Kubernetes · Redis · Kafka · event sourcing · CQRS/MediatR framework'ü · Hangfire · e-posta/bildirim sistemi · Jira/Azure DevOps entegrasyonu · deep learning.
+Login/Identity/JWT · çoklu kullanıcı/rol · ayrı Web API / REST katmanı · React/SPA/npm · Python servis · mikroservis · Kubernetes · Redis · Kafka · event sourcing · CQRS/MediatR framework'ü · Hangfire · e-posta/bildirim sistemi · Jira/Azure DevOps entegrasyonu · deep learning.

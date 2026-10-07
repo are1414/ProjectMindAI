@@ -2,7 +2,7 @@
 
 **Akademik başlık:** Yapay Zekâ Destekli Yazılım Proje Planlama ve Karar Destek Sistemi: Zamanlama, Kaynak ve Kapsam Yönetimi Üzerine Bir Uygulama
 
-**Aktif faz: FAZ 2 — Frontend iskeleti ve veri giriş ekranları**
+**Aktif faz: FAZ 3 — Eksik iş önerisi (kural tabanlı katman)**
 
 ## Ürün akışı (tek kullanıcı: proje yöneticisi)
 
@@ -26,20 +26,22 @@
 - [x] CLAUDE.md (AI ajan kuralları)
 - [x] DECISIONS.md, PLAN.md, PROGRESS.md
 
-### FAZ 1 — Backend temeli ve temel veri ✅
-- [x] Solution: Domain / Application / Infrastructure / Api / Tests (.NET 10)
+### FAZ 1 — Temel katmanlar ve veri ✅
+- [x] Solution: Domain / Application / Infrastructure / Web / Tests (.NET 10)
 - [x] SQL Server + EF Core, ilk migration, docker-compose (SQL Server)
 - [x] Entity'ler: Project, Person, WorkItem, WorkItemDependency
-- [x] CRUD API: projeler, kişiler, işler, bağımlılıklar
+- [x] Servisler: projeler, kişiler, işler, bağımlılıklar (CRUD + iş kuralları)
 - [x] Bağımlılık kuralları: kendine bağımlılık yok, tekrar yok, **döngü yok**
-- [x] Global hata yönetimi (ProblemDetails), OpenAPI
 - [x] Birim + entegrasyon testleri
 
-### FAZ 2 — Frontend iskeleti ve veri giriş ekranları
-- [ ] React + TS + Vite iskeleti, API istemcisi
-- [ ] Proje listesi / oluşturma / düzenleme
-- [ ] İş listesi (ekle, düzenle, sil, bağımlılık seç)
-- [ ] Kişi listesi (ekle, düzenle, sil)
+### FAZ 2 — Web arayüzü (MVC) ve veri giriş ekranları ✅
+- [x] Ayrı API kaldırıldı; tek ASP.NET Core MVC uygulaması (D3, D6)
+- [x] Proje listesi / oluşturma / düzenleme / silme
+- [x] Proje detay sayfası: işler, bağımlılıklar, kişiler tek ekranda
+- [x] İş formu (faz, beceri, öncelik, efor, atama, gerçekleşme)
+- [x] Kişi formu (çoklu beceri, kapasite, maliyet)
+- [x] Türkçe arayüz ve biçimlendirme, 404/hata sayfaları
+- [x] Form gönderimi uçtan uca testleri
 
 ### FAZ 3 — Eksik iş önerisi (kural tabanlı katman)
 - [ ] TaskTemplate (proje tipine göre faz/iş şablonu) + seed
@@ -66,9 +68,9 @@
 ### FAZ 6 — Veri ve ML
 - [ ] Sentetik proje üreteci (gürültü + gizli değişken, formül ezberini önlemek için)
 - [ ] Haftalık snapshot veri seti
-- [ ] Python FastAPI servis: LogReg / RandomForest / GBM, metrikler (F1, ROC-AUC, MAE)
-- [ ] EVM baseline ile karşılaştırma, SHAP/özellik önemi
-- [ ] .NET `IPredictionService` entegrasyonu
+- [ ] ML.NET: LogisticRegression / FastTree (GBM) / FastForest, metrikler (F1, AUC, MAE)
+- [ ] EVM baseline ile karşılaştırma, özellik önemi (Permutation Feature Importance)
+- [ ] `IPredictionService` ile uygulamaya entegrasyon
 
 ### FAZ 7 — What-if
 - [ ] Senaryolar: kişi ekle/çıkar, iş çıkar, kapasite değiştir, deadline değiştir
@@ -97,12 +99,10 @@
 src/
   ProjectMind.Domain/          Entity, enum (bağımlılıksız)
   ProjectMind.Application/     Servisler, DTO, iş kuralları, hesaplama motorları
-  ProjectMind.Infrastructure/  EF Core (SQL Server), migrations, AI sağlayıcıları
-  ProjectMind.Api/             Controller'lar, hata yönetimi, OpenAPI
+  ProjectMind.Infrastructure/  EF Core (SQL Server), migrations, AI sağlayıcıları, ML.NET
+  ProjectMind.Web/             MVC controller'lar, Razor view'lar, wwwroot (Bootstrap)
 tests/
-  ProjectMind.Tests/           Birim + entegrasyon testleri
-frontend/                      (Faz 2) React + TS + Vite
-ml/                            (Faz 6) Python ML servisi
+  ProjectMind.Tests/           Birim + entegrasyon (servis ve form) testleri
 docs/                          Plan, kararlar, ilerleme
 ```
 
