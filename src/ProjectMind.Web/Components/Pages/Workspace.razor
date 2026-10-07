@@ -5,17 +5,21 @@
 
 <PageTitle>@(_session?.Title ?? "Sohbet") · ProjectMind AI</PageTitle>
 
-@if (_session is not null)
-{
-    <div class="workspace">
-        <section class="project-pane">
+<div class="workspace">
+    <section class="project-pane">
+        @if (_session is null)
+        {
+            <div class="loading">Proje yükleniyor…</div>
+        }
+        else
+        {
             <ProjectPanel Overview="_overview" />
-        </section>
-        <section class="chat-pane">
-            <ChatPanel @key="SessionId" SessionId="SessionId" OnDataChanged="ReloadAsync" />
-        </section>
-    </div>
-}
+        }
+    </section>
+    <section class="chat-pane">
+        <ChatPanel @key="SessionId" SessionId="SessionId" HasProject="@(_session?.ProjectId is not null)" OnDataChanged="ReloadAsync" />
+    </section>
+</div>
 
 @code {
     [Parameter] public int SessionId { get; set; }
@@ -25,6 +29,8 @@
 
     protected override async Task OnParametersSetAsync()
     {
+        _session = null;
+        _overview = null;
         try
         {
             await LoadAsync();

@@ -22,6 +22,9 @@ public sealed class AiOptions
     /// <summary>Eski yapı ("AI": { "ApiKey": "..." }) — seçili sağlayıcının anahtarı boşsa bu kullanılır.</summary>
     public string? ApiKey { get; set; }
 
+    /// <summary>Ayarların nereden okunduğuna dair teşhis (bağlanmadan değil, açılışta Web katmanı doldurur).</summary>
+    public string? Diagnostics { get; set; }
+
     /// <summary>Claude'a özgü: düşünme derinliği (low/medium/high/max).</summary>
     public string ClaudeEffort { get; set; } = "low";
 }

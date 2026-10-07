@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using ProjectMind.Application.Abstractions;
 using ProjectMind.Application.Ai;
 using ProjectMind.Application.Common;
+using ProjectMind.Application.Projects;
 using ProjectMind.Domain.Entities;
 using ProjectMind.Domain.Enums;
 
@@ -17,6 +18,7 @@ public sealed class ChatService(
     IAppDbContext db,
     IChatModel model,
     AiActionService actions,
+    ProjectService projects,
     ProjectContextBuilder contextBuilder,
     IOptions<AiOptions> options)
 {
@@ -60,6 +62,41 @@ public sealed class ChatService(
         db.ChatSessions.Add(session);
         await db.SaveChangesAsync(ct);
         return new ChatSessionResponse(session.Id, projectId, session.Title, session.UpdatedAt);
+    }
+
+    /// <summary>
+    /// Sohbeti siler (mesajlar ve AI önerileri dahil). deleteProject true ise bağlı proje ve tüm verisi de silinir.
+    /// Projeye bağlı bir sohbet, proje silinmeden kaldırılamaz (proje listede görünmez olurdu); onun için ClearHistoryAsync.
+    /// </summary>
+    public async Task DeleteSessionAsync(int sessionId, bool deleteProject, CancellationToken ct)
+    {
+        var session = await db.ChatSessions.FirstOrDefaultAsync(s => s.Id == sessionId, ct)
+            ?? throw new NotFoundException("Sohbet", sessionId);
+
+        if (session.ProjectId is { } projectId)
+        {
+            if (!deleteProject)
+                throw new BusinessRuleException("Bu sohbet bir projeye bağlı. Geçmişi temizleyebilir veya projeyle birlikte silebilirsiniz.");
+            await projects.DeleteAsync(projectId, ct);
+        }
+
+        await RemoveHistoryAsync(sessionId, ct);
+        await db.ChatSessions.Where(s => s.Id == sessionId).ExecuteDeleteAsync(ct);
+    }
+
+    /// <summary>Sohbet geçmişini (mesajlar ve AI önerileri) siler; sohbet ve bağlı proje kalır.</summary>
+    public async Task ClearHistoryAsync(int sessionId, CancellationToken ct)
+    {
+        if (!await db.ChatSessions.AnyAsync(s => s.Id == sessionId, ct))
+            throw new NotFoundException("Sohbet", sessionId);
+        await RemoveHistoryAsync(sessionId, ct);
+    }
+
+    private async Task RemoveHistoryAsync(int sessionId, CancellationToken ct)
+    {
+        // Öneriler mesajlara NO ACTION ile bağlı; önce öneriler, sonra mesajlar silinir.
+        await db.AiActions.Where(a => a.ChatSessionId == sessionId).ExecuteDeleteAsync(ct);
+        await db.ChatMessages.Where(m => m.ChatSessionId == sessionId).ExecuteDeleteAsync(ct);
     }
 
     public async Task<IReadOnlyList<ChatMessageResponse>> ListMessagesAsync(int sessionId, CancellationToken ct) =>

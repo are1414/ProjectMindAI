@@ -28,15 +28,11 @@ public sealed class WebFactory : WebApplicationFactory<Program>
             services.RemoveAll<IDbContextOptionsConfiguration<AppDbContext>>();
             services.AddDbContext<AppDbContext>(o => o.UseSqlite(_connection));
         });
-    }
 
-    protected override IHost CreateHost(IHostBuilder builder)
-    {
+        // Program açılışta veritabanına sorgu atar; tablolar host kurulmadan önce hazır olmalı.
         _connection.Open();
-        var host = base.CreateHost(builder);
-        using var scope = host.Services.CreateScope();
-        scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.EnsureCreated();
-        return host;
+        using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseSqlite(_connection).Options);
+        db.Database.EnsureCreated();
     }
 
     protected override void Dispose(bool disposing)

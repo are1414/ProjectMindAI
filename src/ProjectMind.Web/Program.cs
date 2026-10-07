@@ -9,7 +9,7 @@ using ProjectMind.Web.Services;
 var builder = WebApplication.CreateBuilder(args);
 
 // Kişisel ayarlar (API anahtarları) için git'e girmeyen dosya. Örnek: appsettings.Local.example.json
-builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
+var localSettingsReport = LocalSettings.Load(builder.Configuration, builder.Environment.ContentRootPath);
 
 var connectionString = builder.Configuration.GetConnectionString("Default")
     ?? throw new InvalidOperationException("ConnectionStrings:Default tanımlı değil.");
@@ -27,6 +27,7 @@ builder.Services.PostConfigure<AiOptions>(o =>
         o.Claude.ApiKey = (useGemini ? null : legacyKey) ?? Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
     o.Gemini.ApiKey = o.Gemini.ApiKey?.Trim();
     o.Claude.ApiKey = o.Claude.ApiKey?.Trim();
+    o.Diagnostics = $"{localSettingsReport}\n{LocalSettings.Describe(o)}";
 });
 
 builder.Services.AddScoped<AppScope>();
@@ -35,14 +36,24 @@ builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 
 var app = builder.Build();
 
-var aiLabel = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<AiOptions>>().Value.ActiveModelLabel();
-app.Logger.LogInformation("AI sağlayıcısı: {Ai}", aiLabel);
+var ai = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<AiOptions>>().Value;
+app.Logger.LogInformation("AI sağlayıcısı: {Ai}\n{Diagnostics}", ai.ActiveModelLabel(), ai.Diagnostics);
 
-// Geliştirme ortamında bekleyen migration'lar açılışta uygulanır ("Invalid object name" hatası yaşanmasın).
-if (app.Environment.IsDevelopment())
+await using (var scope = app.Services.CreateAsyncScope())
 {
-    await using var scope = app.Services.CreateAsyncScope();
-    await scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.MigrateAsync();
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    // Geliştirmede bekleyen migration'lar açılışta uygulanır ("Invalid object name" hatası yaşanmasın).
+    if (app.Environment.IsDevelopment())
+        await db.Database.MigrateAsync();
+    // Isınma: EF modeli ve ilk SQL bağlantısı açılışta hazırlanır; ilk sayfa yüklemesi beklemez.
+    try
+    {
+        await db.ChatSessions.AsNoTracking().AnyAsync();
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogWarning(ex, "Veritabanı ısınma sorgusu başarısız");
+    }
 }
 
 if (!app.Environment.IsDevelopment())

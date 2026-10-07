@@ -116,3 +116,10 @@ a { color: var(--primary); text-decoration: none; }
     .chat { height: 70vh; }
     .stats { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* Yükleme ve sohbet araçları */
+.loading { color: var(--muted); padding: 2rem 0; text-align: center; }
+.chat-tools { display: flex; gap: .4rem; }
+.chat-pending { padding: .6rem 1rem; border-bottom: 1px solid var(--border); background: #fffbeb; }
+.btn-danger { color: var(--danger); border-color: #f1c0c0; }
+.btn-danger:hover { background: #fff0f0; border-color: var(--danger); }

@@ -1,18 +1,37 @@
 @inject AppScope Scope
+@inject AppEvents Events
+@inject NavigationManager Nav
 @inject IJSRuntime JS
 @inject Microsoft.Extensions.Options.IOptions<AiOptions> AiSettings
 
 <div class="chat">
     <div class="chat-header">
         <span>AI Asistan <small class="model-label">@AiSettings.Value.ActiveModelLabel()</small></span>
-        @if (PendingCount > 1)
-        {
-            <button class="btn btn-primary btn-sm" disabled="@_busy" @onclick="ApplyAllAsync">Bekleyen @PendingCount öneriyi uygula</button>
-        }
+        <div class="chat-tools">
+            @if (HasProject)
+            {
+                <button class="btn btn-sm" disabled="@_busy" @onclick="ClearHistoryAsync" title="Mesajları ve önerileri sil, proje kalsın">Geçmişi temizle</button>
+                <button class="btn btn-sm btn-danger" disabled="@_busy" @onclick="() => DeleteAsync(true)" title="Projeyi ve sohbeti sil">Projeyi sil</button>
+            }
+            else
+            {
+                <button class="btn btn-sm btn-danger" disabled="@_busy" @onclick="() => DeleteAsync(false)">Sohbeti sil</button>
+            }
+        </div>
     </div>
+    @if (PendingCount > 1)
+    {
+        <div class="chat-pending">
+            <button class="btn btn-primary btn-sm" disabled="@_busy" @onclick="ApplyAllAsync">Bekleyen @PendingCount öneriyi uygula</button>
+        </div>
+    }
 
     <div class="chat-messages" @ref="_scroller">
-        @if (_messages.Count == 0)
+        @if (_loading)
+        {
+            <div class="loading">Sohbet yükleniyor…</div>
+        }
+        else if (_messages.Count == 0)
         {
             <div class="chat-hint">
                 Merhaba! Projenizi anlatın: adı, ne zaman başlayıp biteceği, bütçesi, yapılacak işler ve ekip.
@@ -68,6 +87,7 @@
 @code {
     [Parameter, EditorRequired] public int SessionId { get; set; }
     [Parameter] public EventCallback OnDataChanged { get; set; }
+    [Parameter] public bool HasProject { get; set; }
 
     private List<ChatMessageResponse> _messages = [];
     private IReadOnlyList<AiActionResponse> _actions = [];
@@ -76,6 +96,7 @@
     private bool _busy;
     private string? _error;
     private bool _scrollPending = true;
+    private bool _loading = true;
     private ElementReference _scroller;
 
     private int PendingCount => _actions.Count(a => a.Status == AiActionStatus.Pending);
@@ -93,11 +114,38 @@
 
     private async Task LoadAsync()
     {
-        _messages = (await Scope.RunAsync<ChatService, IReadOnlyList<ChatMessageResponse>>(
-            s => s.ListMessagesAsync(SessionId, CancellationToken.None))).ToList();
-        _actions = await Scope.RunAsync<AiActionService, IReadOnlyList<AiActionResponse>>(
+        // Her sorgu kendi DbContext'iyle çalıştığı için mesajlar ve öneriler paralel yüklenir.
+        var messages = Scope.RunAsync<ChatService, IReadOnlyList<ChatMessageResponse>>(
+            s => s.ListMessagesAsync(SessionId, CancellationToken.None));
+        var actions = Scope.RunAsync<AiActionService, IReadOnlyList<AiActionResponse>>(
             s => s.ListAsync(SessionId, CancellationToken.None));
+        _messages = (await messages).ToList();
+        _actions = await actions;
+        _loading = false;
         _scrollPending = true;
+    }
+
+    private async Task ClearHistoryAsync()
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", "Bu sohbetin mesajları ve AI önerileri silinecek. Proje verisi kalacak. Devam edilsin mi?"))
+            return;
+        _busy = true;
+        await Scope.RunAsync<ChatService>(s => s.ClearHistoryAsync(SessionId, CancellationToken.None));
+        _busy = false;
+        await LoadAsync();
+    }
+
+    private async Task DeleteAsync(bool withProject)
+    {
+        var question = withProject
+            ? "Proje ve tüm verisi (işler, kişiler, bağımlılıklar) ile bu sohbet kalıcı olarak silinecek. Emin misiniz?"
+            : "Bu sohbet kalıcı olarak silinecek. Emin misiniz?";
+        if (!await JS.InvokeAsync<bool>("confirm", question))
+            return;
+        _busy = true;
+        await Scope.RunAsync<ChatService>(s => s.DeleteSessionAsync(SessionId, withProject, CancellationToken.None));
+        await Events.NotifySessionsChangedAsync();
+        Nav.NavigateTo("/");
     }
 
     private async Task SendAsync()

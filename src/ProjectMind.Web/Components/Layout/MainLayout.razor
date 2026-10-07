@@ -9,12 +9,16 @@
         <a class="btn btn-primary btn-block" href="/chat/new">+ Yeni proje sohbeti</a>
 
         <div class="sidebar-title">Sohbetler</div>
-        @if (_sessions.Count == 0)
+        @if (_sessions is null)
+        {
+            <p class="sidebar-empty">Yükleniyor…</p>
+        }
+        else if (_sessions.Count == 0)
         {
             <p class="sidebar-empty">Henüz sohbet yok.</p>
         }
         <nav>
-            @foreach (var s in _sessions)
+            @foreach (var s in _sessions ?? [])
             {
                 <NavLink class="sidebar-link" href="@($"/chat/{s.Id}")">
                     <span class="dot @(s.ProjectId is null ? "dot-draft" : "dot-project")"></span>
@@ -35,7 +39,7 @@
 </div>
 
 @code {
-    private IReadOnlyList<ChatSessionResponse> _sessions = [];
+    private IReadOnlyList<ChatSessionResponse>? _sessions;
 
     protected override async Task OnInitializedAsync()
     {

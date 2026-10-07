@@ -4,6 +4,21 @@ Her oturum sonunda en üste yeni kayıt eklenir. Format: yapılanlar · varsayı
 
 ---
 
+## 2026-10-07 (8) — Anahtar teşhisi, hızlı yükleme, sohbet silme
+
+Proje sahibi: "Mock mod yazıyor", "geçmiş geç geliyor", "sohbeti silebilmeliyim".
+- `LocalSettings`: appsettings.Local.json proje klasörü, repo kökü ve bin klasöründe aranır; bulunamazsa beklenen tam yol,
+  ".txt" uzantısı kalmışsa uyarı, JSON hatası varsa hata mesajı. Mock cevabında ve açılış logunda teşhis + maskeli anahtar durumu.
+- Hız: açılışta EF ısınma sorgusu; mesajlar ve öneriler paralel yüklenir; sohbet paneli projeyi beklemeden açılır;
+  yüklenirken "yükleniyor" göstergesi.
+- Sohbet silme: taslak sohbette "Sohbeti sil"; projeye bağlı sohbette "Geçmişi temizle" (proje kalır) ve "Projeyi sil"
+  (proje + sohbet). Onay penceresi var.
+- Varsayım: projeye bağlı sohbet, proje silinmeden tamamen silinemez (proje listede görünmez kalırdı).
+- Not: Silinen sohbetin AI öneri kayıtları da silinir (kabul oranı ölçümünden düşer).
+- Testler 41/41; arayüz Playwright ile denendi (Mock teşhis mesajı, sohbet silme → ana sayfa, kenar çubuğu güncellendi).
+
+---
+
 ## 2026-10-07 (7) — Gemini "çalışmıyor" düzeltmeleri
 
 Proje sahibi anahtarı ekledi ama chat çalışmadı (hata mesajı/commit repoya ulaşmadı; olası nedenler kodda sağlamlaştırıldı).

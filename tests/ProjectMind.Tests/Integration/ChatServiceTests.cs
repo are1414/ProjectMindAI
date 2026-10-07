@@ -76,6 +76,58 @@ public class ChatServiceTests : ServiceTestBase
         Assert.Equal("AI servisine bağlanılamadı.", reply.Content);
     }
 
+    [Fact]
+    public async Task Clear_history_keeps_session_and_project_but_removes_messages_and_actions()
+    {
+        var chat = NewChatService(new ScriptedModel(
+            (AiTools.CreateProject, new { name = "P", startDate = "2026-12-01", targetEndDate = "2027-03-31" })));
+        var session = await chat.CreateSessionAsync(_ct);
+        await chat.SendAsync(session.Id, "Proje aç", _ct);
+        await NewActionService().ApplyAllPendingAsync(session.Id, _ct);
+
+        await chat.ClearHistoryAsync(session.Id, _ct);
+
+        Assert.Empty(await chat.ListMessagesAsync(session.Id, _ct));
+        Assert.Empty(await NewActionService().ListAsync(session.Id, _ct));
+        Assert.NotNull((await chat.GetSessionAsync(session.Id, _ct)).ProjectId);
+        Assert.Single(Db.Projects);
+    }
+
+    [Fact]
+    public async Task Project_chat_cannot_be_deleted_without_its_project_but_can_with_it()
+    {
+        var chat = NewChatService(new ScriptedModel(
+            (AiTools.CreateProject, new { name = "P", startDate = "2026-12-01", targetEndDate = "2027-03-31" }),
+            (AiTools.AddWorkItem, new { name = "İş", phase = "Development", requiredSkill = "Backend", estimatedHours = 8 })));
+        var session = await chat.CreateSessionAsync(_ct);
+        await chat.SendAsync(session.Id, "Proje aç", _ct);
+        await NewActionService().ApplyAllPendingAsync(session.Id, _ct);
+
+        await Assert.ThrowsAsync<ProjectMind.Application.Common.BusinessRuleException>(() =>
+            chat.DeleteSessionAsync(session.Id, deleteProject: false, _ct));
+
+        await chat.DeleteSessionAsync(session.Id, deleteProject: true, _ct);
+
+        Assert.Empty(Db.ChatSessions);
+        Assert.Empty(Db.ChatMessages);
+        Assert.Empty(Db.AiActions);
+        Assert.Empty(Db.Projects);
+        Assert.Empty(Db.WorkItems);
+    }
+
+    [Fact]
+    public async Task Draft_chat_can_be_deleted()
+    {
+        var chat = NewChatService(new ScriptedModel());
+        var session = await chat.CreateSessionAsync(_ct);
+        await chat.SendAsync(session.Id, "Merhaba", _ct);
+
+        await chat.DeleteSessionAsync(session.Id, deleteProject: false, _ct);
+
+        Assert.Empty(Db.ChatSessions);
+        Assert.Empty(Db.ChatMessages);
+    }
+
     private sealed class FailingModel : IChatModel
     {
         public Task<ChatTurnResult> CompleteTurnAsync(ChatTurnRequest request, IChatToolExecutor tools, CancellationToken ct) =>
