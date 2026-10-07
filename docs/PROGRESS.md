@@ -4,6 +4,19 @@ Her oturum sonunda en üste yeni kayıt eklenir. Format: yapılanlar · varsayı
 
 ---
 
+## 2026-10-07 (11) — WBS numaraları, aç/kapat, sayfada düzenleme
+
+Proje sahibi isteği: id yerine 4.1 gibi numaralar, +/− ile daraltma, sayfa az yer kaplasın, saat ve metinler sayfadan düzenlensin.
+- `WorkItemTree` her satıra WBS kodu üretir (1, 1.2, 1.2.1; aynı seviyede oluşturulma sırası). Test eklendi.
+- AI bağlamında her işin `wbs` alanı; kullanıcı "4.1'i güncelle" diyebilir (prompt chat-v3).
+- İş tablosu: kompakt; Faz sütunu kaldırıldı (satır ipucunda); üst işlerde +/−; varsayılan kapalı; "Tümünü aç/kapat".
+- Satır içi düzenleme: iş adı (tüm işler), efor saati ve % (sadece yaprak işler; üst işler alt işlerden hesaplanır).
+  Enter kaydeder, Esc vazgeçer, odak çıkınca da kaydeder; mevcut WorkItemService iş kurallarından geçer, hata satır üstünde gösterilir.
+- Varsayım: Sayfadan düzenleme proje yöneticisinin doğrudan veri girişidir, AI önerisi olmadığından kart/onay gerekmez.
+- Testler 51/51; Playwright: kapalı→açık görünüm, 1.2.1 eforu 40→60 → üst toplamlar 76/100, toplam 132 saat.
+
+---
+
 ## 2026-10-07 (10) — Alt işler (WBS hiyerarşisi)
 
 Proje sahibi isteği: işlere alt iş eklenebilsin.

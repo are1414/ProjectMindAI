@@ -29,6 +29,7 @@ public class WorkItemTreeTests
         Assert.Equal([1, 2, 3, 4, 5, 6], rows.Select(r => r.Item.Id));
         Assert.Equal([0, 1, 1, 2, 2, 0], rows.Select(r => r.Depth));
         Assert.Equal([true, false, true, false, false, false], rows.Select(r => r.HasChildren));
+        Assert.Equal(["1", "1.1", "1.2", "1.2.1", "1.2.2", "2"], rows.Select(r => r.Code));
     }
 
     [Fact]

@@ -141,3 +141,18 @@ a { color: var(--primary); text-decoration: none; }
 .row-parent td { font-weight: 600; background: #fafbfc; }
 .tree-name { display: inline-block; }
 .tree-branch { color: var(--muted); margin-right: .3rem; }
+
+/* Kompakt iş tablosu, aç/kapat, satır içi düzenleme */
+.section-head { display: flex; justify-content: space-between; align-items: center; }
+.section-tools { display: flex; gap: .4rem; }
+.table-compact th, .table-compact td { padding: .32rem .55rem; font-size: .88rem; }
+.col-wbs { width: 3.5rem; white-space: nowrap; }
+.tree-toggle { width: 1.15rem; height: 1.15rem; line-height: 1rem; padding: 0; margin-right: .35rem; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); cursor: pointer; font-weight: 700; color: var(--muted); }
+.tree-toggle:hover { border-color: var(--primary); color: var(--primary); }
+.tree-toggle-space { display: inline-block; width: 1.5rem; }
+.editable { cursor: text; border-bottom: 1px dashed transparent; }
+.editable:hover { border-bottom-color: var(--muted); }
+.cell-input { width: 4.5rem; padding: .15rem .35rem; border: 1px solid var(--primary); border-radius: 4px; font: inherit; text-align: right; }
+.cell-input-wide { width: 16rem; text-align: left; }
+.inline-error { margin: .4rem 0; padding: .4rem .6rem; background: #fff0f0; color: var(--danger); border-radius: 6px; }
+.hint { color: var(--muted); font-size: .75rem; margin: .35rem 0 0; }

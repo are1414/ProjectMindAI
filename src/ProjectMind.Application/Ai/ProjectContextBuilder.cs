@@ -25,6 +25,7 @@ public sealed class ProjectContextBuilder(IAppDbContext db, ProjectOverviewServi
         if (session.ProjectId is { } projectId)
         {
             var o = await overviews.GetAsync(projectId, ct);
+            var wbs = o.WorkItemTreeRows.ToDictionary(r => r.Item.Id, r => r.Code);
             project = new
             {
                 o.Project.Id,
@@ -45,9 +46,10 @@ public sealed class ProjectContextBuilder(IAppDbContext db, ProjectOverviewServi
                     p.WeeklyCapacityHours,
                     p.HourlyCost
                 }),
-                workItems = o.WorkItems.Select(w => new
+                workItems = o.WorkItemTreeRows.Select(r => r.Item).Select(w => new
                 {
                     w.Id,
+                    wbs = wbs[w.Id],
                     w.Name,
                     parent = w.ParentId is { } parentId ? o.WorkItemName(parentId) : null,
                     phase = w.Phase.ToString(),

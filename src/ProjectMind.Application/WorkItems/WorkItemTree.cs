@@ -1,7 +1,8 @@
 namespace ProjectMind.Application.WorkItems;
 
-/// <summary>Ağaçta gösterilecek bir iş satırı: derinlik ve alt işlerden toplanan değerlerle.</summary>
-public sealed record WorkItemTreeRow(WorkItemResponse Item, int Depth, bool HasChildren, decimal RollupHours, decimal RollupPercent);
+/// <summary>Ağaçta gösterilecek bir iş satırı: WBS numarası (ör. "4.1"), derinlik ve alt işlerden toplanan değerlerle.</summary>
+public sealed record WorkItemTreeRow(
+    WorkItemResponse Item, string Code, int Depth, bool HasChildren, decimal RollupHours, decimal RollupPercent);
 
 /// <summary>
 /// WBS hiyerarşisi hesapları (veritabanından bağımsız, test edilebilir).
@@ -38,31 +39,33 @@ public static class WorkItemTree
             .ToDictionary(g => g.Key, g => g.OrderBy(i => i.Id).ToList());
 
         var rows = new List<WorkItemTreeRow>();
+        var rootNumber = 0;
         foreach (var root in items.Where(i => i.ParentId is not { } p || !byId.ContainsKey(p)).OrderBy(i => i.Id))
-            Visit(root, 0);
+            Visit(root, 0, (++rootNumber).ToString());
         return rows;
 
-        (decimal Hours, decimal DoneHours) Visit(WorkItemResponse item, int depth)
+        (decimal Hours, decimal DoneHours) Visit(WorkItemResponse item, int depth, string code)
         {
             var index = rows.Count;
             rows.Add(null!); // yer tutucu: değerler alt işler gezildikten sonra yazılır
 
             if (!children.TryGetValue(item.Id, out var kids))
             {
-                rows[index] = new WorkItemTreeRow(item, depth, false, item.EstimatedHours, item.PercentComplete);
+                rows[index] = new WorkItemTreeRow(item, code, depth, false, item.EstimatedHours, item.PercentComplete);
                 return (item.EstimatedHours, item.EstimatedHours * item.PercentComplete / FullPercent);
             }
 
             decimal hours = 0, done = 0;
+            var childNumber = 0;
             foreach (var kid in kids)
             {
-                var (h, d) = Visit(kid, depth + 1);
+                var (h, d) = Visit(kid, depth + 1, $"{code}.{++childNumber}");
                 hours += h;
                 done += d;
             }
 
             var percent = hours == 0 ? 0 : Math.Round(done / hours * FullPercent, 1);
-            rows[index] = new WorkItemTreeRow(item, depth, true, hours, percent);
+            rows[index] = new WorkItemTreeRow(item, code, depth, true, hours, percent);
             return (hours, done);
         }
     }
