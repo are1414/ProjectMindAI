@@ -1,6 +1,5 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using ProjectMind.Application.Ai;
 using ProjectMind.Application.Chat;
 using ProjectMind.Application.Dependencies;
@@ -35,7 +34,7 @@ public abstract class ServiceTestBase : IDisposable
         var overview = new ProjectOverviewService(
             new ProjectService(Db), new PersonService(Db), new WorkItemService(Db), new DependencyService(Db));
         return new ChatService(Db, model, NewActionService(), new ProjectService(Db),
-            new ProjectContextBuilder(Db, overview, TimeProvider.System), Options.Create(new AiOptions()));
+            new ProjectContextBuilder(Db, overview, TimeProvider.System), new AiOptions());
     }
 
     protected static ProjectRequest NewProject() => new()

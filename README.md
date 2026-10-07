@@ -27,6 +27,10 @@ dotnet run --project src/ProjectMind.Web
 
 ### AI bağlantısı (Gemini)
 
+**En kolay yol:** uygulamayı açın → sol menü **⚙ Ayarlar** → anahtarı yapıştırın → Kaydet. Yeniden başlatmak gerekmez.
+
+Elle yapmak isterseniz:
+
 1. https://aistudio.google.com/apikey adresinden Gemini API anahtarı alın.
 2. `src/ProjectMind.Web/appsettings.Local.example.json` dosyasını aynı klasöre `appsettings.Local.json` adıyla kopyalayın
    ve anahtarı yazın. Bu dosya `.gitignore`'dadır, GitHub'a gitmez. (**Anahtarı `appsettings.json`'a yazmayın.**)

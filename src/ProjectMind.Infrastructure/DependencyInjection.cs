@@ -15,12 +15,14 @@ public static class DependencyInjection
         services.AddDbContext<AppDbContext>(o => o.UseSqlServer(connectionString));
         services.AddScoped<IAppDbContext>(sp => sp.GetRequiredService<AppDbContext>());
 
+        // Ayarlar sayfasından anahtar değişince yeniden başlatmadan geçerli olsun: her kapsamda güncel değer.
+        services.AddScoped(sp => sp.GetRequiredService<IOptionsMonitor<AiOptions>>().CurrentValue);
         services.AddHttpClient<GeminiChatModel>(c => c.Timeout = TimeSpan.FromMinutes(2));
         services.AddScoped<ClaudeChatModel>();
         services.AddScoped<NotConfiguredChatModel>();
         services.AddScoped<IChatModel>(sp =>
         {
-            var ai = sp.GetRequiredService<IOptions<AiOptions>>().Value;
+            var ai = sp.GetRequiredService<AiOptions>();
             bool Is(string provider) => string.Equals(ai.Provider, provider, StringComparison.OrdinalIgnoreCase);
 
             if (Is(AiOptions.GeminiProvider) && !string.IsNullOrWhiteSpace(ai.Gemini.ApiKey))

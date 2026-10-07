@@ -4,7 +4,6 @@ using Anthropic;
 using Anthropic.Exceptions;
 using Anthropic.Models.Messages;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using ProjectMind.Application.Ai;
 using ProjectMind.Domain.Enums;
 
@@ -14,11 +13,11 @@ namespace ProjectMind.Infrastructure.Ai;
 /// Claude (Anthropic Messages API) ile bir sohbet turu yürütür: model araç çağırdıkça executor'a iletir,
 /// sonucu geri gönderir ve model metin cevabıyla bitirene kadar döner.
 /// </summary>
-public sealed class ClaudeChatModel(IOptions<AiOptions> options, ILogger<ClaudeChatModel> logger) : IChatModel
+public sealed class ClaudeChatModel(AiOptions options, ILogger<ClaudeChatModel> logger) : IChatModel
 {
     public async Task<ChatTurnResult> CompleteTurnAsync(ChatTurnRequest request, IChatToolExecutor tools, CancellationToken ct)
     {
-        var o = options.Value;
+        var o = options;
         AnthropicClient client = new() { ApiKey = o.Claude.ApiKey };
 
         List<MessageParam> messages = request.History

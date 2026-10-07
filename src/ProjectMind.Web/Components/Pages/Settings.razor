@@ -1,0 +1,90 @@
+@page "/settings"
+@implements IDisposable
+@inject Microsoft.Extensions.Options.IOptionsMonitor<AiOptions> AiSettings
+@inject IWebHostEnvironment Env
+
+<PageTitle>Ayarlar · ProjectMind AI</PageTitle>
+
+<div class="settings">
+    <h1>Ayarlar</h1>
+
+    <section class="settings-card">
+        <h2>Yapay zekâ bağlantısı</h2>
+        <p>
+            Şu an kullanılan: <strong>@AiSettings.CurrentValue.ActiveModelLabel()</strong>
+        </p>
+
+        <label>Sağlayıcı</label>
+        <select @bind="_provider">
+            <option value="@AiOptions.GeminiProvider">Google Gemini</option>
+            <option value="@AiOptions.ClaudeProvider">Anthropic Claude</option>
+        </select>
+
+        <label>API anahtarı</label>
+        <input type="password" @bind="_apiKey" @bind:event="oninput" placeholder="Anahtarı buraya yapıştırın" autocomplete="off" />
+        <small class="muted">
+            Gemini: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> ·
+            Claude: <a href="https://console.anthropic.com" target="_blank" rel="noopener">console.anthropic.com</a>
+        </small>
+
+        <label>Model (boş bırakılırsa varsayılan)</label>
+        <input @bind="_model" placeholder="@CurrentModelPlaceholder" />
+
+        <div class="settings-actions">
+            <button class="btn btn-primary" disabled="@string.IsNullOrWhiteSpace(_apiKey)" @onclick="Save">Kaydet</button>
+        </div>
+
+        @if (_message is not null)
+        {
+            <p class="@(_error ? "settings-error" : "settings-ok")">@_message</p>
+        }
+
+        <p class="muted small">
+            Anahtar bu bilgisayarda <code>@LocalSettings.PrimaryPath(Env.ContentRootPath)</code> dosyasına yazılır.
+            Bu dosya .gitignore'dadır, GitHub'a gönderilmez. Yeniden başlatmaya gerek yoktur.
+        </p>
+    </section>
+
+    <section class="settings-card">
+        <h2>Teşhis</h2>
+        <pre>@AiSettings.CurrentValue.Diagnostics</pre>
+    </section>
+</div>
+
+@code {
+    private string _provider = AiOptions.GeminiProvider;
+    private string _apiKey = "";
+    private string _model = "";
+    private string? _message;
+    private bool _error;
+    private IDisposable? _subscription;
+
+    private string CurrentModelPlaceholder => _provider == AiOptions.ClaudeProvider
+        ? AiSettings.CurrentValue.Claude.Model
+        : AiSettings.CurrentValue.Gemini.Model;
+
+    protected override void OnInitialized()
+    {
+        _provider = AiSettings.CurrentValue.Provider;
+        // Dosya değişince ayarlar yeniden yüklenir; ekrandaki "şu an kullanılan" bilgisi güncellensin.
+        _subscription = AiSettings.OnChange((_, _) => InvokeAsync(StateHasChanged));
+    }
+
+    private void Save()
+    {
+        try
+        {
+            LocalSettings.Save(Env.ContentRootPath, _provider, _apiKey, _model);
+            _apiKey = "";
+            _error = false;
+            _message = "Kaydedildi. Birkaç saniye içinde üstteki 'Şu an kullanılan' bilgisi güncellenecek; sonra sohbete dönebilirsiniz.";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _error = true;
+            _message = $"Dosya yazılamadı: {ex.Message}";
+        }
+    }
+
+    public void Dispose() => _subscription?.Dispose();
+}

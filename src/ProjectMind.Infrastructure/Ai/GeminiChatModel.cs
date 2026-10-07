@@ -4,7 +4,6 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using ProjectMind.Application.Ai;
 using ProjectMind.Domain.Enums;
 
@@ -15,7 +14,7 @@ namespace ProjectMind.Infrastructure.Ai;
 /// executor ile çalıştırılır, sonuç functionResponse olarak geri gönderilir; model metinle bitirene kadar döner.
 /// Modelin içeriği (thoughtSignature dahil) olduğu gibi geri eklenir.
 /// </summary>
-public sealed class GeminiChatModel(HttpClient http, IOptions<AiOptions> options, ILogger<GeminiChatModel> logger) : IChatModel
+public sealed class GeminiChatModel(HttpClient http, AiOptions options, ILogger<GeminiChatModel> logger) : IChatModel
 {
     public const string BaseUrl = "https://generativelanguage.googleapis.com/v1beta/";
     private const string PreferredFamily = "flash";
@@ -25,7 +24,7 @@ public sealed class GeminiChatModel(HttpClient http, IOptions<AiOptions> options
 
     public async Task<ChatTurnResult> CompleteTurnAsync(ChatTurnRequest request, IChatToolExecutor tools, CancellationToken ct)
     {
-        var o = options.Value;
+        var o = options;
         var model = _resolvedFallbackModel ?? o.Gemini.Model;
 
         var contents = new JsonArray();
@@ -140,7 +139,7 @@ public sealed class GeminiChatModel(HttpClient http, IOptions<AiOptions> options
                 throw new ChatModelException(response.StatusCode switch
                 {
                     HttpStatusCode.BadRequest when text.Contains("API_KEY_INVALID") =>
-                        "Gemini API anahtarı geçersiz. appsettings.Local.json içindeki 'AI:Gemini:ApiKey' değerini kontrol edin.",
+                        "Gemini API anahtarı geçersiz. ⚙ Ayarlar sayfasından anahtarı kontrol edip yeniden kaydedin.",
                     HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized =>
                         "Gemini API anahtarının bu modele erişimi yok.",
                     HttpStatusCode.TooManyRequests =>

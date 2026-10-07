@@ -123,3 +123,16 @@ a { color: var(--primary); text-decoration: none; }
 .chat-pending { padding: .6rem 1rem; border-bottom: 1px solid var(--border); background: #fffbeb; }
 .btn-danger { color: var(--danger); border-color: #f1c0c0; }
 .btn-danger:hover { background: #fff0f0; border-color: var(--danger); }
+
+/* Ayarlar */
+.settings { max-width: 720px; margin: 2rem auto; padding: 0 1.5rem; overflow-y: auto; height: 100vh; }
+.settings-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; margin-bottom: 1rem; }
+.settings-card h2 { margin-top: 0; }
+.settings-card label { display: block; font-weight: 600; margin: .9rem 0 .3rem; }
+.settings-card input, .settings-card select { width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: .5rem .7rem; font: inherit; }
+.settings-actions { margin-top: 1rem; }
+.settings-ok { color: var(--success); }
+.settings-error { color: var(--danger); }
+.settings pre { white-space: pre-wrap; word-break: break-all; background: var(--bg); padding: .75rem; border-radius: 6px; font-size: .8rem; }
+.small { font-size: .8rem; }
+.sidebar-settings { margin-top: .5rem; }

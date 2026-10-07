@@ -3,7 +3,6 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 using ProjectMind.Application.Ai;
 using ProjectMind.Domain.Enums;
 using ProjectMind.Infrastructure.Ai;
@@ -43,7 +42,7 @@ public class GeminiChatModelTests
 
     private static GeminiChatModel Model(FakeHandler handler) => new(
         new HttpClient(handler),
-        Options.Create(new AiOptions { Gemini = new() { Model = "gemini-test", ApiKey = "KEY" } }),
+        new AiOptions { Gemini = new() { Model = "gemini-test", ApiKey = "KEY" } },
         NullLogger<GeminiChatModel>.Instance);
 
     private static ChatTurnRequest Request() => new(

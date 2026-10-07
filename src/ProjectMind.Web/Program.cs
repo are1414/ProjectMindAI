@@ -9,7 +9,8 @@ using ProjectMind.Web.Services;
 var builder = WebApplication.CreateBuilder(args);
 
 // Kişisel ayarlar (API anahtarları) için git'e girmeyen dosya. Örnek: appsettings.Local.example.json
-var localSettingsReport = LocalSettings.Load(builder.Configuration, builder.Environment.ContentRootPath);
+var contentRoot = builder.Environment.ContentRootPath;
+LocalSettings.Register(builder.Configuration, contentRoot);
 
 var connectionString = builder.Configuration.GetConnectionString("Default")
     ?? throw new InvalidOperationException("ConnectionStrings:Default tanımlı değil.");
@@ -27,7 +28,7 @@ builder.Services.PostConfigure<AiOptions>(o =>
         o.Claude.ApiKey = (useGemini ? null : legacyKey) ?? Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
     o.Gemini.ApiKey = o.Gemini.ApiKey?.Trim();
     o.Claude.ApiKey = o.Claude.ApiKey?.Trim();
-    o.Diagnostics = $"{localSettingsReport}\n{LocalSettings.Describe(o)}";
+    o.Diagnostics = $"{LocalSettings.Inspect(contentRoot)}\n{LocalSettings.Describe(o)}";
 });
 
 builder.Services.AddScoped<AppScope>();

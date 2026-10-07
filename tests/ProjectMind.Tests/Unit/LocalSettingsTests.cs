@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.Configuration;
 using ProjectMind.Application.Ai;
 using ProjectMind.Web.Services;
@@ -8,37 +9,62 @@ public class LocalSettingsTests : IDisposable
 {
     private readonly string _root = Directory.CreateTempSubdirectory("pm-local-").FullName;
 
+    private string LocalFile => Path.Combine(_root, LocalSettings.FileName);
+
     [Fact]
     public void Reads_key_from_content_root_file()
     {
-        File.WriteAllText(Path.Combine(_root, LocalSettings.FileName),
-            """{ "AI": { "Provider": "Gemini", "Gemini": { "ApiKey": "AIzaTEST1234" } } }""");
+        File.WriteAllText(LocalFile, """{ "AI": { "Provider": "Gemini", "Gemini": { "ApiKey": "AIzaTEST1234" } } }""");
         var config = new ConfigurationManager();
 
-        var report = LocalSettings.Load(config, _root);
+        LocalSettings.Register(config, _root);
 
-        Assert.Contains("Okundu", report);
         Assert.Equal("AIzaTEST1234", config["AI:Gemini:ApiKey"]);
+        Assert.Contains("Okundu", LocalSettings.Inspect(_root));
+    }
+
+    [Fact]
+    public void Saved_file_is_valid_keeps_other_settings_and_is_read_back()
+    {
+        File.WriteAllText(LocalFile, """{ "Other": 1, "AI": { "Gemini": { "Model": "x-model" } } }""");
+
+        LocalSettings.Save(_root, AiOptions.GeminiProvider, "  AIzaNEWKEY  ", model: null);
+
+        var json = JsonNode.Parse(File.ReadAllText(LocalFile))!;
+        Assert.Equal(1, json["Other"]!.GetValue<int>());
+        Assert.Equal("Gemini", json["AI"]!["Provider"]!.GetValue<string>());
+        Assert.Equal("AIzaNEWKEY", json["AI"]!["Gemini"]!["ApiKey"]!.GetValue<string>());
+        Assert.Equal("x-model", json["AI"]!["Gemini"]!["Model"]!.GetValue<string>());
+
+        var config = new ConfigurationManager();
+        LocalSettings.Register(config, _root);
+        Assert.Equal("AIzaNEWKEY", config["AI:Gemini:ApiKey"]);
+    }
+
+    [Fact]
+    public void Save_creates_file_when_missing()
+    {
+        LocalSettings.Save(_root, AiOptions.GeminiProvider, "AIzaFIRST", "gemini-test");
+
+        Assert.Contains("gemini-test", File.ReadAllText(LocalFile));
     }
 
     [Fact]
     public void Reports_hidden_txt_extension_and_missing_file()
     {
-        File.WriteAllText(Path.Combine(_root, LocalSettings.FileName + ".txt"), "{}");
+        Assert.Contains("bulunamadı", LocalSettings.Inspect(_root));
 
-        var report = LocalSettings.Load(new ConfigurationManager(), _root);
-
-        Assert.Contains(".txt silinmeli", report);
+        File.WriteAllText(LocalFile + ".txt", "{}");
+        Assert.Contains(".txt silinmeli", LocalSettings.Inspect(_root));
     }
 
     [Fact]
     public void Reports_invalid_json_instead_of_crashing()
     {
-        File.WriteAllText(Path.Combine(_root, LocalSettings.FileName), """{ "AI": { "Gemini": { "ApiKey": "x" }  """);
+        File.WriteAllText(LocalFile, """{ "AI": { "Gemini": { "ApiKey": "x" }  """);
 
-        var report = LocalSettings.Load(new ConfigurationManager(), _root);
-
-        Assert.Contains("JSON hatası", report);
+        LocalSettings.Register(new ConfigurationManager(), _root);
+        Assert.Contains("JSON hatası", LocalSettings.Inspect(_root));
     }
 
     [Fact]

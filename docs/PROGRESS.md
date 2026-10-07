@@ -4,6 +4,19 @@ Her oturum sonunda en üste yeni kayıt eklenir. Format: yapılanlar · varsayı
 
 ---
 
+## 2026-10-07 (9) — Ayarlar sayfası (API anahtarı arayüzden)
+
+Teşhis: proje sahibinin makinesinde `appsettings.Local.json` hiç yoktu. Dosyayı elle oluşturmak yerine:
+- `/settings` sayfası: sağlayıcı, API anahtarı (şifre alanı), model; "Kaydet" → proje klasöründe appsettings.Local.json yazılır
+  (diğer ayarlar korunur). Dosya açılışta yoksa da izlenir; değişiklik **yeniden başlatmadan** geçerli olur.
+- AI ayarları her kapsamda güncel değerden okunur (`IOptionsMonitor` → scoped `AiOptions`); chat başlığı da canlı güncellenir.
+- Mock cevabı ve geçersiz anahtar mesajı Ayarlar sayfasına yönlendirir; sayfada teşhis metni görünür.
+- Doğrulama: Playwright ile ayar kaydı → etiket "Mock" → "Gemini · gemini-3.5-flash" (yeniden başlatmadan). Sahte anahtarla
+  gerçek Gemini API'ye istek gitti, 400 API_KEY_INVALID → Türkçe "anahtar geçersiz" mesajı (istek biçimi API tarafından kabul edildi).
+- Testler 43/43.
+
+---
+
 ## 2026-10-07 (8) — Anahtar teşhisi, hızlı yükleme, sohbet silme
 
 Proje sahibi: "Mock mod yazıyor", "geçmiş geç geliyor", "sohbeti silebilmeliyim".

@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using ProjectMind.Application.Abstractions;
 using ProjectMind.Application.Ai;
 using ProjectMind.Application.Common;
@@ -20,7 +19,7 @@ public sealed class ChatService(
     AiActionService actions,
     ProjectService projects,
     ProjectContextBuilder contextBuilder,
-    IOptions<AiOptions> options)
+    AiOptions options)
 {
     private const string NewSessionTitle = "Yeni proje sohbeti";
 
@@ -120,7 +119,7 @@ public sealed class ChatService(
         var history = await db.ChatMessages.AsNoTracking()
             .Where(m => m.ChatSessionId == sessionId)
             .OrderByDescending(m => m.Id)
-            .Take(options.Value.MaxHistoryMessages)
+            .Take(options.MaxHistoryMessages)
             .OrderBy(m => m.Id)
             .Select(m => new ChatHistoryItem(m.Role, m.Content))
             .ToListAsync(ct);
