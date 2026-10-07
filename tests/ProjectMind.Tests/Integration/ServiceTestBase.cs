@@ -63,6 +63,9 @@ public abstract class ServiceTestBase : IDisposable
             throw new NotSupportedException();
     }
 
+    protected ProjectMind.Application.WhatIf.WhatIfService NewWhatIfService(DateTimeOffset? now = null) =>
+        new(NewScheduleService(now), Microsoft.Extensions.Options.Options.Create(new ProjectMind.Application.WhatIf.WhatIfOptions { Iterations = 100 }));
+
     protected AiActionService NewActionService() =>
         new(Db, new ProjectService(Db), new PersonService(Db), new WorkItemService(Db), new DependencyService(Db),
             NewScheduleService());
@@ -79,7 +82,7 @@ public abstract class ServiceTestBase : IDisposable
         var overview = NewOverviewService();
         return new ChatService(Db, model, NewActionService(),
             new ReadOnlyToolHandler(Db, new ProjectMind.Application.MissingWork.MissingWorkService(overview, NewScheduleService()),
-                NewScheduleService(), NewStatusService()), new ProjectService(Db),
+                NewScheduleService(), NewStatusService(), NewWhatIfService()), new ProjectService(Db),
             new ProjectContextBuilder(Db, overview, TimeProvider.System), new AiOptions());
     }
 

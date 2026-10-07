@@ -34,6 +34,12 @@ public sealed record RemoveWorkItemPayload(int WorkItemId);
 
 public sealed record AddDependencyPayload(string PredecessorName, string SuccessorName);
 
+/// <summary>simulate_what_if: tek senaryo, düz alanlar (modeller iç içe şemada daha çok hata yapıyor).</summary>
+public sealed record SimulateWhatIfPayload(
+    string? ScenarioName = null, int? AddPeopleCount = null, List<Skill>? AddPeopleSkills = null, decimal? AddPeopleWeeklyHours = null,
+    DateOnly? AddPeopleJoinDate = null, string? RemovePersonName = null, string? CapacityPersonName = null, decimal? NewWeeklyHours = null,
+    string? RemoveWorkItemName = null, DateOnly? NewDeadline = null);
+
 public static class AiJson
 {
     public static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web)

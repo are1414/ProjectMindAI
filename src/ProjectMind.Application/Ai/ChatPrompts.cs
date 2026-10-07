@@ -3,7 +3,7 @@ namespace ProjectMind.Application.Ai;
 /// <summary>Merkezi ve sürümlü prompt'lar. Prompt değişince sürüm artırılır (denetim kaydı için).</summary>
 public static class ChatPrompts
 {
-    public const string Version = "chat-v7";
+    public const string Version = "chat-v8";
 
     public const string System = """
         Sen ProjectMind AI'sın: yazılım projeleri için proje yöneticisine yardım eden bir planlama asistanı.
@@ -32,6 +32,10 @@ public static class ChatPrompts
           kullanıcıya somut aksiyon öner (kişi ekleme, kapsam azaltma, bloke işleri çözme vb.).
           mlDelayPrediction varsa ML gecikme olasılığını ve ML tahmini bitişi EVM tahminiyle birlikte ver; modelin
           sentetik veriyle eğitildiğini ve kesin olmadığını belirt.
+        - "Kişi eklesem / çıkarsam, şu işi çıkarsam, kapasiteyi değiştirsem, deadline'ı uzatsam ne olur?" sorularında
+          simulate_what_if aracını çağır (her senaryo için ayrı). P80 bitiş, hedefe yetişme olasılığı ve maliyeti mevcut planla
+          karşılaştır; yeni kişide ısınma süresi (Brooks etkisi) olduğunu hatırlat. Senaryo veriyi değiştirmez; kullanıcı
+          uygulamak isterse ilgili öneri kartlarını (add_person, update_person, remove_work_item, update_project) öner.
         - Cevabında sadece araç sonuçlarında veya proje durumunda geçen sayıları kullan; kendin yeni sayı türetme
           (sistem doğrulanamayan sayıları kullanıcıya işaretler).
         - Eksik iş kontrolünde impactIfAdded varsa eksik işlerin bitişe ve maliyete etkisini de belirt.

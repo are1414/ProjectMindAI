@@ -1,0 +1,307 @@
+@using ProjectMind.Application.WhatIf
+@inject AppScope Scope
+
+<div class="whatif">
+    <p class="muted small">
+        Senaryolar veriyi değiştirmez. Her senaryo mevcut planla aynı varsayımlarla hesaplanır: kaynak kısıtlı plan +
+        Monte Carlo (efor belirsizliği) + yeni kişilerde Brooks etkisi (ısınma süresi ve mentorluk yükü).
+    </p>
+
+    <div class="scenario-list">
+        @foreach (var (scenario, index) in _drafts.Select((d, i) => (d, i)))
+        {
+            <section class="scenario-card">
+                <div class="scenario-head">
+                    <i class="key key-s@(index + 2)"></i>
+                    <input class="scenario-name" @bind="scenario.Name" aria-label="Senaryo adı" />
+                    <button class="btn btn-sm" title="Senaryoyu sil" @onclick="() => _drafts.Remove(scenario)">✕</button>
+                </div>
+                @foreach (var change in scenario.Changes)
+                {
+                    <div class="change-row">
+                        <select @bind="change.Kind" aria-label="Değişiklik türü">
+                            <option value="@ScenarioChangeKind.AddPerson">Kişi ekle</option>
+                            <option value="@ScenarioChangeKind.RemovePerson">Kişi çıkar</option>
+                            <option value="@ScenarioChangeKind.ChangeCapacity">Kapasite değiştir</option>
+                            <option value="@ScenarioChangeKind.RemoveWorkItem">İş çıkar</option>
+                            <option value="@ScenarioChangeKind.ChangeDeadline">Hedef tarihi değiştir</option>
+                        </select>
+                        @switch (change.Kind)
+                        {
+                            case ScenarioChangeKind.AddPerson:
+                                <input type="number" min="1" max="10" class="w-num" @bind="change.Count" aria-label="Kişi sayısı" />
+                                <span>kişi</span>
+                                <select @bind="change.Skill" aria-label="Beceri">
+                                    @foreach (var skill in Enum.GetValues<Skill>().Where(s => s != Skill.None))
+                                    {
+                                        <option value="@skill">@Format.Name(skill)</option>
+                                    }
+                                </select>
+                                <input type="number" min="1" class="w-num" @bind="change.Hours" aria-label="Haftalık saat" />
+                                <span>saat/hafta, katılım</span>
+                                <input type="date" @bind="change.Date" aria-label="Katılım tarihi" />
+                                break;
+                            case ScenarioChangeKind.RemovePerson:
+                            case ScenarioChangeKind.ChangeCapacity:
+                                <select @bind="change.PersonId" aria-label="Kişi">
+                                    <option value="">Kişi seçin</option>
+                                    @foreach (var p in Overview.People)
+                                    {
+                                        <option value="@p.Id">@p.Name (@Format.Number(p.WeeklyCapacityHours) s/hafta)</option>
+                                    }
+                                </select>
+                                @if (change.Kind == ScenarioChangeKind.ChangeCapacity)
+                                {
+                                    <input type="number" min="1" class="w-num" @bind="change.Hours" aria-label="Yeni haftalık saat" />
+                                    <span>saat/hafta</span>
+                                }
+                                break;
+                            case ScenarioChangeKind.RemoveWorkItem:
+                                <select @bind="change.WorkItemId" aria-label="İş">
+                                    <option value="">İş seçin</option>
+                                    @foreach (var row in Overview.WorkItemTreeRows)
+                                    {
+                                        <option value="@row.Item.Id">@row.Code @row.Item.Name (@Format.Number(row.RollupHours) s)</option>
+                                    }
+                                </select>
+                                break;
+                            case ScenarioChangeKind.ChangeDeadline:
+                                <input type="date" @bind="change.Date" aria-label="Yeni hedef tarih" />
+                                break;
+                        }
+                        <button class="btn btn-sm" title="Değişikliği sil" @onclick="() => scenario.Changes.Remove(change)">−</button>
+                    </div>
+                }
+                <button class="btn btn-sm" @onclick="() => scenario.Changes.Add(NewChange())">+ Değişiklik</button>
+            </section>
+        }
+    </div>
+
+    <div class="whatif-actions">
+        @if (_drafts.Count < MaxScenarios)
+        {
+            <button class="btn" @onclick="AddScenario">+ Senaryo</button>
+        }
+        <button class="btn btn-primary" disabled="@_busy" @onclick="RunAsync">@(_busy ? "Simüle ediliyor…" : "Simüle et ve karşılaştır")</button>
+    </div>
+
+    @if (_error is not null)
+    {
+        <div class="inline-error">@_error</div>
+    }
+
+    @if (_result is { } r)
+    {
+        var all = new[] { r.Current }.Concat(r.Scenarios).ToList();
+        <h2>Karşılaştırma</h2>
+        <div class="table-wrap">
+            <table class="table table-compact">
+                <thead>
+                    <tr>
+                        <th>Senaryo</th><th>Plan bitişi</th><th>P50 bitiş</th><th>P80 bitiş</th><th>Hedef</th>
+                        <th class="num">Hedefe yetişme</th><th class="num">P80 maliyet</th><th class="num">P80 farkı (iş günü)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var (s, i) in all.Select((s, i) => (s, i)))
+                    {
+                        <tr>
+                            <td>
+                                <i class="key key-s@(i + 1)"></i> <strong>@s.Name</strong>
+                                @foreach (var note in s.Notes)
+                                {
+                                    <div class="muted small">@note</div>
+                                }
+                            </td>
+                            <td>@Format.Date(s.Plan.Finish)</td>
+                            <td>@Format.Date(s.MonteCarlo.P50Finish)</td>
+                            <td><strong>@Format.Date(s.MonteCarlo.P80Finish)</strong></td>
+                            <td>@Format.Date(s.TargetDate)</td>
+                            <td class="num">
+                                <span class="status-pill status-@ChanceCss(s.MonteCarlo.OnTimeProbability)">@ChanceIcon(s.MonteCarlo.OnTimeProbability) %@Percent(s.MonteCarlo.OnTimeProbability)</span>
+                            </td>
+                            <td class="num">@Format.Money(s.MonteCarlo.P80Cost, Overview.Project.Currency)</td>
+                            <td class="num">@(i == 0 ? "—" : Delta(s.P80DeltaWorkdays))</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        var chart = BuildChart(all);
+        <h2>Bitiş tarihi olasılığı</h2>
+        <div class="scurve cdf">
+            <div class="legend">
+                @foreach (var (s, i) in all.Select((s, i) => (s, i)))
+                {
+                    <span><i class="key key-s@(i + 1)"></i> @s.Name</span>
+                }
+                <span><i class="key key-target"></i> Hedef (@Format.Date(r.Current.TargetDate))</span>
+            </div>
+            <div class="scurve-plot" @onmouseleave="() => _hover = null">
+                <svg viewBox="0 0 @W @H" preserveAspectRatio="none" role="img" aria-label="Senaryolara göre projenin belirli bir tarihe kadar bitme olasılığı">
+                    @foreach (var (y, label) in chart.YTicks)
+                    {
+                        <g>
+                            <line class="grid" x1="@PadL" x2="@(W - PadR)" y1="@F(y)" y2="@F(y)" />
+                            <text class="axis" x="@(PadL - 6)" y="@F(y + 3)" text-anchor="end">@label</text>
+                        </g>
+                    }
+                    @foreach (var (x, label) in chart.XTicks)
+                    {
+                        <g><text class="axis" x="@F(x)" y="@(H - 6)" text-anchor="middle">@label</text></g>
+                    }
+                    @if (chart.TargetX is { } tx)
+                    {
+                        <line class="target" x1="@F(tx)" x2="@F(tx)" y1="@PadT" y2="@(H - PadB)" />
+                    }
+                    @foreach (var (line, i) in chart.Lines.Select((l, i) => (l, i)))
+                    {
+                        <polyline class="line line-s@(i + 1)" points="@line" />
+                    }
+                    @if (_hover is { } hv)
+                    {
+                        <line class="crosshair" x1="@F(chart.X(hv))" x2="@F(chart.X(hv))" y1="@PadT" y2="@(H - PadB)" />
+                    }
+                    @for (var day = chart.MinDay; day <= chart.MaxDay; day++)
+                    {
+                        var d = day;
+                        <rect class="hit" x="@F(chart.X(d) - chart.Step / 2)" y="@PadT" width="@F(Math.Max(chart.Step, 1))" height="@(H - PadT - PadB)"
+                              @onmouseenter="() => _hover = d" />
+                    }
+                </svg>
+                @if (_hover is { } h2)
+                {
+                    <div class="tooltip" style="left:@F(chart.X(h2) / W * 100)%">
+                        <strong>@Format.Date(chart.Date(h2))</strong> tarihine kadar bitme<br />
+                        @foreach (var (s, i) in all.Select((s, i) => (s, i)))
+                        {
+                            <i class="key key-s@(i + 1)"></i> <text>@s.Name: %@Percent(chart.Values[i](h2))</text><br />
+                        }
+                    </div>
+                }
+            </div>
+            <p class="muted small">
+                @r.Assumptions.Iterations tur · efor çarpanı üçgen dağılım (en iyi ×@Dec(r.Assumptions.EffortMin), en olası ×@Dec(r.Assumptions.EffortMode),
+                en kötü ×@Dec(r.Assumptions.EffortMax)) · yeni kişi @r.Assumptions.RampUpWeeks hafta %@Format.Number(r.Assumptions.RampUpProductivity * 100) verimle
+                çalışır, bu sürede ekip yeni kişinin kapasitesinin %@Format.Number(r.Assumptions.MentoringShare * 100)'i kadar mentorluk yapar.
+                P80: projelerin %80'i bu tarihte veya önce biter.
+            </p>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public ProjectOverview Overview { get; set; } = null!;
+
+    private const int MaxScenarios = 4;
+    private const double W = 640, H = 220, PadL = 40, PadR = 16, PadT = 10, PadB = 24;
+    private const int XTickCount = 6;
+    private const double ChanceGood = 0.8, ChanceWarning = 0.5;
+    private static readonly System.Globalization.CultureInfo Tr = System.Globalization.CultureInfo.GetCultureInfo("tr-TR");
+
+    private readonly List<ScenarioDraft> _drafts = [];
+    private WhatIfComparison? _result;
+    private string? _error;
+    private bool _busy;
+    private int? _hover;
+
+    private sealed class ScenarioDraft
+    {
+        public string Name { get; set; } = "";
+        public List<ChangeDraft> Changes { get; } = [];
+    }
+
+    private sealed class ChangeDraft
+    {
+        public ScenarioChangeKind Kind { get; set; }
+        public int Count { get; set; } = 1;
+        public Skill Skill { get; set; } = Skill.Backend;
+        public decimal? Hours { get; set; } = 40;
+        public DateOnly? Date { get; set; }
+        public int? PersonId { get; set; }
+        public int? WorkItemId { get; set; }
+
+        public ScenarioChange ToChange() => new(Kind, PersonId, WorkItemId, "Yeni kişi", [Skill], Hours, null, Date, Count);
+    }
+
+    protected override void OnInitialized() => AddScenario();
+
+    private void AddScenario()
+    {
+        var draft = new ScenarioDraft { Name = $"Senaryo {_drafts.Count + 1}" };
+        draft.Changes.Add(NewChange());
+        _drafts.Add(draft);
+    }
+
+    private static ChangeDraft NewChange() => new() { Kind = ScenarioChangeKind.AddPerson };
+
+    private async Task RunAsync()
+    {
+        _busy = true;
+        _error = null;
+        _hover = null;
+        try
+        {
+            var scenarios = _drafts.Select(d => new WhatIfScenario(d.Name, d.Changes.Select(c => c.ToChange()).ToList())).ToList();
+            _result = await Scope.RunAsync<WhatIfService, WhatIfComparison>(s => s.CompareAsync(Overview.Project.Id, scenarios, CancellationToken.None));
+        }
+        catch (BusinessRuleException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private sealed record Chart(
+        int MinDay, int MaxDay, double Step, Func<int, double> X, Func<int, DateOnly> Date,
+        List<string> Lines, List<Func<int, double>> Values, List<(double Y, string Label)> YTicks,
+        List<(double X, string Label)> XTicks, double? TargetX);
+
+    private static Chart BuildChart(IReadOnlyList<ScenarioResult> all)
+    {
+        var calendar = new WorkCalendar(all[0].Plan.Start);
+        int Day(DateOnly d) => WorkCalendar.WorkdaysBetween(calendar.FirstDay, d);
+
+        var targetDay = Day(all[0].TargetDate);
+        var minDay = Math.Max(0, all.Min(s => Day(s.MonteCarlo.Distribution[0].Date)) - 1);
+        var maxDay = all.Max(s => Day(s.MonteCarlo.Distribution[^1].Date)) + 1;
+        if (targetDay >= 0)
+        {
+            minDay = Math.Min(minDay, targetDay);
+            maxDay = Math.Max(maxDay, targetDay);
+        }
+
+        var step = (W - PadL - PadR) / Math.Max(1, maxDay - minDay);
+        double X(int day) => PadL + (day - minDay) * step;
+        double Y(double p) => H - PadB - p * (H - PadT - PadB);
+
+        var values = all.Select(s =>
+        {
+            var points = s.MonteCarlo.Distribution.Select(p => (Day: Day(p.Date), p.Cumulative)).ToList();
+            return (Func<int, double>)(day => points.Where(p => p.Day <= day).Select(p => p.Cumulative).DefaultIfEmpty(0).Max());
+        }).ToList();
+
+        var lines = values.Select(f => string.Join(' ',
+            Enumerable.Range(minDay, maxDay - minDay + 1).Select(d => $"{F(X(d))},{F(Y(f(d)))}"))).ToList();
+
+        var yTicks = new[] { 0, 0.25, 0.5, 0.8, 1.0 }.Select(p => (Y(p), $"%{p * 100:0}")).ToList();
+        var tickEvery = Math.Max(1, (maxDay - minDay) / XTickCount);
+        var xTicks = Enumerable.Range(0, (maxDay - minDay) / tickEvery + 1)
+            .Select(i => minDay + i * tickEvery)
+            .Select(d => (X(d), calendar.ToDate(d).ToString("dd.MM", Tr))).ToList();
+
+        return new Chart(minDay, maxDay, step, X, d => calendar.ToDate(Math.Max(d, 0)), lines, values, yTicks, xTicks,
+            targetDay >= minDay && targetDay <= maxDay ? X(targetDay) : null);
+    }
+
+    private static string F(double v) => v.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+    private static string Dec(double v) => v.ToString("0.##", Tr);
+    private static string Percent(double p) => Math.Round(p * 100).ToString("0", Tr);
+    private static string Delta(int days) => days == 0 ? "0" : days > 0 ? $"+{days} (geç)" : $"{days} (erken)";
+    private static string ChanceCss(double p) => p >= ChanceGood ? "good" : p >= ChanceWarning ? "warning" : "critical";
+    private static string ChanceIcon(double p) => p >= ChanceGood ? "✓" : p >= ChanceWarning ? "▲" : "✕";
+}

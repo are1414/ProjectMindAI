@@ -35,11 +35,16 @@ else
         <button class="tab @(_tab == Tab.Work ? "active" : "")" @onclick="() => _tab = Tab.Work">İşler (@Overview.WorkItems.Count)</button>
         <button class="tab @(_tab == Tab.Plan ? "active" : "")" @onclick="() => _tab = Tab.Plan">Plan (Gantt)</button>
         <button class="tab @(_tab == Tab.Team ? "active" : "")" @onclick="() => _tab = Tab.Team">Ekip (@Overview.People.Count)</button>
+        <button class="tab @(_tab == Tab.WhatIf ? "active" : "")" @onclick="() => _tab = Tab.WhatIf">What-if</button>
     </nav>
 
     @if (_tab == Tab.Status)
     {
         <StatusPanel ProjectId="Overview.Project.Id" Overview="Overview" />
+    }
+    else if (_tab == Tab.WhatIf)
+    {
+        <WhatIfPanel Overview="Overview" />
     }
     else if (_tab == Tab.Plan)
     {
@@ -190,7 +195,7 @@ else
 
     private enum Field { Name, Hours, Percent }
 
-    private enum Tab { Status, Work, Plan, Team }
+    private enum Tab { Status, Work, Plan, Team, WhatIf }
 
     private Tab _tab = Tab.Status;
 

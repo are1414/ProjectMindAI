@@ -48,6 +48,13 @@ public sealed class ScheduleService(IAppDbContext db, ProjectOverviewService ove
         return (ResourceScheduler.Schedule(BuildInput(overview, [])), ResourceScheduler.Schedule(BuildInput(overview, extra)));
     }
 
+    /// <summary>What-if için plan girdisi (veri değişmez).</summary>
+    public async Task<(ProjectOverview Overview, PlanInput Input)> BuildInputAsync(int projectId, CancellationToken ct)
+    {
+        var overview = await overviews.GetAsync(projectId, ct);
+        return (overview, BuildInput(overview, []));
+    }
+
     /// <summary>Planı işlere yazar (tarih + boş atamalar) ve baseline olarak dondurur.</summary>
     public async Task<SchedulePreview> ApplyAsync(int projectId, CancellationToken ct)
     {

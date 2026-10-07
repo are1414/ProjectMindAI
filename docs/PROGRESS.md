@@ -4,6 +4,39 @@ Her oturum sonunda en üste yeni kayıt eklenir. Format: yapılanlar · varsayı
 
 ---
 
+## 2026-10-07 (17) — Faz 7: What-if (senaryo, Monte Carlo, Brooks etkisi)
+
+- `Planning/ResourceScheduler`: `PlanResource`'a gün bazlı kapasite pencereleri (`CapacityWindow`, çarpımsal). Pencere
+  verilmezse davranış aynı (mevcut testler değişmeden geçti). `ScheduleService.BuildInputAsync` what-if için plan girdisi verir.
+- `Application/WhatIf`: `ScenarioApplier` (kişi ekle [sayı, beceri, kapasite, katılım tarihi] / çıkar [sabit atamaları
+  serbest kalır], kapasite değiştir, iş çıkar [alt işleriyle; öncüller ardıllara aktarılır], hedef tarih değiştir; Brooks
+  pencereleri), `MonteCarlo` (üçgen dağılım ters CDF, SplitMix64 ile (tohum, tur, iş) bazlı belirlenimci sayılar, en yakın sıra
+  yüzdeliği, bitiş CDF'i), `WhatIfService` (mevcut plan + en fazla 4 senaryo, P80 farkı). Ayarlar: `WhatIf` bölümü (D22).
+- AI: salt okunur `simulate_what_if` aracı (düz alanlar: eklenecek kişi sayısı/beceri/kapasite/katılım, çıkarılacak kişi,
+  kapasite değişimi, çıkarılacak iş, yeni hedef; adlar id'ye çevrilir). `ReadOnlyToolHandler.ExecuteAsync` artık araç
+  girdisini de alıyor. Prompt chat-v8.
+- Arayüz: proje panelinde **What-if** sekmesi: senaryo kartları (değişiklik ekle/sil), karşılaştırma tablosu (plan/P50/P80
+  bitiş, hedef, hedefe yetişme olasılığı ikon+metin, P80 maliyet, P80 farkı), bitiş olasılığı eğrisi (seri renkleri sabit
+  sırada; 5 renk doğrulayıcıdan geçti, kontrast uyarısı tablo görünümüyle karşılanıyor), hedef çizgisi, üzerine gelince değerler.
+- Testler 115/115 (+10): kapasite pencereleri, Brooks (tek kişi + iki 80 s iş: yeni kişi ilk 4 haftada bitişi hızlandırmıyor
+  — 20 gün; ısınmasız 10 gün), geç katılım, bağımlılık zinciri korunarak iş çıkarma, kişi çıkarma/kapasite/hedef, üçgen
+  dağılım ve yüzdelik elle değerleri, belirsizliksiz Monte Carlo = deterministik plan, tekrarlanabilirlik ve P50 ≤ P80 ≤ P90,
+  servis (kapsam azaltma ve süre uzatma), AI aracının ad çözümü ve bilinmeyen kişi hatası.
+- Görsel kontrol (Playwright, SQLite kopya): iki senaryo (+1 backend; iş çıkar + hedef uzat), tablo, eğri, tooltip; konsol hatası yok.
+  Küçük demo projesinde +1 kişi P80'i 2 iş günü geciktirdi (ısınma süresi proje süresinden uzun — Brooks etkisi).
+
+**Varsayımlar**: Bir iş tek kişiye atanır (bölünmez); bu yüzden kişi eklemek sadece paralel işler varsa hızlandırır.
+Belirsizlik yalnızca kalan eforda (bağımlılık/kişi değişikliği rastgele değil). Yeni kişinin saatlik maliyeti verilmezse ekip
+ortalaması. Katılım tarihi verilmezse plan başlangıcı.
+
+**Bilinen sorunlar**: Grafikte hedef çizgisi mevcut planın hedefidir; senaryoya özel hedef tabloda gösterilir.
+Senaryolar kaydedilmiyor (sayfadan çıkınca kaybolur) — fikir havuzunda.
+
+**Sıradaki adım**: Faz 8 — AI analiz yorumları: proje ve senaryo yorumu (EVM/ML/Monte Carlo sonuçlarını açıklayan, JSON
+şemalı ve sayı doğrulamalı yorum kartı), eksik iş önerisinin LLM katmanı (hibrit), analiz cevapları için audit.
+
+---
+
 ## 2026-10-07 (16) — Faz 6: Veri ve ML (gecikme tahmini, EVM ile karşılaştırma)
 
 - Yeni paketler: `Microsoft.ML` 5.0.0 ve `Microsoft.ML.FastTree` 5.0.0 (Infrastructure). Gerekçe: D7 kararı ML'in uygulama

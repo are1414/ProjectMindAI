@@ -5,9 +5,25 @@ namespace ProjectMind.Application.Planning;
 public sealed record PlanActivity(
     int Id, string Name, decimal Hours, Skill Skill, Priority Priority, int? FixedAssigneeId, IReadOnlyList<int> Predecessors);
 
-public sealed record PlanResource(int Id, string Name, Skill Skills, decimal WeeklyCapacityHours, decimal HourlyCost)
+/// <summary>Bir gün aralığında [FromDay, ToDay] kapasite çarpanı (what-if: henüz katılmamış = 0, ısınma, mentorluk yükü).</summary>
+public sealed record CapacityWindow(int FromDay, int ToDay, decimal Factor);
+
+public sealed record PlanResource(
+    int Id, string Name, Skill Skills, decimal WeeklyCapacityHours, decimal HourlyCost,
+    IReadOnlyList<CapacityWindow>? Windows = null)
 {
     public decimal DailyCapacity => WeeklyCapacityHours / WorkCalendar.WorkDaysPerWeek;
+
+    public decimal CapacityOn(int day)
+    {
+        var capacity = DailyCapacity;
+        if (Windows is null)
+            return capacity;
+        foreach (var w in Windows)
+            if (day >= w.FromDay && day <= w.ToDay)
+                capacity *= w.Factor;
+        return capacity;
+    }
 }
 
 public sealed record PlanInput(
@@ -76,13 +92,13 @@ public static class ResourceScheduler
             }
 
             var best = candidates
-                .Select(person => (Person: person, Slot: Simulate(next.Hours, earliest, person.DailyCapacity, used[person.Id])))
+                .Select(person => (Person: person, Slot: Simulate(next.Hours, earliest, person, used[person.Id])))
                 .OrderBy(c => c.Slot.Finish)
                 .ThenBy(c => assignedHours[c.Person.Id])
                 .ThenBy(c => c.Person.Id)
                 .First();
 
-            Allocate(next.Hours, best.Slot.Start, best.Person.DailyCapacity, used[best.Person.Id]);
+            Allocate(next.Hours, best.Slot.Start, best.Person, used[best.Person.Id]);
             assignedHours[best.Person.Id] += next.Hours;
             scheduled[next.Id] = (best.Slot.Start, best.Slot.Finish, best.Person.Id);
         }
@@ -105,7 +121,7 @@ public static class ResourceScheduler
         var loads = input.People
             .Select(p =>
             {
-                var capacity = p.DailyCapacity * durationWorkdays;
+                var capacity = Enumerable.Range(0, durationWorkdays).Sum(p.CapacityOn);
                 var utilization = capacity <= 0 ? 0 : Math.Round(assignedHours[p.Id] / capacity * 100, 1);
                 return new ResourceLoad(p.Id, p.Name, assignedHours[p.Id], capacity, utilization);
             })
@@ -134,7 +150,7 @@ public static class ResourceScheduler
         return people.Where(p => p.Skills.HasFlag(activity.Skill) && p.DailyCapacity > 0).ToList();
     }
 
-    private static (int Start, int Finish) Simulate(decimal hours, int earliest, decimal dailyCapacity, Dictionary<int, decimal> used)
+    private static (int Start, int Finish) Simulate(decimal hours, int earliest, PlanResource person, Dictionary<int, decimal> used)
     {
         if (hours <= Epsilon)
             return (earliest, earliest);
@@ -144,7 +160,7 @@ public static class ResourceScheduler
         var day = earliest;
         while (true)
         {
-            var free = dailyCapacity - used.GetValueOrDefault(day);
+            var free = person.CapacityOn(day) - used.GetValueOrDefault(day);
             if (free > Epsilon)
             {
                 start ??= day;
@@ -156,12 +172,12 @@ public static class ResourceScheduler
         }
     }
 
-    private static void Allocate(decimal hours, int start, decimal dailyCapacity, Dictionary<int, decimal> used)
+    private static void Allocate(decimal hours, int start, PlanResource person, Dictionary<int, decimal> used)
     {
         var remaining = hours;
         for (var day = start; remaining > Epsilon; day++)
         {
-            var take = Math.Min(dailyCapacity - used.GetValueOrDefault(day), remaining);
+            var take = Math.Min(person.CapacityOn(day) - used.GetValueOrDefault(day), remaining);
             if (take <= Epsilon)
                 continue;
             used[day] = used.GetValueOrDefault(day) + take;

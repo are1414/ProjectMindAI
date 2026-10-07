@@ -2,7 +2,7 @@
 
 **Akademik başlık:** Yapay Zekâ Destekli Yazılım Proje Planlama ve Karar Destek Sistemi: Zamanlama, Kaynak ve Kapsam Yönetimi Üzerine Bir Uygulama
 
-**Aktif faz: FAZ 7 — What-if**
+**Aktif faz: FAZ 8 — AI katmanı (analiz yorumları)**
 
 ## Ürün akışı (tek kullanıcı: proje yöneticisi)
 
@@ -83,11 +83,11 @@
 - [x] `IDelayPredictor` ile entegrasyon: Durum sekmesinde gecikme olasılığı + ML/EVM bitiş, `get_project_status`'ta tahmin
 - [x] Deneyler sayfası (`/experiments`): yeniden eğit, sonuç tablosu, özellik önemi, CSV indir
 
-### FAZ 7 — What-if
-- [ ] Senaryolar: kişi ekle/çıkar, iş çıkar, kapasite değiştir, deadline değiştir
-- [ ] Monte Carlo (efor belirsizliği) → P50 / P80 bitiş, maliyet
-- [ ] Brooks etkisi (yeni kişide ısınma süresi)
-- [ ] Senaryo karşılaştırma ekranı
+### FAZ 7 — What-if ✅
+- [x] Senaryolar: kişi ekle/çıkar, iş çıkar (alt işleriyle, bağımlılık zinciri korunur), kapasite değiştir, deadline değiştir
+- [x] Monte Carlo (efor belirsizliği, üçgen dağılım, ortak rastgele sayılar) → P50 / P80 / P90 bitiş, maliyet, hedefe yetişme olasılığı
+- [x] Brooks etkisi (yeni kişide ısınma süresi + mevcut ekipte mentorluk yükü; katılım tarihi)
+- [x] Senaryo karşılaştırma ekranı (What-if sekmesi: tablo + bitiş olasılığı eğrisi) ve AI aracı `simulate_what_if`
 
 ### FAZ 8 — AI katmanı (analiz yorumları)
 - [x] `IChatModel`: Mock + Gemini + Claude (Faz 2.5'te)
@@ -122,4 +122,6 @@ docs/                          Plan, kararlar, ilerleme
 ## Fikir Havuzu (uygulanmadı — sadece not)
 
 - Projeye özel açıklama: tahmini en çok etkileyen göstergeler (yerel katkı) Durum kartında
+- Monte Carlo efor belirsizliğini projenin gerçekleşen CPI dağılımından kalibre etmek
+- Senaryoyu tek tıkla öneri kartlarına dönüştürmek (kişi ekle / iş çıkar kartları)
 - Gerçek proje snapshot'larıyla (Faz 9 demo) modelin ince ayarı / doğrulanması

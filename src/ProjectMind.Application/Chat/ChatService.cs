@@ -188,7 +188,7 @@ public sealed class ChatService(
                 Evidence.Add(input.GetRawText());
                 if (AiTools.ReadOnly.Contains(toolName))
                 {
-                    var readOnly = await readOnlyTools.ExecuteAsync(sessionId, toolName, ct);
+                    var readOnly = await readOnlyTools.ExecuteAsync(sessionId, toolName, input, ct);
                     Evidence.Add(readOnly.Content);
                     return readOnly;
                 }

@@ -21,9 +21,10 @@ public static class AiTools
     public const string PreviewSchedule = "preview_schedule";
     public const string ApplySchedule = "apply_schedule";
     public const string GetProjectStatus = "get_project_status";
+    public const string SimulateWhatIf = "simulate_what_if";
 
     /// <summary>Veri değiştirmeyen, sadece bilgi döndüren araçlar (öneri kartı oluşturmaz).</summary>
-    public static readonly IReadOnlySet<string> ReadOnly = new HashSet<string> { CheckMissingWork, PreviewSchedule, GetProjectStatus };
+    public static readonly IReadOnlySet<string> ReadOnly = new HashSet<string> { CheckMissingWork, PreviewSchedule, GetProjectStatus, SimulateWhatIf };
 
     /// <summary>Toplu uygulamada sıra: önce proje, sonra kişiler, işler, bağımlılıklar, silmeler.</summary>
     public static int ApplyOrder(string toolName) => toolName switch
@@ -156,6 +157,25 @@ public static class AiTools
             "EAC, tahmini bitiş), AHP ağırlıklı sağlık skoru ve bileşenleri, risk uyarıları. 'Proje ne durumda', 'gecikiyor mu', " +
             "'neden', 'en büyük risk ne' gibi sorularda kullan.",
             Schema(new { })),
+
+        new(SimulateWhatIf,
+            "What-if senaryosunu simüle eder (veri değiştirmez): kişi ekle/çıkar, kapasite değiştir, iş çıkar, hedef tarih değiştir. " +
+            "Mevcut plan ile senaryoyu Monte Carlo (efor belirsizliği) ve Brooks etkisiyle (yeni kişinin ısınma süresi) karşılaştırır: " +
+            "P50/P80 bitiş, hedefe yetişme olasılığı, maliyet. 'X kişi eklesem', 'şu işi çıkarsam', 'deadline'ı uzatsam' sorularında kullan. " +
+            "Sadece senaryoda değişen alanları gönder; birden fazla senaryo için ayrı ayrı çağır.",
+            Schema(new
+            {
+                scenarioName = Str("Senaryonun kısa adı"),
+                addPeopleCount = Int("Eklenecek kişi sayısı"),
+                addPeopleSkills = new { type = "array", items = Enum<Skill>("Beceri"), description = "Eklenecek kişilerin becerileri" },
+                addPeopleWeeklyHours = Num("Eklenecek kişilerin haftalık kapasitesi, varsayılan 40"),
+                addPeopleJoinDate = Date("Yeni kişilerin katılım tarihi, varsayılan plan başlangıcı"),
+                removePersonName = Str("Ekipten çıkarılacak kişinin adı"),
+                capacityPersonName = Str("Kapasitesi değişecek kişinin adı"),
+                newWeeklyHours = Num("Bu kişinin yeni haftalık kapasitesi"),
+                removeWorkItemName = Str("Kapsamdan çıkarılacak işin adı (alt işleriyle)"),
+                newDeadline = Date("Yeni hedef bitiş tarihi")
+            })),
 
         new(ApplySchedule,
             "Otomatik planın işlere uygulanmasını (başlangıç/bitiş tarihleri ve boş atamalar) ve baseline olarak " +

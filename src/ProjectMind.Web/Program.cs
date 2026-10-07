@@ -20,6 +20,7 @@ builder.Services.AddInfrastructure(connectionString);
 builder.Services.Configure<AiOptions>(builder.Configuration.GetSection(AiOptions.SectionName));
 builder.Services.Configure<ProjectMind.Application.Analytics.HealthOptions>(
     builder.Configuration.GetSection(ProjectMind.Application.Analytics.HealthOptions.SectionName));
+builder.Services.Configure<ProjectMind.Application.WhatIf.WhatIfOptions>(builder.Configuration.GetSection(ProjectMind.Application.WhatIf.WhatIfOptions.Section));
 builder.Services.Configure<ProjectMind.Application.Ml.MlOptions>(builder.Configuration.GetSection(ProjectMind.Application.Ml.MlOptions.Section));
 // Model klasörü göreli verilirse uygulama klasörüne göre çözülür (App_Data/models, git'e girmez).
 builder.Services.PostConfigure<ProjectMind.Application.Ml.MlOptions>(o =>

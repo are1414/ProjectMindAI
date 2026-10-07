@@ -201,6 +201,8 @@ a { color: var(--primary); text-decoration: none; }
     --series-1: #2a78d6;   /* PV */
     --series-2: #eb6834;   /* EV */
     --series-3: #1baf7a;   /* AC */
+    --series-4: #eda100;
+    --series-5: #e87ba4;
     --status-good: #0ca30c;
     --status-warning: #fab219;
     --status-critical: #d03b3b;
@@ -279,3 +281,32 @@ h1:focus { outline: none; }
     .delay-card, .delay-compare { grid-template-columns: 1fr; }
     .importance li { grid-template-columns: 110px 1fr 46px; }
 }
+
+/* What-if (senaryo karşılaştırma) — seri renkleri sabit sırada: 1 mevcut plan, 2–5 senaryolar */
+.whatif { display: grid; gap: .75rem; }
+.scenario-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: .75rem; }
+.scenario-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: .75rem; display: grid; gap: .45rem; align-content: start; }
+.scenario-head { display: flex; gap: .5rem; align-items: center; }
+.scenario-name { flex: 1; font-weight: 600; border: 1px solid transparent; border-radius: 6px; padding: .2rem .35rem; }
+.scenario-name:hover, .scenario-name:focus { border-color: var(--border); }
+.change-row { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; font-size: .85rem; }
+.change-row select, .change-row input { padding: .2rem .35rem; border: 1px solid var(--border); border-radius: 6px; font: inherit; }
+.change-row .w-num { width: 64px; }
+.whatif-actions { display: flex; gap: .5rem; }
+.key-s1 { background: var(--series-1); }
+.key-s2 { background: var(--series-2); }
+.key-s3 { background: var(--series-3); }
+.key-s4 { background: var(--series-4); }
+.key-s5 { background: var(--series-5); }
+.key-target { background: none; border-top: 2px dashed var(--muted); height: 0; }
+.scurve .line-s1 { stroke: var(--series-1); }
+.scurve .line-s2 { stroke: var(--series-2); }
+.scurve .line-s3 { stroke: var(--series-3); }
+.scurve .line-s4 { stroke: var(--series-4); }
+.scurve .line-s5 { stroke: var(--series-5); }
+.scurve .target { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 3; }
+.cdf svg { height: 220px; }
+@media (max-width: 720px) { .scenario-list { grid-template-columns: 1fr; } }
+.scenario-card > .btn { justify-self: start; }
+.whatif .status-pill { white-space: nowrap; }
+.change-row select:first-child { min-width: 150px; }
