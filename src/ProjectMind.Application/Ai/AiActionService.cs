@@ -4,6 +4,7 @@ using ProjectMind.Application.Abstractions;
 using ProjectMind.Application.Common;
 using ProjectMind.Application.Dependencies;
 using ProjectMind.Application.People;
+using ProjectMind.Application.Planning;
 using ProjectMind.Application.Projects;
 using ProjectMind.Application.WorkItems;
 using ProjectMind.Domain.Entities;
@@ -28,7 +29,8 @@ public sealed class AiActionService(
     ProjectService projects,
     PersonService people,
     WorkItemService workItems,
-    DependencyService dependencies)
+    DependencyService dependencies,
+    ScheduleService schedules)
 {
     private const string DefaultCurrency = "TRY";
     private const decimal DefaultHoursPerDay = 8;
@@ -190,6 +192,14 @@ public sealed class AiActionService(
                 var p = Parse<AddDependencyPayload>(input);
                 return $"Bağımlılık ekle: {p.PredecessorName} → {p.SuccessorName}";
             }
+            case AiTools.ApplySchedule:
+            {
+                if (session.ProjectId is not { } projectId)
+                    throw new BusinessRuleException("Planı uygulamak için önce proje oluşturulup uygulanmalı.");
+                var plan = (await schedules.PreviewAsync(projectId, ct)).Plan;
+                return $"Otomatik planı uygula ve baseline kaydet: {Format.Date(plan.Start)} → {Format.Date(plan.Finish)} · " +
+                       $"{plan.Activities.Count} iş · {Format.Number(plan.TotalHours)} saat";
+            }
             default:
                 throw new BusinessRuleException($"Bilinmeyen araç: {toolName}");
         }
@@ -327,6 +337,11 @@ public sealed class AiActionService(
                     SuccessorId = await ResolveWorkItemAsync(projectId, p.SuccessorName, ct)
                 }, ct);
                 return "Bağımlılık eklendi.";
+            }
+            case AiTools.ApplySchedule:
+            {
+                var applied = await schedules.ApplyAsync(projectId, ct);
+                return $"Plan uygulandı: bitiş {Format.Date(applied.Plan.Finish)}; baseline kaydedildi.";
             }
             default:
                 throw new BusinessRuleException($"Bilinmeyen araç: {action.ToolName}");

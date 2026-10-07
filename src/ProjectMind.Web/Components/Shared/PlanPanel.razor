@@ -1,0 +1,211 @@
+@inject AppScope Scope
+@inject IJSRuntime JS
+
+@if (_error is not null)
+{
+    <div class="inline-error">@_error</div>
+}
+
+@if (_preview is null)
+{
+    <div class="loading">Plan hesaplanıyor…</div>
+}
+else if (_preview.Plan.Activities.Count == 0)
+{
+    <p class="muted">Planlanacak iş yok. Önce işleri ekleyin.</p>
+}
+else
+{
+    var plan = _preview.Plan;
+    var project = _preview.Overview.Project;
+    <div class="stats stats-plan">
+        <div class="stat">
+            <span>Planlanan bitiş</span>
+            <strong>@Format.Date(plan.Finish)</strong>
+            <em class="@(_preview.IsLate ? "late" : "ontime")">
+                @(_preview.VarianceWorkdays == 0 ? "hedefte" : _preview.IsLate ? $"{_preview.VarianceWorkdays} iş günü geç" : $"{-_preview.VarianceWorkdays} iş günü erken")
+            </em>
+        </div>
+        <div class="stat"><span>Hedef bitiş</span><strong>@Format.Date(project.TargetEndDate)</strong></div>
+        <div class="stat" title="Yeterli kişi olsaydı (sadece bağımlılıklar) en erken bitiş"><span>Kaynak sınırsız bitiş</span><strong>@Format.Date(plan.UnconstrainedFinish)</strong></div>
+        <div class="stat"><span>Kalan efor</span><strong>@Format.Number(plan.TotalHours) saat</strong></div>
+        <div class="stat">
+            <span>Planlanan maliyet</span>
+            <strong>@Format.Money(plan.PlannedCost, project.Currency)</strong>
+            @if (project.Budget > 0)
+            {
+                <em class="@(plan.PlannedCost > project.Budget ? "late" : "ontime")">bütçe @Format.Money(project.Budget, project.Currency)</em>
+            }
+        </div>
+    </div>
+
+    @foreach (var warning in plan.Warnings)
+    {
+        <div class="plan-warning">⚠ @warning</div>
+    }
+
+    <div class="gantt">
+        <div class="gantt-header">
+            <div class="gantt-label"></div>
+            <div class="gantt-track gantt-scale">
+                @foreach (var (day, date) in ScaleTicks(plan))
+                {
+                    <span style="left:@Pct(day, plan)%">@date.ToString("dd.MM")</span>
+                }
+            </div>
+        </div>
+        @foreach (var row in GanttRows())
+        {
+            <div class="gantt-row @(row.IsParent ? "gantt-parent" : "")">
+                <div class="gantt-label" title="@row.Name">
+                    <span class="muted">@row.Code</span>
+                    <span style="padding-left:@(row.Depth * .8)rem">@row.Name</span>
+                </div>
+                <div class="gantt-track">
+                    @if (row.StartDay is { } start && row.FinishDay is { } finish)
+                    {
+                        <div class="gantt-bar @row.CssClass"
+                             style="left:@Pct(start, plan)%; width:@Pct(finish - start + 1, plan)%"
+                             title="@row.Tooltip"></div>
+                    }
+                </div>
+            </div>
+        }
+        <div class="gantt-legend">
+            <span><i class="gantt-bar bar-critical"></i> Kritik yol</span>
+            <span><i class="gantt-bar bar-normal"></i> Bolluklu iş</span>
+            <span><i class="gantt-bar bar-unassigned"></i> Kişi yok</span>
+            <span><i class="gantt-bar bar-parent"></i> Üst iş</span>
+        </div>
+    </div>
+
+    <h2>Kişi doluluğu</h2>
+    <table class="table table-compact">
+        <thead><tr><th>Kişi</th><th class="num">Atanan (s)</th><th class="num">Kapasite (s)</th><th class="num">Doluluk</th></tr></thead>
+        <tbody>
+            @foreach (var load in plan.Loads)
+            {
+                <tr>
+                    <td>@load.Name</td>
+                    <td class="num">@Format.Number(load.AssignedHours)</td>
+                    <td class="num">@Format.Number(load.CapacityHours)</td>
+                    <td class="num">
+                        <span class="util"><span class="util-bar" style="width:@Math.Min(load.UtilizationPercent, 100)%"></span></span>
+                        %@Format.Number(load.UtilizationPercent)
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <div class="plan-actions">
+        <button class="btn btn-primary" disabled="@_busy" @onclick="ApplyAsync">Planı uygula ve baseline kaydet</button>
+        <span class="muted small">
+            @if (_preview.LatestBaseline is { } b)
+            {
+                <text>Son baseline: @b.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm") · bitiş @Format.Date(b.PlannedFinish)</text>
+            }
+            else
+            {
+                <text>Henüz baseline yok. Uygulayınca tarihler ve boş atamalar kaydedilir; ilerleme bu plana göre ölçülür.</text>
+            }
+        </span>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public int ProjectId { get; set; }
+    [Parameter] public ProjectOverview? Overview { get; set; }
+    [Parameter] public EventCallback OnDataChanged { get; set; }
+
+    private const int ScaleStepWorkdays = 5;
+
+    private SchedulePreview? _preview;
+    private ProjectOverview? _loadedFor;
+    private string? _error;
+    private bool _busy;
+
+    private sealed record GanttRow(string Code, string Name, int Depth, bool IsParent, int? StartDay, int? FinishDay, string CssClass, string Tooltip);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Proje verisi değişince (iş eklendi, saat değişti…) plan yeniden hesaplanır.
+        if (ReferenceEquals(_loadedFor, Overview) && _preview is not null)
+            return;
+        _loadedFor = Overview;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _error = null;
+        try
+        {
+            _preview = await Scope.RunAsync<ScheduleService, SchedulePreview>(s => s.PreviewAsync(ProjectId, CancellationToken.None));
+        }
+        catch (BusinessRuleException ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task ApplyAsync()
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", "Plan işlere uygulanacak (tarihler ve boş atamalar) ve baseline olarak kaydedilecek. Devam edilsin mi?"))
+            return;
+        _busy = true;
+        try
+        {
+            await Scope.RunAsync<ScheduleService, SchedulePreview>(s => s.ApplyAsync(ProjectId, CancellationToken.None));
+            await OnDataChanged.InvokeAsync();
+            await LoadAsync();
+        }
+        catch (BusinessRuleException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private IEnumerable<GanttRow> GanttRows()
+    {
+        var overview = _preview!.Overview;
+        var planned = _preview.Plan.Activities.ToDictionary(a => a.Id);
+        var parentOf = overview.WorkItems.ToDictionary(w => w.Id, w => w.ParentId);
+        var people = overview.People.ToDictionary(p => p.Id, p => p.Name);
+
+        foreach (var row in overview.WorkItemTreeRows)
+        {
+            if (row.HasChildren)
+            {
+                var children = WorkItemTree.SubtreeIds(parentOf, row.Item.Id).Where(planned.ContainsKey).Select(id => planned[id]).ToList();
+                if (children.Count == 0)
+                    continue;
+                var (s, f) = (children.Min(c => c.StartDay), children.Max(c => c.FinishDay));
+                yield return new GanttRow(row.Code, row.Item.Name, row.Depth, true, s, f, "bar-parent",
+                    $"{Format.Date(children.Min(c => c.Start))} → {Format.Date(children.Max(c => c.Finish))}");
+            }
+            else if (planned.TryGetValue(row.Item.Id, out var a))
+            {
+                var who = a.AssigneeId is { } pid ? people.GetValueOrDefault(pid) ?? "?" : "kişi yok";
+                var css = a.AssigneeId is null ? "bar-unassigned" : a.IsCritical ? "bar-critical" : "bar-normal";
+                yield return new GanttRow(row.Code, row.Item.Name, row.Depth, false, a.StartDay, a.FinishDay, css,
+                    $"{Format.Date(a.Start)} → {Format.Date(a.Finish)} · {Format.Number(a.Hours)} saat · {who}" +
+                    (a.IsCritical ? " · kritik" : $" · bolluk {Format.Number(a.SlackDays)} gün"));
+            }
+        }
+    }
+
+    private static IEnumerable<(int Day, DateOnly Date)> ScaleTicks(PlanResult plan)
+    {
+        var calendar = new WorkCalendar(plan.Start);
+        for (var day = 0; day < plan.DurationWorkdays; day += ScaleStepWorkdays)
+            yield return (day, calendar.ToDate(day));
+    }
+
+    private static string Pct(int days, PlanResult plan) =>
+        (days * 100m / Math.Max(plan.DurationWorkdays, 1)).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+}

@@ -161,3 +161,37 @@ a { color: var(--primary); text-decoration: none; }
 .chat-shortcuts { display: flex; gap: .4rem; padding: .5rem 1rem 0; flex-wrap: wrap; }
 .chip { border: 1px solid var(--border); background: var(--bg); border-radius: 999px; padding: .25rem .7rem; font: inherit; font-size: .8rem; cursor: pointer; }
 .chip:hover { border-color: var(--primary); color: var(--primary); }
+
+/* Sekmeler */
+.tabs { display: flex; gap: .25rem; margin: 1.25rem 0 .75rem; border-bottom: 1px solid var(--border); }
+.tab { border: none; background: none; padding: .5rem .9rem; font: inherit; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+
+/* Plan */
+.stats-plan { grid-template-columns: repeat(5, 1fr); margin-top: 0; }
+.stat em { display: block; font-style: normal; font-size: .75rem; margin-top: .15rem; }
+.stat em.late { color: var(--danger); }
+.stat em.ontime { color: var(--success); }
+.plan-warning { margin: .5rem 0; padding: .45rem .7rem; background: #fff8e6; border: 1px solid #f3d38a; border-radius: 6px; font-size: .85rem; }
+.plan-actions { display: flex; align-items: center; gap: 1rem; margin: 1.25rem 0; flex-wrap: wrap; }
+.util { display: inline-block; width: 60px; height: 6px; background: #eef1f6; border-radius: 3px; vertical-align: middle; margin-right: .35rem; overflow: hidden; }
+.util-bar { display: block; height: 100%; background: var(--primary); }
+
+/* Gantt */
+.gantt { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: .5rem .75rem; margin-top: 1rem; }
+.gantt-header, .gantt-row { display: grid; grid-template-columns: 240px 1fr; align-items: center; }
+.gantt-row { min-height: 24px; border-top: 1px solid #f1f3f6; }
+.gantt-label { font-size: .8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: .5rem; }
+.gantt-label .muted { display: inline-block; width: 2.6rem; }
+.gantt-parent .gantt-label { font-weight: 600; }
+.gantt-track { position: relative; height: 18px; background: repeating-linear-gradient(90deg, transparent, transparent 19.5%, #f4f6f9 19.5%, #f4f6f9 20%); }
+.gantt-scale { height: 18px; background: none; }
+.gantt-scale span { position: absolute; font-size: .68rem; color: var(--muted); transform: translateX(-2px); }
+.gantt-bar { position: absolute; top: 4px; height: 10px; border-radius: 3px; min-width: 3px; display: inline-block; }
+.bar-critical { background: #e03131; }
+.bar-normal { background: #4c6ef5; }
+.bar-unassigned { background: repeating-linear-gradient(45deg, #adb5bd, #adb5bd 3px, #dee2e6 3px, #dee2e6 6px); }
+.bar-parent { background: #343a40; height: 5px; top: 7px; }
+.gantt-legend { display: flex; gap: 1rem; margin-top: .5rem; font-size: .75rem; color: var(--muted); flex-wrap: wrap; }
+.gantt-legend .gantt-bar { position: static; width: 18px; height: 8px; vertical-align: middle; margin-right: .25rem; }

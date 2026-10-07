@@ -5,6 +5,7 @@ using ProjectMind.Application.Chat;
 using ProjectMind.Application.Dependencies;
 using ProjectMind.Application.Overview;
 using ProjectMind.Application.People;
+using ProjectMind.Application.Planning;
 using ProjectMind.Application.Projects;
 using ProjectMind.Application.WorkItems;
 using ProjectMind.Domain.Enums;
@@ -26,15 +27,30 @@ public abstract class ServiceTestBase : IDisposable
 
     protected AppDbContext Db { get; }
 
+    protected ProjectOverviewService NewOverviewService() =>
+        new(new ProjectService(Db), new PersonService(Db), new WorkItemService(Db), new DependencyService(Db));
+
+    /// <summary>Testlerde "bugün" proje başlangıcından önce: plan proje başlangıç tarihinden başlar.</summary>
+    protected ScheduleService NewScheduleService() =>
+        new(Db, NewOverviewService(), new FixedClock(new DateTimeOffset(2026, 10, 1, 9, 0, 0, TimeSpan.Zero)));
+
     protected AiActionService NewActionService() =>
-        new(Db, new ProjectService(Db), new PersonService(Db), new WorkItemService(Db), new DependencyService(Db));
+        new(Db, new ProjectService(Db), new PersonService(Db), new WorkItemService(Db), new DependencyService(Db),
+            NewScheduleService());
+
+    protected sealed class FixedClock(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
+        public override TimeZoneInfo LocalTimeZone => TimeZoneInfo.Utc;
+    }
+
 
     protected ChatService NewChatService(IChatModel model)
     {
-        var overview = new ProjectOverviewService(
-            new ProjectService(Db), new PersonService(Db), new WorkItemService(Db), new DependencyService(Db));
+        var overview = NewOverviewService();
         return new ChatService(Db, model, NewActionService(),
-            new ReadOnlyToolHandler(Db, new ProjectMind.Application.MissingWork.MissingWorkService(overview)), new ProjectService(Db),
+            new ReadOnlyToolHandler(Db, new ProjectMind.Application.MissingWork.MissingWorkService(overview, NewScheduleService()),
+                NewScheduleService()), new ProjectService(Db),
             new ProjectContextBuilder(Db, overview, TimeProvider.System), new AiOptions());
     }
 

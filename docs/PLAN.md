@@ -2,7 +2,7 @@
 
 **Akademik başlık:** Yapay Zekâ Destekli Yazılım Proje Planlama ve Karar Destek Sistemi: Zamanlama, Kaynak ve Kapsam Yönetimi Üzerine Bir Uygulama
 
-**Aktif faz: FAZ 4 — Otomatik planlama**
+**Aktif faz: FAZ 5 — Takip ve analiz**
 
 ## Ürün akışı (tek kullanıcı: proje yöneticisi)
 
@@ -57,13 +57,14 @@
 - [ ] "Kabul etmeden önce plana etkisi" bilgisi (Faz 4 sonrası bağlanır) → Faz 4'e taşındı
 - [x] Test: tam plandan birer iş çıkarma (leave-one-out) → precision = recall = 1.0 (15 şablon)
 
-### FAZ 4 — Otomatik planlama
-- [ ] Eksik iş önerisinin plana etkisi (toplam efor / bitiş tarihine etkisi)
-- [ ] CPM: ES/EF/LS/LF, bolluk (slack), kritik yol
-- [ ] Kaynak kısıtlı çizelgeleme (öncelik kurallı seri çizelgeleme): beceri + kapasite
-- [ ] Planı uygula (atama + tarih), elle düzeltme
-- [ ] Baseline kaydet
-- [ ] Gantt ekranı, kişi doluluk tablosu
+### FAZ 4 — Otomatik planlama ✅
+- [x] Eksik iş önerisinin plana etkisi (ek iş günü, efor, maliyet — simülasyonla)
+- [x] CPM: ES/EF/LS/LF, bolluk (slack), kritik yol
+- [x] Kaynak kısıtlı çizelgeleme (seri çizelgeleme, öncelik = en küçük LS): beceri + haftalık kapasite, sabit atamalar korunur
+- [x] Planı uygula (tarih + boş atamalar; üst iş tarihleri alt işlerden) — elle düzeltme: chat'ten update_work_item (plannedStart/End)
+- [x] Baseline kaydet (Baselines / BaselineItems; EVM PV kaynağı)
+- [x] Gantt ekranı (kritik yol / bolluk / kişisiz / üst iş), kişi doluluk tablosu, maliyet-bütçe, hedefe göre sapma
+- [x] AI: preview_schedule (salt okunur, tarih/maliyet soruları), apply_schedule (kart)
 
 ### FAZ 5 — Takip ve analiz
 - [ ] StatusUpdate (durum, % tamamlanma, harcanan saat)

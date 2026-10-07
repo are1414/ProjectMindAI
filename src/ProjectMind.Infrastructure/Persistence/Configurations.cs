@@ -107,3 +107,26 @@ internal sealed class AiActionConfiguration : IEntityTypeConfiguration<AiAction>
             .HasForeignKey(a => a.ChatMessageId).OnDelete(DeleteBehavior.NoAction);
     }
 }
+
+internal sealed class BaselineConfiguration : IEntityTypeConfiguration<Baseline>
+{
+    public void Configure(EntityTypeBuilder<Baseline> b)
+    {
+        b.Property(x => x.TotalHours).HasPrecision(10, 2);
+        b.Property(x => x.PlannedCost).HasPrecision(18, 2);
+        b.HasOne<Project>().WithMany()
+            .HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Cascade);
+        b.HasMany(x => x.Items).WithOne()
+            .HasForeignKey(i => i.BaselineId).OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+internal sealed class BaselineItemConfiguration : IEntityTypeConfiguration<BaselineItem>
+{
+    public void Configure(EntityTypeBuilder<BaselineItem> b)
+    {
+        b.Property(x => x.Name).HasMaxLength(300).IsRequired();
+        b.Property(x => x.Hours).HasPrecision(8, 2);
+        b.Property(x => x.HourlyCost).HasPrecision(18, 2);
+    }
+}

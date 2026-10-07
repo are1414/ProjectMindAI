@@ -30,6 +30,18 @@ else
         <div class="stat"><span>Toplam tahmini efor</span><strong>@Format.Number(Overview.TotalEstimatedHours) saat</strong></div>
     </div>
 
+    <nav class="tabs">
+        <button class="tab @(_tab == Tab.Work ? "active" : "")" @onclick="() => _tab = Tab.Work">İşler (@Overview.WorkItems.Count)</button>
+        <button class="tab @(_tab == Tab.Plan ? "active" : "")" @onclick="() => _tab = Tab.Plan">Plan (Gantt)</button>
+        <button class="tab @(_tab == Tab.Team ? "active" : "")" @onclick="() => _tab = Tab.Team">Ekip (@Overview.People.Count)</button>
+    </nav>
+
+    @if (_tab == Tab.Plan)
+    {
+        <PlanPanel ProjectId="Overview.Project.Id" Overview="Overview" OnDataChanged="OnDataChanged" />
+    }
+    else if (_tab == Tab.Work)
+    {
     <div class="section-head">
         <h2>İşler <span class="count">@Overview.WorkItems.Count</span></h2>
         @if (Overview.WorkItems.Any(w => w.ParentId is not null))
@@ -139,6 +151,9 @@ else
         </ul>
     }
 
+    }
+    else
+    {
     <h2>Ekip <span class="count">@Overview.People.Count</span></h2>
     @if (Overview.People.Count == 0)
     {
@@ -162,12 +177,17 @@ else
         </table>
     }
 }
+    }
 
 @code {
     [Parameter] public ProjectOverview? Overview { get; set; }
     [Parameter] public EventCallback OnDataChanged { get; set; }
 
     private enum Field { Name, Hours, Percent }
+
+    private enum Tab { Work, Plan, Team }
+
+    private Tab _tab = Tab.Work;
 
     // Açık olan üst işler; varsayılan: hepsi kapalı (sadece üst seviye görünür, sayfa kısa kalır).
     private readonly HashSet<int> _expanded = [];

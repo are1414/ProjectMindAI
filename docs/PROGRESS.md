@@ -4,6 +4,30 @@ Her oturum sonunda en üste yeni kayıt eklenir. Format: yapılanlar · varsayı
 
 ---
 
+## 2026-10-07 (14) — Faz 4: Otomatik planlama (CPM + kaynak kısıtlı çizelge + baseline)
+
+- `Planning/`: `WorkCalendar` (Pzt–Cum), `CriticalPath` (ileri/geri geçiş, bolluk, kritik yol, döngü tespiti),
+  `ResourceScheduler` (seri çizelgeleme: öncülü bitenler arasından en küçük CPM-LS, eşitlikte öncelik; gereken beceriye sahip
+  ve işi en erken bitirecek kişiye günlük kapasite aşılmadan), `ScheduleService` (DB'den girdi, önizleme, uygula, baseline).
+- Girdi kuralları: sadece yaprak işler planlanır; üst işe verilen bağımlılık alt işlerine açılır; kalan efor =
+  tahmini × (1 − %tamamlanma), "Bitti" = 0; iptal edilenler dışarıda; plan başlangıcı = max(proje başlangıcı, bugün).
+- Varsayımlar (gün hassasiyeti): bağımlı iş, öncülü bittiği günün ertesi iş günü başlar; bir kişi aynı gün birden fazla
+  bağımsız işe kalan kapasitesiyle çalışabilir; günlük kapasite = haftalık / 5; uygun kişi yoksa iş, günde HoursPerDay saatle
+  kişisiz planlanır ve uyarı verilir; elle atanmış kişi korunur (beceri uymuyorsa uyarı).
+- Yeni tablolar (migration `AddBaselines`): `Baselines`, `BaselineItems` (iş silinse de değişmeyen dondurulmuş plan).
+- AI: `preview_schedule` (salt okunur; bitiş, sapma, kritik yol, doluluk, maliyet, uyarılar — sayılar koddan) ve
+  `apply_schedule` (kart). Eksik iş kontrolü artık "eklenirse bitiş N iş günü uzar, +X saat, +Y maliyet" bilgisini de verir.
+  Prompt chat-v5.
+- Arayüz: proje paneli sekmeli (İşler · Plan (Gantt) · Ekip). Plan: özet kartlar, uyarılar, Gantt (kritik kırmızı, bolluklu mavi,
+  kişisiz çizgili, üst iş siyah), kişi doluluk tablosu, "Planı uygula ve baseline kaydet".
+- Testler 77/77: CPM ders kitabı örneği (elle hesap), çizelgeleme senaryoları (paralel kişi, yarı zamanlı kapasite, kritik öncelik,
+  eksik beceri, sabit atama, maliyet/doluluk, hafta sonu), DB entegrasyonu (üst iş bağımlılığı açılımı, kalan efor, uygula + baseline,
+  eksik iş etkisi, chat kartı). Arayüz Playwright ile denendi.
+
+**Sıradaki adım**: Faz 5 — durum girişi geçmişi (StatusUpdate), snapshot, EVM (PV baseline'dan), sağlık skoru, risk uyarıları.
+
+---
+
 ## 2026-10-07 (13) — Faz 3: Eksik iş kontrolü
 
 Proje sahibi: "fazın sonraki adımlarına geç; proje değiştiyse gidişata göre sormadan yapıyı değiştir."

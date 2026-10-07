@@ -18,9 +18,11 @@ public static class AiTools
     public const string RemoveWorkItem = "remove_work_item";
     public const string AddDependency = "add_dependency";
     public const string CheckMissingWork = "check_missing_work";
+    public const string PreviewSchedule = "preview_schedule";
+    public const string ApplySchedule = "apply_schedule";
 
     /// <summary>Veri değiştirmeyen, sadece bilgi döndüren araçlar (öneri kartı oluşturmaz).</summary>
-    public static readonly IReadOnlySet<string> ReadOnly = new HashSet<string> { CheckMissingWork };
+    public static readonly IReadOnlySet<string> ReadOnly = new HashSet<string> { CheckMissingWork, PreviewSchedule };
 
     /// <summary>Toplu uygulamada sıra: önce proje, sonra kişiler, işler, bağımlılıklar, silmeler.</summary>
     public static int ApplyOrder(string toolName) => toolName switch
@@ -33,6 +35,7 @@ public static class AiTools
         UpdateWorkItem => 5,
         AddDependency => 6,
         RemoveWorkItem => 7,
+        ApplySchedule => 8,
         _ => 99
     };
 
@@ -140,6 +143,16 @@ public static class AiTools
         new(CheckMissingWork,
             "Projenin iş listesini proje tipine göre bilinen iş şablonlarıyla karşılaştırıp eksik görünen işleri döndürür " +
             "(veri değiştirmez). Kullanıcı eksik iş sorduğunda veya iş listesi oluşturulduktan sonra kullan.",
+            Schema(new { })),
+
+        new(PreviewSchedule,
+            "Otomatik planı hesaplar (veri değiştirmez): kritik yol, kaynak kısıtlı tahmini bitiş, hedefe göre sapma, " +
+            "kişi doluluğu, maliyet ve uyarılar. Tarih/süre/maliyet sorularında ve plan yorumlamada kullan; sayıları buradan al.",
+            Schema(new { })),
+
+        new(ApplySchedule,
+            "Otomatik planın işlere uygulanmasını (başlangıç/bitiş tarihleri ve boş atamalar) ve baseline olarak " +
+            "kaydedilmesini önerir. Kullanıcı planı onaylamak istediğinde kullan.",
             Schema(new { })),
 
         new(AddDependency,
