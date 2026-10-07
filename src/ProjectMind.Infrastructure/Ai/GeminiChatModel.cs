@@ -248,9 +248,12 @@ public sealed class GeminiChatModel(HttpClient http, AiOptions options, ILogger<
     private static JsonObject ToDeclaration(ChatToolDefinition d)
     {
         var parameters = JsonNode.Parse(d.InputSchema.GetRawText())!.AsObject();
-        // Gemini boş "required" dizisini kabul etmeyebiliyor; boşsa kaldır.
+        // Gemini boş "required" dizisini ve özelliksiz nesne şemasını kabul etmiyor; parametresiz araçta şema gönderilmez.
         if (parameters["required"] is JsonArray { Count: 0 })
             parameters.Remove("required");
-        return new JsonObject { ["name"] = d.Name, ["description"] = d.Description, ["parameters"] = parameters };
+        var declaration = new JsonObject { ["name"] = d.Name, ["description"] = d.Description };
+        if (parameters["properties"] is JsonObject { Count: > 0 })
+            declaration["parameters"] = parameters;
+        return declaration;
     }
 }

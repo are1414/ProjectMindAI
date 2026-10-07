@@ -19,7 +19,8 @@ public class AiToolsTests
 
     [Fact]
     public void Tool_names_are_unique_and_have_an_apply_order() =>
-        Assert.All(AiTools.All, t => Assert.NotEqual(99, AiTools.ApplyOrder(t.Name)));
+        Assert.All(AiTools.All.Where(t => !AiTools.ReadOnly.Contains(t.Name)),
+            t => Assert.NotEqual(99, AiTools.ApplyOrder(t.Name)));
 
     [Fact]
     public void Skill_enum_in_schema_excludes_none()

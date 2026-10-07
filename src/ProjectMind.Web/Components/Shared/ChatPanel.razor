@@ -78,6 +78,16 @@
         <div class="chat-error">@_error</div>
     }
 
+    @if (HasProject && !_sending)
+    {
+        <div class="chat-shortcuts">
+            @foreach (var shortcut in Shortcuts)
+            {
+                <button class="chip" type="button" @onclick="() => SendShortcutAsync(shortcut)">@shortcut</button>
+            }
+        </div>
+    }
+
     <form class="chat-input" @onsubmit="SendAsync">
         <input @bind="_input" @bind:event="oninput" placeholder="Projenizle ilgili bir şey yazın…" disabled="@_sending" />
         <button class="btn btn-primary" type="submit" disabled="@(_sending || string.IsNullOrWhiteSpace(_input))">Gönder</button>
@@ -98,6 +108,14 @@
     private bool _scrollPending = true;
     private bool _loading = true;
     private ElementReference _scroller;
+
+    private static readonly string[] Shortcuts = ["Eksik iş var mı?"];
+
+    private Task SendShortcutAsync(string text)
+    {
+        _input = text;
+        return SendAsync();
+    }
 
     private int PendingCount => _actions.Count(a => a.Status == AiActionStatus.Pending);
 

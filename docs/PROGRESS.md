@@ -4,6 +4,24 @@ Her oturum sonunda en üste yeni kayıt eklenir. Format: yapılanlar · varsayı
 
 ---
 
+## 2026-10-07 (13) — Faz 3: Eksik iş kontrolü
+
+Proje sahibi: "fazın sonraki adımlarına geç; proje değiştiyse gidişata göre sormadan yapıyı değiştir."
+- Uyarlama: Plandaki TaskTemplate DB tablosu yerine kodda sürümlü katalog (`WorkTemplateCatalog`, templates-v1, 19 şablon,
+  proje tipine göre filtre). Gerekçe: kullanıcı verisi değil sabit bilgi; test edilebilir, migration gerektirmez.
+- `MissingWorkDetector`: Türkçe sadeleştirme (ı→i, ş→s…), çok kelimeli anahtar = alt metin, kısa (≤3) = tam kelime,
+  diğerleri = kelime başı eşleşme. Eksik işler için "hangi mevcut işten önce bitmeli" önerisi (şablon `Before`).
+- `check_missing_work` salt okunur AI aracı (`ReadOnlyToolHandler`): sonuç modele JSON döner, kart oluşturmaz; model eksikleri
+  add_work_item / add_dependency kartlarıyla önerir (prompt chat-v4). Chat'te "Eksik iş var mı?" kısayolu.
+- Gemini: parametresiz araçta şema gönderilmez (Gemini özelliksiz nesne şemasını kabul etmiyor).
+- AI'a giden JSON artık Türkçe karakterleri kaçışlamıyor (okunaklı, daha az token).
+- Değerlendirme (RQ4): eksiksiz web planından birer iş çıkarma → 15/15 doğru tespit, 0 yanlış pozitif (precision = recall = 1.0).
+  Bu test sayesinde "SQL Server kurulumu"nun sunucu kurulumunu yanlışlıkla karşılaması bulunup düzeltildi.
+- Varsayım: Kart kaynağı (kural mı serbest öneri mi) ayrıca etiketlenmiyor; şablon adlarıyla eşleştirilerek analiz edilebilir.
+- Testler 63/63.
+
+---
+
 ## 2026-10-07 (12) — Gemini yoğunluk (503) dayanıklılığı
 
 Proje sahibinin lokal denemesi: anahtar çalışıyor (istek Google'a ulaştı), ancak `gemini-3.5-flash` 503 "high demand" döndü.

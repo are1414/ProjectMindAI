@@ -1,5 +1,7 @@
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Unicode;
 using ProjectMind.Domain.Enums;
 
 namespace ProjectMind.Application.Ai;
@@ -38,6 +40,8 @@ public static class AiJson
     {
         Converters = { new JsonStringEnumConverter(allowIntegerValues: false) },
         RespectRequiredConstructorParameters = true,
+        // Türkçe karakterler \u0131 gibi kaçışlanmasın: model için okunaklı ve daha az token.
+        Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
         RespectNullableAnnotations = true
     };
 }

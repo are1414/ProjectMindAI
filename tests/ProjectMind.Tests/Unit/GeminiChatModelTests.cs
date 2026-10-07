@@ -96,6 +96,10 @@ public class GeminiChatModelTests
         var updateProject = handler.Requests[0].Body["tools"]![0]!["functionDeclarations"]!.AsArray()
             .Single(d => d!["name"]!.GetValue<string>() == AiTools.UpdateProject)!;
         Assert.Null(updateProject["parameters"]!["required"]);
+
+        var checkMissing = handler.Requests[0].Body["tools"]![0]!["functionDeclarations"]!.AsArray()
+            .Single(d => d!["name"]!.GetValue<string>() == AiTools.CheckMissingWork)!;
+        Assert.Null(checkMissing["parameters"]);   // parametresiz araçta şema gönderilmez
     }
 
     [Fact]

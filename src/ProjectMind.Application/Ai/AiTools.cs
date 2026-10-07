@@ -17,6 +17,10 @@ public static class AiTools
     public const string UpdateWorkItem = "update_work_item";
     public const string RemoveWorkItem = "remove_work_item";
     public const string AddDependency = "add_dependency";
+    public const string CheckMissingWork = "check_missing_work";
+
+    /// <summary>Veri değiştirmeyen, sadece bilgi döndüren araçlar (öneri kartı oluşturmaz).</summary>
+    public static readonly IReadOnlySet<string> ReadOnly = new HashSet<string> { CheckMissingWork };
 
     /// <summary>Toplu uygulamada sıra: önce proje, sonra kişiler, işler, bağımlılıklar, silmeler.</summary>
     public static int ApplyOrder(string toolName) => toolName switch
@@ -132,6 +136,11 @@ public static class AiTools
         new(RemoveWorkItem,
             "Bir işi (ve bağımlılıklarını) silmeyi önerir.",
             Schema(new { workItemId = Int("İş id") }, "workItemId")),
+
+        new(CheckMissingWork,
+            "Projenin iş listesini proje tipine göre bilinen iş şablonlarıyla karşılaştırıp eksik görünen işleri döndürür " +
+            "(veri değiştirmez). Kullanıcı eksik iş sorduğunda veya iş listesi oluşturulduktan sonra kullan.",
+            Schema(new { })),
 
         new(AddDependency,
             "Finish-to-Start bağımlılık önerir: successor, predecessor bitmeden başlayamaz. İş adlarıyla belirt.",

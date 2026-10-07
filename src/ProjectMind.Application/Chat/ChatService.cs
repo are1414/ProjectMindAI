@@ -17,6 +17,7 @@ public sealed class ChatService(
     IAppDbContext db,
     IChatModel model,
     AiActionService actions,
+    ReadOnlyToolHandler readOnlyTools,
     ProjectService projects,
     ProjectContextBuilder contextBuilder,
     AiOptions options)
@@ -129,7 +130,7 @@ public sealed class ChatService(
         await db.SaveChangesAsync(ct);
 
         var context = await contextBuilder.BuildAsync(sessionId, ct);
-        var executor = new SessionToolExecutor(actions, sessionId);
+        var executor = new SessionToolExecutor(actions, readOnlyTools, sessionId);
         var request = new ChatTurnRequest(
             ChatPrompts.System,
             history,
@@ -167,7 +168,8 @@ public sealed class ChatService(
     }
 
     /// <summary>Modelin araç çağrılarını öneri olarak kaydeder; hataları modele geri bildirir ki düzeltsin.</summary>
-    private sealed class SessionToolExecutor(AiActionService actions, int sessionId) : IChatToolExecutor
+    private sealed class SessionToolExecutor(AiActionService actions, ReadOnlyToolHandler readOnlyTools, int sessionId)
+        : IChatToolExecutor
     {
         public List<int> CreatedActionIds { get; } = [];
 
@@ -175,6 +177,9 @@ public sealed class ChatService(
         {
             try
             {
+                if (AiTools.ReadOnly.Contains(toolName))
+                    return await readOnlyTools.ExecuteAsync(sessionId, toolName, ct);
+
                 var action = await actions.ProposeAsync(sessionId, toolName, input, ct);
                 CreatedActionIds.Add(action.Id);
                 return new ToolExecutionResult(

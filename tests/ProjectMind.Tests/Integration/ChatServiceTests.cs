@@ -128,6 +128,27 @@ public class ChatServiceTests : ServiceTestBase
         Assert.Empty(Db.ChatMessages);
     }
 
+    [Fact]
+    public async Task Missing_work_check_returns_rule_based_result_without_creating_cards()
+    {
+        var chat = NewChatService(new ScriptedModel(
+            (AiTools.CreateProject, new { name = "Web", type = "WebApplication", startDate = "2026-12-01", targetEndDate = "2027-03-31" }),
+            (AiTools.AddWorkItem, new { name = "Backend API", phase = "Development", requiredSkill = "Backend", estimatedHours = 40 })));
+        var session = await chat.CreateSessionAsync(_ct);
+        await chat.SendAsync(session.Id, "Proje aç", _ct);
+        await NewActionService().ApplyAllPendingAsync(session.Id, _ct);
+
+        var checker = new ScriptedModel((AiTools.CheckMissingWork, new { }));
+        await NewChatService(checker).SendAsync(session.Id, "Eksik iş var mı?", _ct);
+
+        var result = checker.Results.Single();
+        Assert.False(result.IsError);
+        Assert.Contains("Veritabanı kurulumu", result.Content);
+        Assert.Contains("Backend API", result.Content);        // mustFinishBefore önerisi
+        Assert.DoesNotContain("Mobil uygulama", result.Content);
+        Assert.All(await NewActionService().ListAsync(session.Id, _ct), a => Assert.NotEqual(AiActionStatus.Pending, a.Status));
+    }
+
     private sealed class FailingModel : IChatModel
     {
         public Task<ChatTurnResult> CompleteTurnAsync(ChatTurnRequest request, IChatToolExecutor tools, CancellationToken ct) =>

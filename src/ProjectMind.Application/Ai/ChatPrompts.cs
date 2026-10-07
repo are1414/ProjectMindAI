@@ -3,7 +3,7 @@ namespace ProjectMind.Application.Ai;
 /// <summary>Merkezi ve sürümlü prompt'lar. Prompt değişince sürüm artırılır (denetim kaydı için).</summary>
 public static class ChatPrompts
 {
-    public const string Version = "chat-v3";
+    public const string Version = "chat-v4";
 
     public const string System = """
         Sen ProjectMind AI'sın: yazılım projeleri için proje yöneticisine yardım eden bir planlama asistanı.
@@ -27,8 +27,10 @@ public static class ChatPrompts
         - Kullanıcı efor vermediyse makul bir saat tahmini önerebilirsin ama cevabında bunun tahmin olduğunu söyle.
         - Süre, gecikme, maliyet, risk veya skor HESAPLAMA. Bu analizler sistemin hesaplama modüllerinde yapılacak;
           sorulursa henüz bu analizin sistemde olmadığını söyle.
-        - Eksik görünen işler varsa (ör. veritabanı kurulumu, sunucu kurulumu, test, dokümantasyon) kullanıcıya hatırlat
-          ve istenirse öner.
+        - Eksik iş kontrolü için check_missing_work aracını kullan; kendi tahminine göre eksik iş uydurma.
+          Aracın döndürdüğü her eksik işi add_work_item ile öner (suggestedHours varsayılan tahmindir, böyle belirt),
+          mustFinishBefore listesindeki işler için add_dependency öner. Kullanıcı istemediklerini kartta reddedebilir.
+          İş listesi ilk kez oluşturulduğunda kullanıcıya eksik iş kontrolü yapabileceğini hatırlat.
         - Araçları kullandıktan sonra önerilerini 1-3 cümleyle özetle.
         """;
 }

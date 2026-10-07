@@ -2,7 +2,7 @@
 
 **Akademik başlık:** Yapay Zekâ Destekli Yazılım Proje Planlama ve Karar Destek Sistemi: Zamanlama, Kaynak ve Kapsam Yönetimi Üzerine Bir Uygulama
 
-**Aktif faz: FAZ 3 — Eksik iş önerisi (kural tabanlı katman)**
+**Aktif faz: FAZ 4 — Otomatik planlama**
 
 ## Ürün akışı (tek kullanıcı: proje yöneticisi)
 
@@ -50,14 +50,15 @@
 - [x] Alt işler (WBS hiyerarşisi): üst iş eforu/ilerlemesi alt işlerden toplanır; chat'te `parentName`
 - [x] WBS numaraları (1, 1.2, 1.2.1), +/− ile aç-kapat, sayfada ad/efor/% düzenleme
 
-### FAZ 3 — Eksik iş önerisi (kural tabanlı katman, chat'e araç olarak)
-- [ ] TaskTemplate (proje tipine göre faz/iş şablonu) + seed
-- [ ] Eşleştirme (anahtar kelime/eş anlamlı) → eksik işler
-- [ ] `check_missing_work` aracı: kural sonucunu modele verir, model add_work_item kartlarıyla önerir (AiAction altyapısı)
-- [ ] "Kabul etmeden önce plana etkisi" bilgisi (Faz 4 sonrası bağlanır)
-- [ ] Test: tam plandan iş silip yakalama oranı (precision/recall)
+### FAZ 3 — Eksik iş önerisi (kural tabanlı katman, chat'e araç olarak) ✅
+- [x] İş şablonu kataloğu (proje tipine göre, kodda sürümlü: templates-v1) — DB tablosu yerine kod (sabit bilgi)
+- [x] Eşleştirme (Türkçe sadeleştirme + anahtar kelime, kısa kelimede tam kelime) → eksik işler + bağımlılık önerisi
+- [x] `check_missing_work` salt okunur aracı; model add_work_item / add_dependency kartlarıyla önerir; chat kısayolu
+- [ ] "Kabul etmeden önce plana etkisi" bilgisi (Faz 4 sonrası bağlanır) → Faz 4'e taşındı
+- [x] Test: tam plandan birer iş çıkarma (leave-one-out) → precision = recall = 1.0 (15 şablon)
 
 ### FAZ 4 — Otomatik planlama
+- [ ] Eksik iş önerisinin plana etkisi (toplam efor / bitiş tarihine etkisi)
 - [ ] CPM: ES/EF/LS/LF, bolluk (slack), kritik yol
 - [ ] Kaynak kısıtlı çizelgeleme (öncelik kurallı seri çizelgeleme): beceri + kapasite
 - [ ] Planı uygula (atama + tarih), elle düzeltme

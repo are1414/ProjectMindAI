@@ -33,7 +33,8 @@ public abstract class ServiceTestBase : IDisposable
     {
         var overview = new ProjectOverviewService(
             new ProjectService(Db), new PersonService(Db), new WorkItemService(Db), new DependencyService(Db));
-        return new ChatService(Db, model, NewActionService(), new ProjectService(Db),
+        return new ChatService(Db, model, NewActionService(),
+            new ReadOnlyToolHandler(Db, new ProjectMind.Application.MissingWork.MissingWorkService(overview)), new ProjectService(Db),
             new ProjectContextBuilder(Db, overview, TimeProvider.System), new AiOptions());
     }
 
