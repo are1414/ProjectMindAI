@@ -1,0 +1,16 @@
+# Lokal geliştirme için SQL Server. Şifre sadece geliştirme ortamı içindir.
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: projectmind-sql
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "ProjectMind_Dev123!"
+      MSSQL_PID: "Developer"
+    ports:
+      - "1433:1433"
+    volumes:
+      - projectmind-sql-data:/var/opt/mssql
+
+volumes:
+  projectmind-sql-data:
