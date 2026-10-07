@@ -1,0 +1,158 @@
+@inject AppScope Scope
+@inject IJSRuntime JS
+
+<div class="chat">
+    <div class="chat-header">
+        <span>AI Asistan</span>
+        @if (PendingCount > 1)
+        {
+            <button class="btn btn-primary btn-sm" disabled="@_busy" @onclick="ApplyAllAsync">Bekleyen @PendingCount öneriyi uygula</button>
+        }
+    </div>
+
+    <div class="chat-messages" @ref="_scroller">
+        @if (_messages.Count == 0)
+        {
+            <div class="chat-hint">
+                Merhaba! Projenizi anlatın: adı, ne zaman başlayıp biteceği, bütçesi, yapılacak işler ve ekip.
+                Ben öneri kartları hazırlayacağım, siz onaylayacaksınız.
+            </div>
+        }
+        @foreach (var m in _messages)
+        {
+            <div class="msg msg-@m.Role.ToString().ToLowerInvariant()">
+                <div class="bubble">@m.Content</div>
+                @foreach (var a in _actions.Where(a => a.ChatMessageId == m.Id))
+                {
+                    <div class="action-card action-@a.Status.ToString().ToLowerInvariant()">
+                        <div class="action-summary">@a.Summary</div>
+                        @if (a.Status == AiActionStatus.Pending)
+                        {
+                            <div class="action-buttons">
+                                <button class="btn btn-primary btn-sm" disabled="@_busy" @onclick="() => ApplyAsync(a.Id)">Uygula</button>
+                                <button class="btn btn-sm" disabled="@_busy" @onclick="() => RejectAsync(a.Id)">Vazgeç</button>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="action-result">
+                                <span class="badge">@Format.Name(a.Status)</span>
+                                @if (a.Status == AiActionStatus.Failed)
+                                {
+                                    <span>@a.ResultMessage</span>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+        @if (_sending)
+        {
+            <div class="msg msg-assistant"><div class="bubble typing">Düşünüyor…</div></div>
+        }
+    </div>
+
+    @if (_error is not null)
+    {
+        <div class="chat-error">@_error</div>
+    }
+
+    <form class="chat-input" @onsubmit="SendAsync">
+        <input @bind="_input" @bind:event="oninput" placeholder="Projenizle ilgili bir şey yazın…" disabled="@_sending" />
+        <button class="btn btn-primary" type="submit" disabled="@(_sending || string.IsNullOrWhiteSpace(_input))">Gönder</button>
+    </form>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public int SessionId { get; set; }
+    [Parameter] public EventCallback OnDataChanged { get; set; }
+
+    private List<ChatMessageResponse> _messages = [];
+    private IReadOnlyList<AiActionResponse> _actions = [];
+    private string _input = "";
+    private bool _sending;
+    private bool _busy;
+    private string? _error;
+    private bool _scrollPending = true;
+    private ElementReference _scroller;
+
+    private int PendingCount => _actions.Count(a => a.Status == AiActionStatus.Pending);
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_scrollPending)
+        {
+            _scrollPending = false;
+            await JS.InvokeVoidAsync("pmScrollToBottom", _scroller);
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        _messages = (await Scope.RunAsync<ChatService, IReadOnlyList<ChatMessageResponse>>(
+            s => s.ListMessagesAsync(SessionId, CancellationToken.None))).ToList();
+        _actions = await Scope.RunAsync<AiActionService, IReadOnlyList<AiActionResponse>>(
+            s => s.ListAsync(SessionId, CancellationToken.None));
+        _scrollPending = true;
+    }
+
+    private async Task SendAsync()
+    {
+        var text = _input.Trim();
+        if (text.Length == 0 || _sending)
+            return;
+
+        _error = null;
+        _sending = true;
+        _input = "";
+        _messages.Add(new ChatMessageResponse(0, ChatRole.User, text, DateTime.UtcNow));
+        _scrollPending = true;
+        StateHasChanged();
+
+        try
+        {
+            await Scope.RunAsync<ChatService>(s => s.SendAsync(SessionId, text, CancellationToken.None));
+        }
+        catch (BusinessRuleException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _sending = false;
+            await LoadAsync();
+        }
+    }
+
+    private Task ApplyAsync(int actionId) =>
+        DecideAsync(s => s.ApplyAsync(actionId, CancellationToken.None));
+
+    private Task RejectAsync(int actionId) =>
+        DecideAsync(s => s.RejectAsync(actionId, CancellationToken.None));
+
+    private Task ApplyAllAsync() =>
+        DecideAsync(s => s.ApplyAllPendingAsync(SessionId, CancellationToken.None));
+
+    private async Task DecideAsync(Func<AiActionService, Task> decision)
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            await Scope.RunAsync(decision);
+        }
+        catch (BusinessRuleException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+            await LoadAsync();
+            await OnDataChanged.InvokeAsync();
+        }
+    }
+}

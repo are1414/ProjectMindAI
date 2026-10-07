@@ -6,12 +6,12 @@ Bu kararlar ancak proje sahibinin açık onayıyla değişir. Değişirse eski k
 |---|---|---|
 | D1 | Ürün adı **ProjectMind AI** | — |
 | D2 | **Tek kullanıcı** (proje yöneticisi). Login / rol / JWT yok. | Akademik değer katmıyor, süre yiyor. |
-| D3 | ~~ASP.NET Core Web API~~ → **(2026-10-07) Tek .NET 10 web uygulaması: ASP.NET Core MVC (Razor view, sunucu tarafı render).** Ayrı API katmanı yazılmaz. | Kapsamı dar tutmak; proje sahibinin uzmanlığı. |
+| D3 | ~~ASP.NET Core Web API~~ → ~~ASP.NET Core MVC~~ → **(2026-10-07) Tek .NET 10 web uygulaması: Blazor Server (interactive server, ön-render kapalı).** Ayrı API katmanı yazılmaz. | Chat odaklı canlı arayüz; her şey C#. |
 | D4 | Veritabanı: **Microsoft SQL Server**, EF Core migrations. Lokal ortam: **(2026-10-07) bilgisayardaki SQL Server, Windows Authentication, DB `ProjectMindAIDb`**; docker-compose sadece yedek seçenek. | Proje sahibi tercihi. |
 | D5 | Katmanlar: Domain / Application / Infrastructure / **Web** + Tests. Mikroservis yok. | Sade Clean Architecture yeterli. |
-| D6 | ~~React + TypeScript~~ → **(2026-10-07) Arayüz Razor view + Bootstrap 5.** Grafik/Gantt gerekince sadece küçük JS kütüphanesi (CDN değil, `wwwroot/lib`). npm/SPA yok. | Tek proje, tek dil. |
+| D6 | ~~React + TypeScript~~ → **(2026-10-07) Arayüz Blazor bileşenleri + kendi CSS'imiz (`wwwroot/app.css`).** Şimdilik sade tasarım; profesyonel tasarım ayrı adımda. Grafik/Gantt gerekince küçük JS kütüphanesi (`wwwroot/lib`). npm/SPA yok. | Tek proje, tek dil. |
 | D7 | ~~Python FastAPI servisi~~ → **(2026-10-07) ML uygulama içinde ML.NET ile.** Python sadece opsiyonel olarak çevrimdışı analiz/grafik için (uygulamanın parçası değil). | Her şey tek .NET projesinde kalsın. |
-| D8 | LLM: `IAIService` soyutlaması; sağlayıcılar **Mock** (varsayılan), Ollama, Claude/OpenAI | Maliyet kontrolü, karşılaştırma imkânı. |
+| D8 | LLM: `IChatModel` soyutlaması. **(2026-10-07) Ana sağlayıcı Claude** (Anthropic C# SDK, model `claude-opus-5-5`, effort `low`, appsettings `AI` bölümünden değiştirilebilir). API anahtarı yoksa otomatik **Mock**. | Proje sahibi tercihi; maliyet kontrolü. |
 | D9 | LLM sadece **açıklar/önerir**; tüm sayısal hesaplar deterministik kod veya ML servisinde. | Halüsinasyonu önler, savunulabilir. |
 | D10 | Baseline yöntem: **EVM / Earned Schedule**. ML modeli buna karşı kıyaslanır. | Mühendislik yönetimi bağlantısı. |
 | D11 | Sağlık skoru ağırlıkları **AHP** ile belirlenir. | Ağırlıklar keyfi olmasın. |
@@ -19,6 +19,7 @@ Bu kararlar ancak proje sahibinin açık onayıyla değişir. Değişirse eski k
 | D13 | Bağımlılık türü sadece **Finish-to-Start**. | MVP için yeterli. |
 | D14 | Kişiler projeye bağlıdır (proje bazlı ekip). | Basitlik. |
 | D15 | Eksik iş önerisi **hibrit**: kural/şablon tabanlı + LLM. AI önerisi yönetici onayı olmadan eklenmez. | Açıklanabilirlik + kontrol. |
+| D17 | **(2026-10-07) Chat odaklı kullanım:** proje, iş, kişi, bağımlılık sohbetten yönetilir. AI araç çağrısı = öneri kartı (AiAction); proje yöneticisi Uygula/Vazgeç der. Sohbet kayıtları saklanır. | Proje sahibi isteği; kabul oranı akademik ölçüm. |
 | D16 | Kod İngilizce, dokümantasyon Türkçe. | — |
 
 ## YAPILMAYACAKLAR (eklenmesi yasak)

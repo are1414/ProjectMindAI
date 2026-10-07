@@ -64,3 +64,17 @@ public enum WorkItemStatus
     [Display(Name = "Bitti")] Done,
     [Display(Name = "İptal")] Cancelled
 }
+
+public enum ChatRole
+{
+    User,
+    Assistant
+}
+
+public enum AiActionStatus
+{
+    [Display(Name = "Onay bekliyor")] Pending,
+    [Display(Name = "Uygulandı")] Applied,
+    [Display(Name = "Reddedildi")] Rejected,
+    [Display(Name = "Hata")] Failed
+}

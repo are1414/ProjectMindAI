@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/" />
+    <title>ProjectMind AI</title>
+    <ResourcePreloader />
+    <link rel="stylesheet" href="@Assets["app.css"]" />
+    <ImportMap />
+    <HeadOutlet @rendermode="RenderModeNoPrerender" />
+</head>
+
+<body>
+    <Routes @rendermode="RenderModeNoPrerender" />
+    <ReconnectModal />
+    <script src="@Assets["_framework/blazor.web.js"]"></script>
+    <script>
+        window.pmScrollToBottom = (el) => { if (el) el.scrollTop = el.scrollHeight; };
+    </script>
+</body>
+
+</html>
+
+@code {
+    // Ön-render kapalı: sayfa açılışında veritabanı işlemleri (ör. yeni sohbet) iki kez çalışmasın.
+    private static readonly IComponentRenderMode RenderModeNoPrerender = new InteractiveServerRenderMode(prerender: false);
+}

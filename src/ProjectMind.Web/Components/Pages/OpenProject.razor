@@ -1,0 +1,23 @@
+@page "/projects/{ProjectId:int}"
+@inject AppScope Scope
+@inject NavigationManager Nav
+
+<p class="muted">Proje açılıyor…</p>
+
+@code {
+    [Parameter] public int ProjectId { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        try
+        {
+            var session = await Scope.RunAsync<ChatService, ChatSessionResponse>(
+                s => s.GetOrCreateForProjectAsync(ProjectId, CancellationToken.None));
+            Nav.NavigateTo($"/chat/{session.Id}", replace: true);
+        }
+        catch (NotFoundException)
+        {
+            Nav.NavigateTo("/not-found", replace: true);
+        }
+    }
+}

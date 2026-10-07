@@ -1,6 +1,13 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using ProjectMind.Application.Ai;
+using ProjectMind.Application.Chat;
+using ProjectMind.Application.Dependencies;
+using ProjectMind.Application.Overview;
+using ProjectMind.Application.People;
 using ProjectMind.Application.Projects;
+using ProjectMind.Application.WorkItems;
 using ProjectMind.Domain.Enums;
 using ProjectMind.Infrastructure.Persistence;
 
@@ -19,6 +26,17 @@ public abstract class ServiceTestBase : IDisposable
     }
 
     protected AppDbContext Db { get; }
+
+    protected AiActionService NewActionService() =>
+        new(Db, new ProjectService(Db), new PersonService(Db), new WorkItemService(Db), new DependencyService(Db));
+
+    protected ChatService NewChatService(IChatModel model)
+    {
+        var overview = new ProjectOverviewService(
+            new ProjectService(Db), new PersonService(Db), new WorkItemService(Db), new DependencyService(Db));
+        return new ChatService(Db, model, NewActionService(),
+            new ProjectContextBuilder(Db, overview, TimeProvider.System), Options.Create(new AiOptions()));
+    }
 
     protected static ProjectRequest NewProject() => new()
     {

@@ -1,0 +1,102 @@
+@if (Overview is null)
+{
+    <div class="empty-project">
+        <h2>Proje henüz oluşturulmadı</h2>
+        <p>Sağdaki sohbete projenizi anlatın. Örneğin:</p>
+        <p class="example">"E-ticaret sitesi projesi açalım. 1 Aralık'ta başlasın, 4 ay sürsün, bütçe 2 milyon TL."</p>
+        <p class="muted">AI bir öneri kartı hazırlar; <strong>Uygula</strong> dediğinizde proje burada görünür.</p>
+    </div>
+}
+else
+{
+    var p = Overview.Project;
+    <header class="project-header">
+        <div>
+            <h1>@p.Name</h1>
+            <div class="muted">@Format.Name(p.Type) · <span class="badge">@Format.Name(p.Status)</span></div>
+            @if (!string.IsNullOrWhiteSpace(p.Description))
+            {
+                <p class="description">@p.Description</p>
+            }
+        </div>
+    </header>
+
+    <div class="stats">
+        <div class="stat"><span>Başlangıç</span><strong>@Format.Date(p.StartDate)</strong></div>
+        <div class="stat"><span>Hedef bitiş</span><strong>@Format.Date(p.TargetEndDate)</strong></div>
+        <div class="stat"><span>Bütçe</span><strong>@Format.Money(p.Budget, p.Currency)</strong></div>
+        <div class="stat"><span>Toplam tahmini efor</span><strong>@Format.Number(Overview.TotalEstimatedHours) saat</strong></div>
+    </div>
+
+    <h2>İşler <span class="count">@Overview.WorkItems.Count</span></h2>
+    @if (Overview.WorkItems.Count == 0)
+    {
+        <p class="muted">Henüz iş yok. Sohbette yapılacak işleri anlatın.</p>
+    }
+    else
+    {
+        <table class="table">
+            <thead>
+                <tr><th>#</th><th>İş</th><th>Faz</th><th>Beceri</th><th>Öncelik</th><th class="num">Efor</th><th>Atanan</th><th>Durum</th><th class="num">%</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var w in Overview.WorkItems)
+                {
+                    <tr>
+                        <td class="muted">@w.Id</td>
+                        <td>@w.Name</td>
+                        <td>@Format.Name(w.Phase)</td>
+                        <td>@Format.Name(w.RequiredSkill)</td>
+                        <td>@Format.Name(w.Priority)</td>
+                        <td class="num">@Format.Number(w.EstimatedHours)</td>
+                        <td>@Overview.PersonName(w.AssigneeId)</td>
+                        <td><span class="status status-@w.Status.ToString().ToLowerInvariant()">@Format.Name(w.Status)</span></td>
+                        <td class="num">@w.PercentComplete</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+
+    <h2>Bağımlılıklar <span class="count">@Overview.Dependencies.Count</span></h2>
+    @if (Overview.Dependencies.Count == 0)
+    {
+        <p class="muted">Bağımlılık yok. Örn: "Backend bitmeden test başlamasın."</p>
+    }
+    else
+    {
+        <ul class="deps">
+            @foreach (var d in Overview.Dependencies)
+            {
+                <li>@Overview.WorkItemName(d.PredecessorId) <span class="muted">→</span> @Overview.WorkItemName(d.SuccessorId)</li>
+            }
+        </ul>
+    }
+
+    <h2>Ekip <span class="count">@Overview.People.Count</span></h2>
+    @if (Overview.People.Count == 0)
+    {
+        <p class="muted">Henüz kişi yok. Ekip üyelerini, becerilerini ve haftalık saatlerini yazın.</p>
+    }
+    else
+    {
+        <table class="table">
+            <thead><tr><th>Ad</th><th>Beceriler</th><th class="num">Kapasite (s/hafta)</th><th class="num">Saatlik maliyet</th></tr></thead>
+            <tbody>
+                @foreach (var person in Overview.People)
+                {
+                    <tr>
+                        <td>@person.Name</td>
+                        <td>@Format.Flags(person.Skills)</td>
+                        <td class="num">@Format.Number(person.WeeklyCapacityHours)</td>
+                        <td class="num">@Format.Money(person.HourlyCost, p.Currency)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+}
+
+@code {
+    [Parameter] public ProjectOverview? Overview { get; set; }
+}

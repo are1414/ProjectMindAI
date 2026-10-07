@@ -64,3 +64,43 @@ internal sealed class WorkItemDependencyConfiguration : IEntityTypeConfiguration
             .HasForeignKey(d => d.SuccessorId).OnDelete(DeleteBehavior.NoAction);
     }
 }
+
+internal sealed class ChatSessionConfiguration : IEntityTypeConfiguration<ChatSession>
+{
+    public void Configure(EntityTypeBuilder<ChatSession> b)
+    {
+        b.Property(s => s.Title).HasMaxLength(200).IsRequired();
+        // Proje silinince sohbet kaydı kalır (denetim izi), sadece bağlantı kopar.
+        b.HasOne(s => s.Project).WithMany()
+            .HasForeignKey(s => s.ProjectId).OnDelete(DeleteBehavior.SetNull);
+    }
+}
+
+internal sealed class ChatMessageConfiguration : IEntityTypeConfiguration<ChatMessage>
+{
+    public void Configure(EntityTypeBuilder<ChatMessage> b)
+    {
+        b.Property(m => m.Role).HasConversion<string>().HasMaxLength(20);
+        b.Property(m => m.Content).IsRequired();
+        b.Property(m => m.Model).HasMaxLength(100);
+        b.Property(m => m.PromptVersion).HasMaxLength(50);
+        b.HasOne(m => m.ChatSession).WithMany(s => s.Messages)
+            .HasForeignKey(m => m.ChatSessionId).OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+internal sealed class AiActionConfiguration : IEntityTypeConfiguration<AiAction>
+{
+    public void Configure(EntityTypeBuilder<AiAction> b)
+    {
+        b.Property(a => a.ToolName).HasMaxLength(100).IsRequired();
+        b.Property(a => a.PayloadJson).IsRequired();
+        b.Property(a => a.Summary).HasMaxLength(1000).IsRequired();
+        b.Property(a => a.ResultMessage).HasMaxLength(1000);
+        b.Property(a => a.Status).HasConversion<string>().HasMaxLength(20);
+        b.HasOne(a => a.ChatSession).WithMany()
+            .HasForeignKey(a => a.ChatSessionId).OnDelete(DeleteBehavior.Cascade);
+        b.HasOne<ChatMessage>().WithMany()
+            .HasForeignKey(a => a.ChatMessageId).OnDelete(DeleteBehavior.NoAction);
+    }
+}

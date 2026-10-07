@@ -1,11 +1,8 @@
-using System.Globalization;
-using System.Text.Encodings.Web;
-using System.Text.Unicode;
-using Microsoft.AspNetCore.Localization;
-using Microsoft.Extensions.WebEncoders;
 using ProjectMind.Application;
+using ProjectMind.Application.Ai;
 using ProjectMind.Infrastructure;
-using ProjectMind.Web.Infrastructure;
+using ProjectMind.Web.Components;
+using ProjectMind.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,33 +11,27 @@ var connectionString = builder.Configuration.GetConnectionString("Default")
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(connectionString);
-builder.Services.AddControllersWithViews(o => o.Filters.Add<NotFoundExceptionFilter>());
+builder.Services.Configure<AiOptions>(builder.Configuration.GetSection(AiOptions.SectionName));
+builder.Services.PostConfigure<AiOptions>(o =>
+    o.ApiKey = string.IsNullOrWhiteSpace(o.ApiKey) ? Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY") : o.ApiKey);
 
-// Türkçe karakterler (ş, ğ, ı…) HTML'de &#x..; yerine olduğu gibi yazılsın.
-builder.Services.Configure<WebEncoderOptions>(o => o.TextEncoderSettings = new TextEncoderSettings(UnicodeRanges.All));
+builder.Services.AddScoped<AppScope>();
+builder.Services.AddScoped<AppEvents>();
+builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 
 var app = builder.Build();
 
 if (!app.Environment.IsDevelopment())
 {
-    app.UseExceptionHandler("/error");
+    app.UseExceptionHandler("/Error", createScopeForErrors: true);
     app.UseHsts();
 }
-
-// Form sayıları (ör. 12.5) tarayıcıdan nokta ile gelir; bağlama kültürden bağımsız olmalı.
-// Türkçe gösterim biçimlendirmesi Display yardımcısında yapılır.
-app.UseRequestLocalization(new RequestLocalizationOptions
-{
-    DefaultRequestCulture = new RequestCulture(CultureInfo.InvariantCulture),
-    SupportedCultures = [CultureInfo.InvariantCulture],
-    SupportedUICultures = [CultureInfo.InvariantCulture]
-});
-
+app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
-app.UseRouting();
+app.UseAntiforgery();
 
 app.MapStaticAssets();
-app.MapControllers().WithStaticAssets();
+app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 
 app.Run();
 

@@ -34,19 +34,24 @@
 - [x] Bağımlılık kuralları: kendine bağımlılık yok, tekrar yok, **döngü yok**
 - [x] Birim + entegrasyon testleri
 
-### FAZ 2 — Web arayüzü (MVC) ve veri giriş ekranları ✅
-- [x] Ayrı API kaldırıldı; tek ASP.NET Core MVC uygulaması (D3, D6)
-- [x] Proje listesi / oluşturma / düzenleme / silme
-- [x] Proje detay sayfası: işler, bağımlılıklar, kişiler tek ekranda
-- [x] İş formu (faz, beceri, öncelik, efor, atama, gerçekleşme)
-- [x] Kişi formu (çoklu beceri, kapasite, maliyet)
+### FAZ 2 — Web arayüzü ✅ (MVC formları sonradan Blazor + chat ile değiştirildi)
+- [x] Ayrı API kaldırıldı; tek web uygulaması (D3, D6)
 - [x] Türkçe arayüz ve biçimlendirme, 404/hata sayfaları
-- [x] Form gönderimi uçtan uca testleri
 
-### FAZ 3 — Eksik iş önerisi (kural tabanlı katman)
+### FAZ 2.5 — Chat odaklı arayüz ve AI çekirdeği ✅
+- [x] Blazor Server (interactive server), sade tasarım: kenar çubuğu (sohbetler) · proje paneli · AI chat paneli
+- [x] Sohbet kayıtları (ChatSession, ChatMessage) veritabanında; proje sohbetten başlar
+- [x] Claude (Anthropic C# SDK) + araç çağırma; anahtar yoksa ücretsiz Mock'a düşer
+- [x] Araçlar: proje oluştur/güncelle, kişi ekle/güncelle, iş ekle/güncelle/sil, bağımlılık ekle
+- [x] Her araç çağrısı = öneri kartı (AiAction); Uygula / Vazgeç / hepsini uygula; mevcut servislerden geçer
+- [x] Kart metni modelden değil veriden üretilir; kabul/red loglanır (öneri kabul oranı ölçümü için)
+- [x] Kontrollü proje bağlamı (ProjectContextBuilder), sürümlü sistem prompt'u (chat-v1)
+- [x] Testler: öneri/uygulama kuralları, sohbet turu (senaryolu sahte model), araç şemaları, web duman testi
+
+### FAZ 3 — Eksik iş önerisi (kural tabanlı katman, chat'e araç olarak)
 - [ ] TaskTemplate (proje tipine göre faz/iş şablonu) + seed
 - [ ] Eşleştirme (anahtar kelime/eş anlamlı) → eksik işler
-- [ ] TaskSuggestion: öner, gerekçe, tahmini saat, bağımlılık; Kabul/Düzenle/Reddet
+- [ ] `check_missing_work` aracı: kural sonucunu modele verir, model add_work_item kartlarıyla önerir (AiAction altyapısı)
 - [ ] "Kabul etmeden önce plana etkisi" bilgisi (Faz 4 sonrası bağlanır)
 - [ ] Test: tam plandan iş silip yakalama oranı (precision/recall)
 
@@ -78,12 +83,14 @@
 - [ ] Brooks etkisi (yeni kişide ısınma süresi)
 - [ ] Senaryo karşılaştırma ekranı
 
-### FAZ 8 — AI katmanı
-- [ ] `IAIService`: Mock, Ollama, Claude (ve/veya OpenAI uyumlu)
-- [ ] ContextBuilder, prompt şablonları (versiyonlu), JSON şema + sayı doğrulayıcı
+### FAZ 8 — AI katmanı (analiz yorumları)
+- [x] `IChatModel`: Mock + Claude (Faz 2.5'te)
+- [x] ContextBuilder, sürümlü prompt (Faz 2.5'te)
+- [ ] Analiz cevapları için sayı doğrulayıcı (cevaptaki her sayı bağlamda olmalı)
 - [ ] Eksik iş önerisinin LLM katmanı (hibrit)
-- [ ] Proje yorumu, senaryo yorumu, chat
-- [ ] AI audit log
+- [ ] Proje yorumu, senaryo yorumu (EVM/ML/Monte Carlo sonuçlarını açıklama)
+- [x] AI öneri kaydı (AiAction) — [ ] analiz cevapları için ayrıntılı audit
+- [ ] (Opsiyonel) Ollama sağlayıcısı ile karşılaştırma
 
 ### FAZ 9 — Demo ve değerlendirme
 - [ ] Demo projesi: "Mobile Banking Modernization"
@@ -99,8 +106,8 @@
 src/
   ProjectMind.Domain/          Entity, enum (bağımlılıksız)
   ProjectMind.Application/     Servisler, DTO, iş kuralları, hesaplama motorları
-  ProjectMind.Infrastructure/  EF Core (SQL Server), migrations, AI sağlayıcıları, ML.NET
-  ProjectMind.Web/             MVC controller'lar, Razor view'lar, wwwroot (Bootstrap)
+  ProjectMind.Infrastructure/  EF Core (SQL Server), migrations, AI sağlayıcıları (Claude, Mock), ML.NET
+  ProjectMind.Web/             Blazor Server bileşenleri (Components/), wwwroot/app.css
 tests/
   ProjectMind.Tests/           Birim + entegrasyon (servis ve form) testleri
 docs/                          Plan, kararlar, ilerleme

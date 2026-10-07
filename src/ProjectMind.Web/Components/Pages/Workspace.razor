@@ -1,0 +1,55 @@
+@page "/chat/{SessionId:int}"
+@inject AppScope Scope
+@inject AppEvents Events
+@inject NavigationManager Nav
+
+<PageTitle>@(_session?.Title ?? "Sohbet") · ProjectMind AI</PageTitle>
+
+@if (_session is not null)
+{
+    <div class="workspace">
+        <section class="project-pane">
+            <ProjectPanel Overview="_overview" />
+        </section>
+        <section class="chat-pane">
+            <ChatPanel @key="SessionId" SessionId="SessionId" OnDataChanged="ReloadAsync" />
+        </section>
+    </div>
+}
+
+@code {
+    [Parameter] public int SessionId { get; set; }
+
+    private ChatSessionResponse? _session;
+    private ProjectOverview? _overview;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        try
+        {
+            await LoadAsync();
+        }
+        catch (NotFoundException)
+        {
+            Nav.NavigateTo("/not-found", replace: true);
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        _session = await Scope.RunAsync<ChatService, ChatSessionResponse>(s => s.GetSessionAsync(SessionId, CancellationToken.None));
+        _overview = _session.ProjectId is { } projectId
+            ? await Scope.RunAsync<ProjectOverviewService, ProjectOverview>(s => s.GetAsync(projectId, CancellationToken.None))
+            : null;
+    }
+
+    private async Task ReloadAsync()
+    {
+        var hadProject = _session?.ProjectId is not null;
+        var oldTitle = _session?.Title;
+        await LoadAsync();
+        if (hadProject != (_session?.ProjectId is not null) || oldTitle != _session?.Title)
+            await Events.NotifySessionsChangedAsync();
+        StateHasChanged();
+    }
+}

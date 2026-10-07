@@ -35,13 +35,14 @@ Başka bir AI kullanıyorsan bu dosyanın içeriğini ilk mesaj olarak ver.
 - LLM cevabındaki her sayı, gönderilen context'te bulunmalıdır (sayı doğrulayıcı). Bulunmayan sayı → cevap reddedilir.
 - AI önerileri doğrudan veriyi değiştirmez; proje yöneticisi **Kabul/Reddet** der. Her öneri ve karar loglanır.
 - API anahtarları sadece backend'de, `user-secrets` / ortam değişkeninde. Koda ve repoya asla yazılmaz.
-- Geliştirmede varsayılan sağlayıcı `Mock`'tur (ücretsiz).
+- API anahtarı yoksa sağlayıcı otomatik `Mock`'tur (ücretsiz). Testler gerçek API çağırmaz (senaryolu sahte model).
 
 ## 4. Teknik kurallar
 
 - .NET 10, C#, nullable açık, async + `CancellationToken`.
-- **Tek web uygulaması** (ASP.NET Core MVC + Razor). Ayrı Web API, React/npm, Python servisi yok.
-- Katmanlar: `Domain` ← `Application` ← `Infrastructure` ← `Web`. Controller'da iş mantığı ve EF sorgusu yok; controller sadece servisi çağırır ve view döner.
+- **Tek web uygulaması** (Blazor Server). Ayrı Web API, React/npm, Python servisi yok.
+- Katmanlar: `Domain` ← `Application` ← `Infrastructure` ← `Web`. Blazor bileşeninde iş mantığı ve EF sorgusu yok; bileşen Application servislerini `AppScope` ile (her işlem kendi DbContext'iyle) çağırır.
+- Veri değiştiren her AI yeteneği bir **araç (AiTools) + AiActionService** üzerinden öneri kartı olarak eklenir; araç veriyi doğrudan değiştirmez.
 - Veritabanı: SQL Server + EF Core migrations. Şema değişikliği = yeni migration (eski migration düzenlenmez).
 - Kod ve tanımlayıcılar İngilizce; dokümantasyon ve kullanıcıya dönük metinler Türkçe.
 - Magic number yok; eşikler/ağırlıklar configuration'dan veya isimli sabitlerden gelir.

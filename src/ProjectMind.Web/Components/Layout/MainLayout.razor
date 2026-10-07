@@ -1,0 +1,56 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject AppScope Scope
+@inject AppEvents Events
+
+<div class="app">
+    <aside class="sidebar">
+        <a class="brand" href="/">ProjectMind <span>AI</span></a>
+        <a class="btn btn-primary btn-block" href="/chat/new">+ Yeni proje sohbeti</a>
+
+        <div class="sidebar-title">Sohbetler</div>
+        @if (_sessions.Count == 0)
+        {
+            <p class="sidebar-empty">Henüz sohbet yok.</p>
+        }
+        <nav>
+            @foreach (var s in _sessions)
+            {
+                <NavLink class="sidebar-link" href="@($"/chat/{s.Id}")">
+                    <span class="dot @(s.ProjectId is null ? "dot-draft" : "dot-project")"></span>
+                    @s.Title
+                </NavLink>
+            }
+        </nav>
+    </aside>
+    <main class="content">
+        @Body
+    </main>
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    Beklenmeyen bir hata oluştu.
+    <a href="." class="reload">Yenile</a>
+    <span class="dismiss">✕</span>
+</div>
+
+@code {
+    private IReadOnlyList<ChatSessionResponse> _sessions = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        Events.SessionsChanged += ReloadAsync;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync() =>
+        _sessions = await Scope.RunAsync<ChatService, IReadOnlyList<ChatSessionResponse>>(s => s.ListSessionsAsync(CancellationToken.None));
+
+    private async Task ReloadAsync()
+    {
+        await LoadAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose() => Events.SessionsChanged -= ReloadAsync;
+}

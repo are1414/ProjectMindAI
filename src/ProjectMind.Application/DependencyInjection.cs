@@ -1,5 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
+using ProjectMind.Application.Ai;
+using ProjectMind.Application.Chat;
 using ProjectMind.Application.Dependencies;
+using ProjectMind.Application.Overview;
 using ProjectMind.Application.People;
 using ProjectMind.Application.Projects;
 using ProjectMind.Application.WorkItems;
@@ -14,6 +17,11 @@ public static class DependencyInjection
         services.AddScoped<PersonService>();
         services.AddScoped<WorkItemService>();
         services.AddScoped<DependencyService>();
+        services.AddScoped<ProjectOverviewService>();
+        services.AddScoped<AiActionService>();
+        services.AddScoped<ProjectContextBuilder>();
+        services.AddScoped<ChatService>();
+        services.AddSingleton(TimeProvider.System);
         return services;
     }
 }

@@ -1,0 +1,15 @@
+@page "/chat/new"
+@inject AppScope Scope
+@inject AppEvents Events
+@inject NavigationManager Nav
+
+<p class="muted">Yeni sohbet hazırlanıyor…</p>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        var session = await Scope.RunAsync<ChatService, ChatSessionResponse>(s => s.CreateSessionAsync(CancellationToken.None));
+        await Events.NotifySessionsChangedAsync();
+        Nav.NavigateTo($"/chat/{session.Id}", replace: true);
+    }
+}

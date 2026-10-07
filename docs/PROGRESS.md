@@ -4,6 +4,42 @@ Her oturum sonunda en üste yeni kayıt eklenir. Format: yapılanlar · varsayı
 
 ---
 
+## 2026-10-07 (4) — Chat odaklı arayüz: Blazor Server + Claude (Faz 2.5)
+
+**Karar değişikliği (proje sahibi isteği)**: Her şey sohbetten yönetilsin; arayüz Blazor Server, AI sağlayıcısı Claude
+(D3, D6, D8 güncellendi, D17 eklendi). Tasarım şimdilik sade; profesyonel tasarım sonraki ayrı adım.
+
+**Yapılanlar**
+- MVC projesi kaldırıldı, `ProjectMind.Web` Blazor Server olarak yeniden kuruldu (ön-render kapalı).
+- Ekranlar: `/` karşılama · `/chat/new` · `/chat/{id}` (sol: proje paneli, sağ: AI chat) · `/projects/{id}` (projenin sohbetini açar).
+  Kenar çubuğunda tüm sohbetler (proje adıyla).
+- Yeni tablolar (migration `AddChatAndAiActions`): `ChatSessions`, `ChatMessages`, `AiActions`.
+- Application: `AiTools` (8 araç + JSON şema), `AiActionService` (öner → uygula/reddet, toplu uygulamada mantıklı sıra),
+  `ProjectContextBuilder`, `ChatPrompts` (chat-v1), `ChatService` (sohbet turu + kayıt), `ProjectOverviewService`, `Format`.
+- Infrastructure: `ClaudeChatModel` (Anthropic C# SDK, araç döngüsü, thinking bloklarının korunması, refusal ve hata türlerine
+  göre Türkçe mesaj), `NotConfiguredChatModel` (anahtar yoksa).
+- Testler: 30/30 (birim 13, servis 13, sohbet 3, web duman 1). Arayüz geçici SQLite kopyasında Playwright ile denendi:
+  sohbet → 5 öneri kartı → hepsini uygula → proje paneli ve kenar çubuğu güncellendi, konsol hatası yok.
+
+**Paketler (gerekçe)**: `Anthropic` 12.53.0 (resmi C# SDK; Claude'u elle HTTP ile çağırmak yerine). MVC'nin Bootstrap/jQuery dosyaları kaldırıldı.
+
+**Varsayımlar**
+- AI, kullanıcı efor vermezse tahmini saat önerebilir (öneri kartında görünür, kullanıcı onaylar); prompt bunu "tahmin" diye belirtmesini ister.
+  Süre/maliyet/risk hesaplamaz.
+- "Cevaptaki her sayı bağlamda olmalı" doğrulayıcısı analiz cevapları (Faz 8) için eklenecek; bu fazda AI sadece veri girişi öneriyor
+  ve kart metinleri modelden değil veriden üretiliyor.
+- Kişi/iş eşleştirmesi ada göre (SQL Server'da büyük/küçük harf duyarsız).
+- Önceki sohbet turlarından sadece metin geçmişi gönderilir (son 20 mesaj); araç blokları tur içinde tutulur.
+- Sunucu taraflı refusal fallback etkin değil (SDK'da "default" biçimi doğrulanamadı); refusal durumunda kullanıcıya mesaj gösterilir.
+
+**Bilinen sorunlar / sınırlar**
+- Gerçek Claude API bu ortamda çağrılmadı (anahtar yok). Lokal makinede anahtar girilip denenmeli.
+- Manuel düzenleme formları kaldırıldı; düzeltmeler sohbetten yapılıyor.
+
+**Sıradaki adım**: Faz 3 — eksik iş kontrolü (`check_missing_work` aracı, kural tabanlı şablon).
+
+---
+
 ## 2026-10-07 (3) — Lokal SQL Server bağlantısı
 
 - Development bağlantısı proje sahibinin lokal SQL Server'ına çevrildi: `Data Source=.;Initial Catalog=ProjectMindAIDb;Integrated Security=True;Encrypt=False`
