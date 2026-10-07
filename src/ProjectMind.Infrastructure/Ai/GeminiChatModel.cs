@@ -18,11 +18,15 @@ namespace ProjectMind.Infrastructure.Ai;
 public sealed class GeminiChatModel(HttpClient http, IOptions<AiOptions> options, ILogger<GeminiChatModel> logger) : IChatModel
 {
     public const string BaseUrl = "https://generativelanguage.googleapis.com/v1beta/";
+    private const string PreferredFamily = "flash";
+
+    // Ayarlanan model kapatılmışsa bulunan yedek model; uygulama yeniden başlayana kadar tekrar aranmaz.
+    private static string? _resolvedFallbackModel;
 
     public async Task<ChatTurnResult> CompleteTurnAsync(ChatTurnRequest request, IChatToolExecutor tools, CancellationToken ct)
     {
         var o = options.Value;
-        var model = o.Gemini.Model;
+        var model = _resolvedFallbackModel ?? o.Gemini.Model;
 
         var contents = new JsonArray();
         foreach (var h in request.History)
@@ -42,7 +46,21 @@ public sealed class GeminiChatModel(HttpClient http, IOptions<AiOptions> options
                 ["generationConfig"] = new JsonObject { ["maxOutputTokens"] = o.MaxTokens }
             };
 
-            var response = await SendAsync(model, o.Gemini.ApiKey, body, ct);
+            JsonNode response;
+            try
+            {
+                response = await SendAsync(model, o.Gemini.ApiKey, body, ct);
+            }
+            catch (ModelNotFoundException)
+            {
+                var fallback = await FindAvailableModelAsync(o.Gemini.ApiKey, ct)
+                    ?? throw new ChatModelException(
+                        $"Gemini modeli bulunamadı: '{model}' ve uygun bir yedek model de bulunamadı. " +
+                        "appsettings 'AI:Gemini:Model' değerini AI Studio'daki güncel bir model adıyla değiştirin.");
+                logger.LogWarning("Gemini modeli '{Model}' kullanılamıyor; '{Fallback}' modeline geçildi", model, fallback);
+                _resolvedFallbackModel = model = fallback;
+                response = await SendAsync(model, o.Gemini.ApiKey, body, ct);
+            }
             var candidate = response["candidates"]?.AsArray().FirstOrDefault();
             var content = candidate?["content"];
             if (content?["parts"] is not JsonArray parts)
@@ -110,6 +128,12 @@ public sealed class GeminiChatModel(HttpClient http, IOptions<AiOptions> options
         using (response)
         {
             var text = await response.Content.ReadAsStringAsync(ct);
+            if (response.StatusCode == HttpStatusCode.NotFound)
+            {
+                logger.LogWarning("Gemini modeli bulunamadı ({Model}): {Body}", model, text);
+                throw new ModelNotFoundException();
+            }
+
             if (!response.IsSuccessStatusCode)
             {
                 logger.LogError("Gemini hata {Status}: {Body}", (int)response.StatusCode, text);
@@ -119,8 +143,6 @@ public sealed class GeminiChatModel(HttpClient http, IOptions<AiOptions> options
                         "Gemini API anahtarı geçersiz. appsettings.Local.json içindeki 'AI:Gemini:ApiKey' değerini kontrol edin.",
                     HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized =>
                         "Gemini API anahtarının bu modele erişimi yok.",
-                    HttpStatusCode.NotFound =>
-                        $"Gemini modeli bulunamadı: '{model}'. appsettings 'AI:Gemini:Model' değerini kontrol edin.",
                     HttpStatusCode.TooManyRequests =>
                         "Gemini kullanım limiti doldu veya çok fazla istek gönderildi. Biraz sonra tekrar deneyin.",
                     _ => "AI servisinden beklenmeyen bir hata döndü. Ayrıntı loglarda."
@@ -132,6 +154,33 @@ public sealed class GeminiChatModel(HttpClient http, IOptions<AiOptions> options
             return JsonNode.Parse(text) ?? throw new ChatModelException("AI servisinden boş cevap geldi.");
         }
     }
+
+    /// <summary>
+    /// ListModels ile generateContent destekleyen, sohbete uygun en yeni "flash" modelini bulur
+    /// (lite / görüntü / ses / canlı / önizleme sürümleri tercih edilmez).
+    /// </summary>
+    private async Task<string?> FindAvailableModelAsync(string? apiKey, CancellationToken ct)
+    {
+        using var message = new HttpRequestMessage(HttpMethod.Get, $"{BaseUrl}models?pageSize=1000");
+        message.Headers.Add("x-goog-api-key", apiKey);
+        using var response = await http.SendAsync(message, ct);
+        if (!response.IsSuccessStatusCode)
+            return null;
+
+        var models = JsonNode.Parse(await response.Content.ReadAsStringAsync(ct))?["models"]?.AsArray() ?? [];
+        string[] excluded = ["lite", "image", "tts", "audio", "live", "embedding", "preview", "exp"];
+        return models
+            .Where(m => m?["supportedGenerationMethods"]?.AsArray()
+                .Any(x => x?.GetValue<string>() == "generateContent") == true)
+            .Select(m => m!["name"]!.GetValue<string>().Replace("models/", ""))
+            .Where(n => n.StartsWith("gemini-") && n.Contains(PreferredFamily) && !excluded.Any(n.Contains))
+            .OrderByDescending(n => n, StringComparer.Ordinal)
+            .FirstOrDefault();
+    }
+
+    public static void ResetModelCache() => _resolvedFallbackModel = null;
+
+    private sealed class ModelNotFoundException : Exception;
 
     private ChatModelException Fail(Exception ex, string message)
     {

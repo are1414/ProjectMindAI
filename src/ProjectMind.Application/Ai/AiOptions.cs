@@ -16,8 +16,11 @@ public sealed class AiOptions
     public int MaxToolRounds { get; set; } = 8;
     public int MaxHistoryMessages { get; set; } = 20;
 
-    public ProviderOptions Gemini { get; set; } = new() { Model = "gemini-2.5-flash" };
+    public ProviderOptions Gemini { get; set; } = new() { Model = "gemini-3.5-flash" };
     public ProviderOptions Claude { get; set; } = new() { Model = "claude-opus-5-5" };
+
+    /// <summary>Eski yapı ("AI": { "ApiKey": "..." }) — seçili sağlayıcının anahtarı boşsa bu kullanılır.</summary>
+    public string? ApiKey { get; set; }
 
     /// <summary>Claude'a özgü: düşünme derinliği (low/medium/high/max).</summary>
     public string ClaudeEffort { get; set; } = "low";
@@ -27,4 +30,19 @@ public sealed class ProviderOptions
 {
     public string Model { get; set; } = "";
     public string? ApiKey { get; set; }
+}
+
+public static class AiOptionsExtensions
+{
+    /// <summary>Arayüzde gösterilecek etkin sağlayıcı/model ("Gemini · gemini-3.5-flash" ya da "Mock").</summary>
+    public static string ActiveModelLabel(this AiOptions o)
+    {
+        if (string.Equals(o.Provider, AiOptions.GeminiProvider, StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(o.Gemini.ApiKey))
+            return $"Gemini · {o.Gemini.Model}";
+        if (string.Equals(o.Provider, AiOptions.ClaudeProvider, StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(o.Claude.ApiKey))
+            return $"Claude · {o.Claude.Model}";
+        return "Mock (API anahtarı okunamadı)";
+    }
 }

@@ -4,6 +4,17 @@ Her oturum sonunda en üste yeni kayıt eklenir. Format: yapılanlar · varsayı
 
 ---
 
+## 2026-10-07 (7) — Gemini "çalışmıyor" düzeltmeleri
+
+Proje sahibi anahtarı ekledi ama chat çalışmadı (hata mesajı/commit repoya ulaşmadı; olası nedenler kodda sağlamlaştırıldı).
+- `gemini-2.5-flash` Google tarafından kapatılıyor (16.10.2026; birçok kullanıcıda temmuzdan beri 404). Varsayılan `gemini-3.5-flash`.
+- Model 404 dönerse ListModels ile generateContent destekleyen en yeni "flash" modeli bulunup ona geçilir (lite/önizleme/görüntü/ses hariç).
+- Eski anahtar yapısı (`"AI": { "ApiKey": "..." }`) da okunur; anahtar baştaki/sondaki boşluklardan temizlenir.
+- Chat başlığında ve açılış logunda etkin sağlayıcı/model görünür ("Mock (API anahtarı okunamadı)" teşhis için).
+- Testler 34/34 (yedek modele geçiş testi eklendi).
+
+---
+
 ## 2026-10-07 (6) — Geliştirmede otomatik migration
 
 - Lokal çalıştırmada `Invalid object name 'ChatSessions'` hatası: yeni migration veritabanına uygulanmamıştı.

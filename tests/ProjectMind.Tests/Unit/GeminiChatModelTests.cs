@@ -22,7 +22,7 @@ public class GeminiChatModelTests
         {
             Requests.Add((request.RequestUri!.ToString(),
                 request.Headers.TryGetValues("x-goog-api-key", out var k) ? k.Single() : null,
-                JsonNode.Parse(await request.Content!.ReadAsStringAsync(ct))!));
+                request.Content is null ? new JsonObject() : JsonNode.Parse(await request.Content.ReadAsStringAsync(ct))!));
             var (status, body) = responses[_index++];
             return new HttpResponseMessage(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
         }
@@ -38,6 +38,8 @@ public class GeminiChatModelTests
             return Task.FromResult(new ToolExecutionResult("Öneri #1 oluşturuldu", false));
         }
     }
+
+    public GeminiChatModelTests() => GeminiChatModel.ResetModelCache();
 
     private static GeminiChatModel Model(FakeHandler handler) => new(
         new HttpClient(handler),
@@ -95,6 +97,29 @@ public class GeminiChatModelTests
         var updateProject = handler.Requests[0].Body["tools"]![0]!["functionDeclarations"]!.AsArray()
             .Single(d => d!["name"]!.GetValue<string>() == AiTools.UpdateProject)!;
         Assert.Null(updateProject["parameters"]!["required"]);
+    }
+
+    [Fact]
+    public async Task Retired_model_falls_back_to_newest_available_flash_model()
+    {
+        const string models = """
+            {"models":[
+              {"name":"models/gemini-3.5-flash","supportedGenerationMethods":["generateContent"]},
+              {"name":"models/gemini-4.0-flash-lite","supportedGenerationMethods":["generateContent"]},
+              {"name":"models/gemini-4.0-flash-preview","supportedGenerationMethods":["generateContent"]},
+              {"name":"models/gemini-4.0-flash","supportedGenerationMethods":["generateContent","countTokens"]},
+              {"name":"models/text-embedding-004","supportedGenerationMethods":["embedContent"]}]}
+            """;
+        var handler = new FakeHandler(
+            (HttpStatusCode.NotFound, """{"error":{"code":404,"message":"no longer available"}}"""),
+            (HttpStatusCode.OK, models),
+            (HttpStatusCode.OK, TextResponse));
+
+        var result = await Model(handler).CompleteTurnAsync(Request(), new RecordingExecutor(), CancellationToken.None);
+
+        Assert.Equal("gemini-4.0-flash", result.Model);
+        Assert.Contains("/models?", handler.Requests[1].Url);
+        Assert.EndsWith("models/gemini-4.0-flash:generateContent", handler.Requests[2].Url);
     }
 
     [Fact]

@@ -84,6 +84,7 @@ a { color: var(--primary); text-decoration: none; }
 /* Sohbet */
 .chat { display: flex; flex-direction: column; height: 100vh; }
 .chat-header { display: flex; justify-content: space-between; align-items: center; padding: .9rem 1rem; border-bottom: 1px solid var(--border); font-weight: 600; }
+.model-label { display: block; font-weight: 400; font-size: .75rem; color: var(--muted); }
 .chat-messages { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: .8rem; }
 .chat-hint { color: var(--muted); background: var(--bg); border-radius: var(--radius); padding: .8rem; line-height: 1.5; }
 .msg { display: flex; flex-direction: column; gap: .4rem; }
