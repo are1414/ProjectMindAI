@@ -136,3 +136,8 @@ a { color: var(--primary); text-decoration: none; }
 .settings pre { white-space: pre-wrap; word-break: break-all; background: var(--bg); padding: .75rem; border-radius: 6px; font-size: .8rem; }
 .small { font-size: .8rem; }
 .sidebar-settings { margin-top: .5rem; }
+
+/* İş ağacı (WBS) */
+.row-parent td { font-weight: 600; background: #fafbfc; }
+.tree-name { display: inline-block; }
+.tree-branch { color: var(--muted); margin-right: .3rem; }

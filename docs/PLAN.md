@@ -47,6 +47,7 @@
 - [x] Kart metni modelden değil veriden üretilir; kabul/red loglanır (öneri kabul oranı ölçümü için)
 - [x] Kontrollü proje bağlamı (ProjectContextBuilder), sürümlü sistem prompt'u (chat-v1)
 - [x] Testler: öneri/uygulama kuralları, sohbet turu (senaryolu sahte model), araç şemaları, web duman testi
+- [x] Alt işler (WBS hiyerarşisi): üst iş eforu/ilerlemesi alt işlerden toplanır; chat'te `parentName`
 
 ### FAZ 3 — Eksik iş önerisi (kural tabanlı katman, chat'e araç olarak)
 - [ ] TaskTemplate (proje tipine göre faz/iş şablonu) + seed

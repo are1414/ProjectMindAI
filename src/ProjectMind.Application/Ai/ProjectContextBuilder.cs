@@ -49,6 +49,7 @@ public sealed class ProjectContextBuilder(IAppDbContext db, ProjectOverviewServi
                 {
                     w.Id,
                     w.Name,
+                    parent = w.ParentId is { } parentId ? o.WorkItemName(parentId) : null,
                     phase = w.Phase.ToString(),
                     requiredSkill = w.RequiredSkill.ToString(),
                     priority = w.Priority.ToString(),

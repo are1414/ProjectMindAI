@@ -4,6 +4,23 @@ Her oturum sonunda en üste yeni kayıt eklenir. Format: yapılanlar · varsayı
 
 ---
 
+## 2026-10-07 (10) — Alt işler (WBS hiyerarşisi)
+
+Proje sahibi isteği: işlere alt iş eklenebilsin.
+- `WorkItem.ParentId` (kendine referans, NO ACTION) + migration `AddWorkItemParent`.
+- Kurallar: üst iş aynı projede olmalı; bir iş kendisinin/alt işinin altına taşınamaz (döngü yok); üst iş silinince alt ağaç ve
+  bağımlılıkları silinir; proje silinirken üst-alt bağları önce koparılır.
+- `WorkItemTree` (test edilen hesap): ağaç sırası ve derinlik; üst iş eforu = yaprak işlerin toplamı, ilerleme = efora göre
+  ağırlıklı ortalama; proje toplam eforu sadece yapraklardan (çift sayım yok).
+- AI: `add_work_item` / `update_work_item` için `parentName`; toplu uygulamada üst işler önce; bağlamda her işin `parent`'ı;
+  prompt sürümü chat-v2.
+- Arayüz: işler tablosu ağaç görünümünde (girinti, üst işler kalın, toplanan efor/ilerleme).
+- Varsayım: üst işin kendi efor/ilerleme alanı gösterimde ve toplamlarda kullanılmaz (alt işlerden hesaplanır).
+  İleride otomatik planlama (Faz 4) sadece yaprak işleri çizelgeleyecek.
+- Testler 51/51; ağaç görünümü Playwright ile denendi (Backend 80 = 24 + 56, toplam 112 saat).
+
+---
+
 ## 2026-10-07 (9) — Ayarlar sayfası (API anahtarı arayüzden)
 
 Teşhis: proje sahibinin makinesinde `appsettings.Local.json` hiç yoktu. Dosyayı elle oluşturmak yerine:

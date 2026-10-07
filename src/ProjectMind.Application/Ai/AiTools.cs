@@ -95,7 +95,8 @@ public static class AiTools
             }, "personId")),
 
         new(AddWorkItem,
-            "Projeye yapılacak iş eklemeyi önerir. Kullanıcı efor vermediyse makul bir tahmin yap ve cevabında tahmin olduğunu belirt.",
+            "Projeye yapılacak iş veya alt iş eklemeyi önerir. Alt iş için parentName ver; üst işi alt işlerinden önce öner. " +
+            "Kullanıcı efor vermediyse makul bir tahmin yap ve cevabında tahmin olduğunu belirt.",
             Schema(new
             {
                 name = Str("İş adı"),
@@ -104,7 +105,8 @@ public static class AiTools
                 requiredSkill = Enum<Skill>("İşi yapmak için gereken tek beceri"),
                 priority = Enum<Priority>("Öncelik"),
                 estimatedHours = Num("Tahmini efor (saat)"),
-                assigneeName = Str("Atanacak kişinin adı (projede kayıtlı ya da aynı turda önerilmiş olmalı)")
+                assigneeName = Str("Atanacak kişinin adı (projede kayıtlı ya da aynı turda önerilmiş olmalı)"),
+                parentName = Str("Alt iş ise üst işin adı (projede kayıtlı ya da bu turda daha önce önerilmiş olmalı)")
             }, "name", "phase", "requiredSkill", "estimatedHours")),
 
         new(UpdateWorkItem,
@@ -123,7 +125,8 @@ public static class AiTools
                 percentComplete = Int("Tamamlanma yüzdesi 0-100"),
                 actualHours = Num("Şimdiye kadar harcanan saat"),
                 plannedStart = Date("Planlanan başlangıç"),
-                plannedEnd = Date("Planlanan bitiş")
+                plannedEnd = Date("Planlanan bitiş"),
+                parentName = Str("İşi başka bir işin altına taşımak için üst işin adı; en üst seviyeye almak için boş metin")
             }, "workItemId")),
 
         new(RemoveWorkItem,

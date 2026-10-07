@@ -24,7 +24,7 @@ public sealed class WorkItemService(IAppDbContext db)
     public async Task<WorkItemResponse> CreateAsync(int projectId, WorkItemRequest request, CancellationToken ct)
     {
         await EnsureProjectExistsAsync(projectId, ct);
-        await ValidateAsync(projectId, request, ct);
+        await ValidateAsync(projectId, null, request, ct);
         var item = new WorkItem { ProjectId = projectId, Name = request.Name };
         Apply(item, request);
         db.WorkItems.Add(item);
@@ -35,21 +35,34 @@ public sealed class WorkItemService(IAppDbContext db)
     public async Task<WorkItemResponse> UpdateAsync(int projectId, int id, WorkItemRequest request, CancellationToken ct)
     {
         var item = await FindAsync(projectId, id, ct);
-        await ValidateAsync(projectId, request, ct);
+        await ValidateAsync(projectId, id, request, ct);
         Apply(item, request);
         await db.SaveChangesAsync(ct);
         return WorkItemResponse.From(item);
     }
 
+    /// <summary>İşi, tüm alt işlerini ve bunlara ait bağımlılıkları siler.</summary>
     public async Task DeleteAsync(int projectId, int id, CancellationToken ct)
     {
-        var item = await FindAsync(projectId, id, ct);
-        await db.WorkItemDependencies
-            .Where(d => d.PredecessorId == id || d.SuccessorId == id)
-            .ExecuteDeleteAsync(ct);
-        db.WorkItems.Remove(item);
+        await FindAsync(projectId, id, ct);
+        var parents = await ParentMapAsync(projectId, ct);
+        var subtree = WorkItemTree.SubtreeIds(parents, id);
+
+        // Tek kayıtta: önce bağımlılıklar, sonra işler. EF kendine referanslı kayıtları doğru sırada
+        // (önce alt işler) siler ve bellekteki kayıtları da günceller.
+        var dependencies = await db.WorkItemDependencies
+            .Where(d => subtree.Contains(d.PredecessorId) || subtree.Contains(d.SuccessorId))
+            .ToListAsync(ct);
+        db.WorkItemDependencies.RemoveRange(dependencies);
+        var items = await db.WorkItems.Where(w => subtree.Contains(w.Id)).ToListAsync(ct);
+        db.WorkItems.RemoveRange(items);
         await db.SaveChangesAsync(ct);
     }
+
+    private async Task<Dictionary<int, int?>> ParentMapAsync(int projectId, CancellationToken ct) =>
+        await db.WorkItems.AsNoTracking()
+            .Where(w => w.ProjectId == projectId)
+            .ToDictionaryAsync(w => w.Id, w => w.ParentId, ct);
 
     private async Task<WorkItem> FindAsync(int projectId, int id, CancellationToken ct) =>
         await db.WorkItems.FirstOrDefaultAsync(w => w.Id == id && w.ProjectId == projectId, ct)
@@ -61,8 +74,17 @@ public sealed class WorkItemService(IAppDbContext db)
             throw new NotFoundException("Proje", projectId);
     }
 
-    private async Task ValidateAsync(int projectId, WorkItemRequest request, CancellationToken ct)
+    private async Task ValidateAsync(int projectId, int? itemId, WorkItemRequest request, CancellationToken ct)
     {
+        if (request.ParentId is { } parentId)
+        {
+            var parents = await ParentMapAsync(projectId, ct);
+            if (!parents.ContainsKey(parentId))
+                throw new BusinessRuleException("Üst iş bu projeye ait değil.");
+            if (itemId is { } self && WorkItemTree.SubtreeIds(parents, self).Contains(parentId))
+                throw new BusinessRuleException("Bir iş kendisinin veya kendi alt işinin altına taşınamaz.");
+        }
+
         if (!SkillRules.IsSingle(request.RequiredSkill))
             throw new BusinessRuleException("İş için tek bir gerekli beceri seçilmelidir.");
 
@@ -86,6 +108,7 @@ public sealed class WorkItemService(IAppDbContext db)
         item.Priority = request.Priority;
         item.EstimatedHours = request.EstimatedHours;
         item.AssigneeId = request.AssigneeId;
+        item.ParentId = request.ParentId;
         item.PlannedStart = request.PlannedStart;
         item.PlannedEnd = request.PlannedEnd;
         item.Status = request.Status;

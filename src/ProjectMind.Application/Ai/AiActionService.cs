@@ -94,11 +94,15 @@ public sealed class AiActionService(
     {
         var pending = await db.AiActions.AsNoTracking()
             .Where(a => a.ChatSessionId == sessionId && a.Status == AiActionStatus.Pending)
-            .Select(a => new { a.Id, a.ToolName })
+            .Select(a => new { a.Id, a.ToolName, a.PayloadJson })
             .ToListAsync(ct);
 
+        // Aynı türde önce üst işler (parentName'siz), sonra öneri sırası.
         var results = new List<AiActionResponse>();
-        foreach (var a in pending.OrderBy(a => AiTools.ApplyOrder(a.ToolName)).ThenBy(a => a.Id))
+        foreach (var a in pending
+                     .OrderBy(a => AiTools.ApplyOrder(a.ToolName))
+                     .ThenBy(a => HasParent(a.PayloadJson))
+                     .ThenBy(a => a.Id))
             results.Add(await ApplyAsync(a.Id, ct));
         return results;
     }
@@ -159,7 +163,8 @@ public sealed class AiActionService(
             {
                 var p = Parse<AddWorkItemPayload>(input);
                 var assignee = string.IsNullOrWhiteSpace(p.AssigneeName) ? "" : $" · {p.AssigneeName}";
-                return $"İş ekle: {p.Name} · {Format.Name(p.Phase)} · {Format.Name(p.RequiredSkill)} · " +
+                var kind = string.IsNullOrWhiteSpace(p.ParentName) ? "İş ekle" : $"Alt iş ekle ({p.ParentName} altına)";
+                return $"{kind}: {p.Name} · {Format.Name(p.Phase)} · {Format.Name(p.RequiredSkill)} · " +
                        $"{Format.Number(p.EstimatedHours)} saat{assignee}";
             }
             case AiTools.UpdateWorkItem:
@@ -172,7 +177,8 @@ public sealed class AiActionService(
                     ("öncelik", p.Priority is { } pr ? Format.Name(pr) : null), ("efor", Num(p.EstimatedHours)),
                     ("atanan", p.AssigneeName), ("durum", p.Status is { } st ? Format.Name(st) : null),
                     ("ilerleme", p.PercentComplete is { } pc ? $"%{pc}" : null), ("harcanan saat", Num(p.ActualHours)),
-                    ("planlanan başlangıç", Dt(p.PlannedStart)), ("planlanan bitiş", Dt(p.PlannedEnd)));
+                    ("planlanan başlangıç", Dt(p.PlannedStart)), ("planlanan bitiş", Dt(p.PlannedEnd)),
+                    ("üst iş", p.ParentName is null ? null : p.ParentName.Trim().Length == 0 ? "yok (en üst seviye)" : p.ParentName));
             }
             case AiTools.RemoveWorkItem:
             {
@@ -279,7 +285,8 @@ public sealed class AiActionService(
                     RequiredSkill = p.RequiredSkill,
                     Priority = p.Priority ?? Priority.Medium,
                     EstimatedHours = p.EstimatedHours,
-                    AssigneeId = await ResolvePersonAsync(projectId, p.AssigneeName, ct)
+                    AssigneeId = await ResolvePersonAsync(projectId, p.AssigneeName, ct),
+                    ParentId = string.IsNullOrWhiteSpace(p.ParentName) ? null : await ResolveWorkItemAsync(projectId, p.ParentName, ct)
                 }, ct);
                 return "İş eklendi.";
             }
@@ -300,6 +307,8 @@ public sealed class AiActionService(
                 r.ActualHours = p.ActualHours ?? r.ActualHours;
                 r.PlannedStart = p.PlannedStart ?? r.PlannedStart;
                 r.PlannedEnd = p.PlannedEnd ?? r.PlannedEnd;
+                if (p.ParentName is not null)
+                    r.ParentId = p.ParentName.Trim().Length == 0 ? null : await ResolveWorkItemAsync(projectId, p.ParentName, ct);
                 await workItems.UpdateAsync(projectId, p.WorkItemId, r, ct);
                 return "İş güncellendi.";
             }
@@ -377,6 +386,14 @@ public sealed class AiActionService(
         {
             throw new BusinessRuleException($"Araç girdisi geçersiz: {ex.Message}");
         }
+    }
+
+    private static bool HasParent(string payloadJson)
+    {
+        using var doc = JsonDocument.Parse(payloadJson);
+        return doc.RootElement.TryGetProperty("parentName", out var parent)
+               && parent.ValueKind == JsonValueKind.String
+               && !string.IsNullOrWhiteSpace(parent.GetString());
     }
 
     private static string SkillList(IEnumerable<Skill> skills) => string.Join(", ", skills.Select(s => Format.Name(s)));

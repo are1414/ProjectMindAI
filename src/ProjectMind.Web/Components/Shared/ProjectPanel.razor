@@ -31,7 +31,7 @@ else
     <h2>İşler <span class="count">@Overview.WorkItems.Count</span></h2>
     @if (Overview.WorkItems.Count == 0)
     {
-        <p class="muted">Henüz iş yok. Sohbette yapılacak işleri anlatın.</p>
+        <p class="muted">Henüz iş yok. Sohbette yapılacak işleri anlatın. İşler alt işlere bölünebilir: "Backend işinin altına Login API ekle".</p>
     }
     else
     {
@@ -40,18 +40,29 @@ else
                 <tr><th>#</th><th>İş</th><th>Faz</th><th>Beceri</th><th>Öncelik</th><th class="num">Efor</th><th>Atanan</th><th>Durum</th><th class="num">%</th></tr>
             </thead>
             <tbody>
-                @foreach (var w in Overview.WorkItems)
+                @foreach (var row in Overview.WorkItemTreeRows)
                 {
-                    <tr>
+                    var w = row.Item;
+                    <tr class="@(row.HasChildren ? "row-parent" : "")">
                         <td class="muted">@w.Id</td>
-                        <td>@w.Name</td>
+                        <td>
+                            <span class="tree-name" style="padding-left:@(row.Depth * 1.25)rem">
+                                @if (row.Depth > 0) { <span class="tree-branch">└</span> }
+                                @w.Name
+                            </span>
+                        </td>
                         <td>@Format.Name(w.Phase)</td>
                         <td>@Format.Name(w.RequiredSkill)</td>
                         <td>@Format.Name(w.Priority)</td>
-                        <td class="num">@Format.Number(w.EstimatedHours)</td>
-                        <td>@Overview.PersonName(w.AssigneeId)</td>
-                        <td><span class="status status-@w.Status.ToString().ToLowerInvariant()">@Format.Name(w.Status)</span></td>
-                        <td class="num">@w.PercentComplete</td>
+                        <td class="num" title="@(row.HasChildren ? "Alt işlerin toplamı" : "")">@Format.Number(row.RollupHours)</td>
+                        <td>@(row.HasChildren ? "" : Overview.PersonName(w.AssigneeId))</td>
+                        <td>
+                            @if (!row.HasChildren)
+                            {
+                                <span class="status status-@w.Status.ToString().ToLowerInvariant()">@Format.Name(w.Status)</span>
+                            }
+                        </td>
+                        <td class="num" title="@(row.HasChildren ? "Alt işlerin efora göre ağırlıklı ortalaması" : "")">@Format.Number(row.RollupPercent)</td>
                     </tr>
                 }
             </tbody>

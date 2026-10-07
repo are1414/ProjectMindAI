@@ -108,6 +108,47 @@ public class ServiceTests : ServiceTestBase
             _workItems.CreateAsync(p1.Id, WorkItem("Ekran", Skill.Frontend, other.Id), _ct));
     }
 
+    [Fact]
+    public async Task Sub_items_cannot_form_cycle_and_are_deleted_with_their_parent()
+    {
+        var project = await _projects.CreateAsync(NewProject(), _ct);
+        var backend = await _workItems.CreateAsync(project.Id, WorkItem("Backend", Skill.Backend, null), _ct);
+        var login = await _workItems.CreateAsync(project.Id, Child("Login API", backend.Id), _ct);
+        var token = await _workItems.CreateAsync(project.Id, Child("Token", login.Id), _ct);
+        var test = await _workItems.CreateAsync(project.Id, WorkItem("Test", Skill.Test, null), _ct);
+        await _dependencies.CreateAsync(project.Id, new DependencyRequest { PredecessorId = token.Id, SuccessorId = test.Id }, _ct);
+
+        // Backend'i kendi torununun altına taşımak döngü oluşturur
+        var move = WorkItemRequest.From(backend);
+        move.ParentId = token.Id;
+        await Assert.ThrowsAsync<BusinessRuleException>(() => _workItems.UpdateAsync(project.Id, backend.Id, move, _ct));
+
+        await _workItems.DeleteAsync(project.Id, backend.Id, _ct);
+
+        Assert.Equal(["Test"], (await _workItems.ListAsync(project.Id, _ct)).Select(w => w.Name));
+        Assert.Empty(await _dependencies.ListAsync(project.Id, _ct));
+    }
+
+    [Fact]
+    public async Task Parent_from_another_project_is_rejected_and_project_delete_handles_hierarchy()
+    {
+        var p1 = await _projects.CreateAsync(NewProject(), _ct);
+        var p2 = await _projects.CreateAsync(NewProject(), _ct);
+        var foreign = await _workItems.CreateAsync(p2.Id, WorkItem("Yabancı", Skill.Backend, null), _ct);
+        await Assert.ThrowsAsync<BusinessRuleException>(() => _workItems.CreateAsync(p1.Id, Child("X", foreign.Id), _ct));
+
+        await _workItems.CreateAsync(p2.Id, Child("Alt", foreign.Id), _ct);
+        await _projects.DeleteAsync(p2.Id, _ct);
+        Assert.Empty(Db.WorkItems);
+    }
+
+    private static WorkItemRequest Child(string name, int parentId)
+    {
+        var request = WorkItem(name, Skill.Backend, null);
+        request.ParentId = parentId;
+        return request;
+    }
+
     private static WorkItemRequest WorkItem(string name, Skill skill, int? assigneeId) => new()
     {
         Name = name, RequiredSkill = skill, EstimatedHours = 16, AssigneeId = assigneeId

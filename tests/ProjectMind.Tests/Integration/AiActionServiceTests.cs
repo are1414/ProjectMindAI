@@ -119,6 +119,25 @@ public class AiActionServiceTests : ServiceTestBase
     }
 
     [Fact]
+    public async Task Sub_items_proposed_before_their_parent_are_still_applied_under_it()
+    {
+        await Propose(AiTools.CreateProject, Project);
+        var child = await Propose(AiTools.AddWorkItem, new
+        {
+            name = "Login API", phase = "Development", requiredSkill = "Backend", estimatedHours = 16, parentName = "Backend"
+        });
+        await Propose(AiTools.AddWorkItem, new { name = "Backend", phase = "Development", requiredSkill = "Backend", estimatedHours = 0 });
+        Assert.StartsWith("Alt iş ekle (Backend altına): Login API", child.Summary);
+
+        var results = await _actions.ApplyAllPendingAsync(_sessionId, _ct);
+
+        Assert.All(results, r => Assert.Equal(AiActionStatus.Applied, r.Status));
+        var backend = await Db.WorkItems.AsNoTracking().SingleAsync(w => w.Name == "Backend");
+        var login = await Db.WorkItems.AsNoTracking().SingleAsync(w => w.Name == "Login API");
+        Assert.Equal(backend.Id, login.ParentId);
+    }
+
+    [Fact]
     public async Task Rejected_action_cannot_be_applied_later()
     {
         var proposal = await Propose(AiTools.CreateProject, Project);

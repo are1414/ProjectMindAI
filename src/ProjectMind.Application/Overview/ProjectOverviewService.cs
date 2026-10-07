@@ -11,7 +11,10 @@ public sealed record ProjectOverview(
     IReadOnlyList<WorkItemResponse> WorkItems,
     IReadOnlyList<DependencyResponse> Dependencies)
 {
-    public decimal TotalEstimatedHours => WorkItems.Sum(w => w.EstimatedHours);
+    /// <summary>Sadece alt işi olmayan işler toplanır (üst işin eforu alt işlerinin toplamıdır).</summary>
+    public decimal TotalEstimatedHours => WorkItemTree.Leaves(WorkItems).Sum(w => w.EstimatedHours);
+
+    public IReadOnlyList<WorkItemTreeRow> WorkItemTreeRows => WorkItemTree.Build(WorkItems);
 
     public string PersonName(int? id) => People.FirstOrDefault(p => p.Id == id)?.Name ?? "—";
 

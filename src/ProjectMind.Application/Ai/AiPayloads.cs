@@ -21,12 +21,12 @@ public sealed record UpdatePersonPayload(
 
 public sealed record AddWorkItemPayload(
     string Name, WorkPhase Phase, Skill RequiredSkill, decimal EstimatedHours, string? Description = null,
-    Priority? Priority = null, string? AssigneeName = null);
+    Priority? Priority = null, string? AssigneeName = null, string? ParentName = null);
 
 public sealed record UpdateWorkItemPayload(
     int WorkItemId, string? Name = null, string? Description = null, WorkPhase? Phase = null, Skill? RequiredSkill = null, Priority? Priority = null,
     decimal? EstimatedHours = null, string? AssigneeName = null, WorkItemStatus? Status = null, int? PercentComplete = null,
-    decimal? ActualHours = null, DateOnly? PlannedStart = null, DateOnly? PlannedEnd = null);
+    decimal? ActualHours = null, DateOnly? PlannedStart = null, DateOnly? PlannedEnd = null, string? ParentName = null);
 
 public sealed record RemoveWorkItemPayload(int WorkItemId);
 
