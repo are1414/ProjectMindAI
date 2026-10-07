@@ -1,6 +1,8 @@
 using ProjectMind.Application;
 using ProjectMind.Application.Ai;
+using Microsoft.EntityFrameworkCore;
 using ProjectMind.Infrastructure;
+using ProjectMind.Infrastructure.Persistence;
 using ProjectMind.Web.Components;
 using ProjectMind.Web.Services;
 
@@ -28,6 +30,13 @@ builder.Services.AddScoped<AppEvents>();
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 
 var app = builder.Build();
+
+// Geliştirme ortamında bekleyen migration'lar açılışta uygulanır ("Invalid object name" hatası yaşanmasın).
+if (app.Environment.IsDevelopment())
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    await scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.MigrateAsync();
+}
 
 if (!app.Environment.IsDevelopment())
 {

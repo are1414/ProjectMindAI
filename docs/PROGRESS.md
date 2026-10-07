@@ -4,6 +4,13 @@ Her oturum sonunda en üste yeni kayıt eklenir. Format: yapılanlar · varsayı
 
 ---
 
+## 2026-10-07 (6) — Geliştirmede otomatik migration
+
+- Lokal çalıştırmada `Invalid object name 'ChatSessions'` hatası: yeni migration veritabanına uygulanmamıştı.
+- Development ortamında uygulama açılışta bekleyen migration'ları uyguluyor (`Database.MigrateAsync`). Production'da kapalı.
+
+---
+
 ## 2026-10-07 (5) — Gemini sağlayıcısı (varsayılan)
 
 **Karar (proje sahibi isteği)**: Şimdilik AI sağlayıcısı Gemini; anahtar appsettings'ten okunur (D8 güncellendi).
