@@ -9,8 +9,7 @@ public sealed class NotConfiguredChatModel : IChatModel
 
     public Task<ChatTurnResult> CompleteTurnAsync(ChatTurnRequest request, IChatToolExecutor tools, CancellationToken ct) =>
         Task.FromResult(new ChatTurnResult(
-            "AI bağlı değil (Mock mod). Claude'u bağlamak için proje klasöründe şu komutu çalıştırın:\n" +
-            "dotnet user-secrets set \"AI:ApiKey\" \"<anahtar>\" --project src/ProjectMind.Web\n" +
-            "ve uygulamayı yeniden başlatın.",
+            "AI bağlı değil (Mock mod). Gemini anahtarını src/ProjectMind.Web/appsettings.Local.json dosyasına " +
+            "\"AI\": { \"Gemini\": { \"ApiKey\": \"...\" } } şeklinde yazıp uygulamayı yeniden başlatın.",
             ModelName));
 }

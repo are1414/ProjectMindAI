@@ -34,7 +34,7 @@ Başka bir AI kullanıyorsan bu dosyanın içeriğini ilk mesaj olarak ver.
 - LLM cevabı her zaman **JSON şema** ile istenir ve doğrulanır. Geçersiz cevap kullanıcıya gösterilmez.
 - LLM cevabındaki her sayı, gönderilen context'te bulunmalıdır (sayı doğrulayıcı). Bulunmayan sayı → cevap reddedilir.
 - AI önerileri doğrudan veriyi değiştirmez; proje yöneticisi **Kabul/Reddet** der. Her öneri ve karar loglanır.
-- API anahtarları sadece backend'de, `user-secrets` / ortam değişkeninde. Koda ve repoya asla yazılmaz.
+- API anahtarları sadece backend'de: git'e girmeyen `appsettings.Local.json`, `user-secrets` veya ortam değişkeni. `appsettings.json`'a ve repoya asla yazılmaz.
 - API anahtarı yoksa sağlayıcı otomatik `Mock`'tur (ücretsiz). Testler gerçek API çağırmaz (senaryolu sahte model).
 
 ## 4. Teknik kurallar

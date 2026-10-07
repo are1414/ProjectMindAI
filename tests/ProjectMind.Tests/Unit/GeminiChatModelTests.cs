@@ -1,0 +1,109 @@
+using System.Net;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using ProjectMind.Application.Ai;
+using ProjectMind.Domain.Enums;
+using ProjectMind.Infrastructure.Ai;
+
+namespace ProjectMind.Tests.Unit;
+
+/// <summary>Gemini araç döngüsü, gerçek ağa çıkmadan sahte HTTP cevaplarıyla test edilir.</summary>
+public class GeminiChatModelTests
+{
+    private sealed class FakeHandler(params (HttpStatusCode Status, string Body)[] responses) : HttpMessageHandler
+    {
+        private int _index;
+        public List<(string Url, string? ApiKey, JsonNode Body)> Requests { get; } = [];
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            Requests.Add((request.RequestUri!.ToString(),
+                request.Headers.TryGetValues("x-goog-api-key", out var k) ? k.Single() : null,
+                JsonNode.Parse(await request.Content!.ReadAsStringAsync(ct))!));
+            var (status, body) = responses[_index++];
+            return new HttpResponseMessage(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
+        }
+    }
+
+    private sealed class RecordingExecutor : IChatToolExecutor
+    {
+        public List<(string Name, JsonElement Input)> Calls { get; } = [];
+
+        public Task<ToolExecutionResult> ExecuteAsync(string toolName, JsonElement input, CancellationToken ct)
+        {
+            Calls.Add((toolName, input));
+            return Task.FromResult(new ToolExecutionResult("Öneri #1 oluşturuldu", false));
+        }
+    }
+
+    private static GeminiChatModel Model(FakeHandler handler) => new(
+        new HttpClient(handler),
+        Options.Create(new AiOptions { Gemini = new() { Model = "gemini-test", ApiKey = "KEY" } }),
+        NullLogger<GeminiChatModel>.Instance);
+
+    private static ChatTurnRequest Request() => new(
+        "sistem", [new ChatHistoryItem(ChatRole.User, "önceki"), new ChatHistoryItem(ChatRole.Assistant, "cevap")],
+        "proje aç", AiTools.All);
+
+    private const string FunctionCallResponse = """
+        {"candidates":[{"content":{"role":"model","parts":[
+          {"functionCall":{"name":"create_project","args":{"name":"X","startDate":"2026-11-01","targetEndDate":"2027-01-01"}},
+           "thoughtSignature":"SIG"}]}}]}
+        """;
+
+    private const string TextResponse = """
+        {"candidates":[{"content":{"role":"model","parts":[
+          {"text":"düşünce","thought":true},{"text":"Projeyi önerdim."}]}}]}
+        """;
+
+    [Fact]
+    public async Task Tool_call_is_executed_and_result_sent_back_with_model_content_preserved()
+    {
+        var handler = new FakeHandler((HttpStatusCode.OK, FunctionCallResponse), (HttpStatusCode.OK, TextResponse));
+        var executor = new RecordingExecutor();
+
+        var result = await Model(handler).CompleteTurnAsync(Request(), executor, CancellationToken.None);
+
+        Assert.Equal("Projeyi önerdim.", result.Text.Trim());   // "thought" parçası cevaba girmez
+        Assert.Equal("gemini-test", result.Model);
+        Assert.Equal("create_project", executor.Calls.Single().Name);
+        Assert.Equal("X", executor.Calls.Single().Input.GetProperty("name").GetString());
+
+        var first = handler.Requests[0];
+        Assert.EndsWith("models/gemini-test:generateContent", first.Url);
+        Assert.Equal("KEY", first.ApiKey);
+        Assert.Equal("sistem", first.Body["systemInstruction"]!["parts"]![0]!["text"]!.GetValue<string>());
+        Assert.Equal(["user", "model", "user"], first.Body["contents"]!.AsArray().Select(c => c!["role"]!.GetValue<string>()));
+        Assert.Equal(AiTools.All.Count, first.Body["tools"]![0]!["functionDeclarations"]!.AsArray().Count);
+
+        var second = handler.Requests[1].Body["contents"]!.AsArray();
+        Assert.Equal("SIG", second[3]!["parts"]![0]!["thoughtSignature"]!.GetValue<string>());
+        var functionResponse = second[4]!["parts"]![0]!["functionResponse"]!;
+        Assert.Equal("create_project", functionResponse["name"]!.GetValue<string>());
+        Assert.Equal("Öneri #1 oluşturuldu", functionResponse["response"]!["result"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task Empty_required_arrays_are_removed_from_declarations()
+    {
+        var handler = new FakeHandler((HttpStatusCode.OK, TextResponse));
+        await Model(handler).CompleteTurnAsync(Request(), new RecordingExecutor(), CancellationToken.None);
+
+        var updateProject = handler.Requests[0].Body["tools"]![0]!["functionDeclarations"]!.AsArray()
+            .Single(d => d!["name"]!.GetValue<string>() == AiTools.UpdateProject)!;
+        Assert.Null(updateProject["parameters"]!["required"]);
+    }
+
+    [Fact]
+    public async Task Invalid_key_becomes_friendly_error()
+    {
+        var handler = new FakeHandler((HttpStatusCode.BadRequest, """{"error":{"status":"INVALID_ARGUMENT","details":[{"reason":"API_KEY_INVALID"}]}}"""));
+
+        var ex = await Assert.ThrowsAsync<ChatModelException>(() =>
+            Model(handler).CompleteTurnAsync(Request(), new RecordingExecutor(), CancellationToken.None));
+        Assert.Contains("anahtarı geçersiz", ex.Message);
+    }
+}

@@ -4,6 +4,31 @@ Her oturum sonunda en üste yeni kayıt eklenir. Format: yapılanlar · varsayı
 
 ---
 
+## 2026-10-07 (5) — Gemini sağlayıcısı (varsayılan)
+
+**Karar (proje sahibi isteği)**: Şimdilik AI sağlayıcısı Gemini; anahtar appsettings'ten okunur (D8 güncellendi).
+
+**Yapılanlar**
+- `GeminiChatModel`: generateContent REST API, function calling döngüsü; modelin içeriği (thoughtSignature dahil) aynen geri eklenir,
+  "thought" parçaları cevaba girmez; hata kodlarına göre Türkçe mesaj (geçersiz anahtar, model yok, limit).
+- `AiOptions` sağlayıcı başına: `AI:Provider`, `AI:Gemini:{Model,ApiKey}`, `AI:Claude:{Model,ApiKey}`, `AI:ClaudeEffort`.
+- Anahtar için git'e girmeyen `appsettings.Local.json` (örnek: `appsettings.Local.example.json`); ortam değişkeni `GEMINI_API_KEY` de olur.
+- Testler: 33/33 (Gemini döngüsü sahte HTTP cevaplarıyla: araç çağrısı → functionResponse, imza korunması, hata mesajı).
+
+**Paketler (gerekçe)**: `Microsoft.Extensions.Http` (typed HttpClient / IHttpClientFactory; Gemini için resmi .NET SDK yerine
+birkaç uç noktalık REST çağrısı yeterli, ek SDK bağımlılığı eklenmedi).
+
+**Varsayımlar**
+- Varsayılan model `gemini-2.5-flash` (ücretsiz katmanda kullanılabilir olduğu varsayıldı). Google model adını değiştirirse
+  `AI:Gemini:Model` ayarından güncellenir; model bulunamazsa uygulama bunu açıkça söyler.
+
+**Bilinen sorunlar / sınırlar**
+- Gerçek Gemini API bu ortamda çağrılmadı (anahtar yok); lokal makinede denenmeli.
+
+**Sıradaki adım**: Faz 3 — eksik iş kontrolü.
+
+---
+
 ## 2026-10-07 (4) — Chat odaklı arayüz: Blazor Server + Claude (Faz 2.5)
 
 **Karar değişikliği (proje sahibi isteği)**: Her şey sohbetten yönetilsin; arayüz Blazor Server, AI sağlayıcısı Claude

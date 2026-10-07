@@ -11,7 +11,7 @@ Bu kararlar ancak proje sahibinin açık onayıyla değişir. Değişirse eski k
 | D5 | Katmanlar: Domain / Application / Infrastructure / **Web** + Tests. Mikroservis yok. | Sade Clean Architecture yeterli. |
 | D6 | ~~React + TypeScript~~ → **(2026-10-07) Arayüz Blazor bileşenleri + kendi CSS'imiz (`wwwroot/app.css`).** Şimdilik sade tasarım; profesyonel tasarım ayrı adımda. Grafik/Gantt gerekince küçük JS kütüphanesi (`wwwroot/lib`). npm/SPA yok. | Tek proje, tek dil. |
 | D7 | ~~Python FastAPI servisi~~ → **(2026-10-07) ML uygulama içinde ML.NET ile.** Python sadece opsiyonel olarak çevrimdışı analiz/grafik için (uygulamanın parçası değil). | Her şey tek .NET projesinde kalsın. |
-| D8 | LLM: `IChatModel` soyutlaması. **(2026-10-07) Ana sağlayıcı Claude** (Anthropic C# SDK, model `claude-opus-5-5`, effort `low`, appsettings `AI` bölümünden değiştirilebilir). API anahtarı yoksa otomatik **Mock**. | Proje sahibi tercihi; maliyet kontrolü. |
+| D8 | LLM: `IChatModel` soyutlaması. ~~Ana sağlayıcı Claude~~ → **(2026-10-07) Şimdilik ana sağlayıcı Gemini** (REST generateContent, model `gemini-2.5-flash`); Claude (Anthropic C# SDK) alternatif olarak hazır. Seçim `AI:Provider`. Anahtar git'e girmeyen `appsettings.Local.json`'dan okunur; yoksa otomatik **Mock**. | Proje sahibi tercihi (ücretsiz katman); sağlayıcı karşılaştırması imkânı. |
 | D9 | LLM sadece **açıklar/önerir**; tüm sayısal hesaplar deterministik kod veya ML servisinde. | Halüsinasyonu önler, savunulabilir. |
 | D10 | Baseline yöntem: **EVM / Earned Schedule**. ML modeli buna karşı kıyaslanır. | Mühendislik yönetimi bağlantısı. |
 | D11 | Sağlık skoru ağırlıkları **AHP** ile belirlenir. | Ağırlıklar keyfi olmasın. |

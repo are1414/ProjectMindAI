@@ -41,7 +41,7 @@
 ### FAZ 2.5 — Chat odaklı arayüz ve AI çekirdeği ✅
 - [x] Blazor Server (interactive server), sade tasarım: kenar çubuğu (sohbetler) · proje paneli · AI chat paneli
 - [x] Sohbet kayıtları (ChatSession, ChatMessage) veritabanında; proje sohbetten başlar
-- [x] Claude (Anthropic C# SDK) + araç çağırma; anahtar yoksa ücretsiz Mock'a düşer
+- [x] Gemini (varsayılan) ve Claude sağlayıcıları + araç çağırma; anahtar yoksa ücretsiz Mock'a düşer
 - [x] Araçlar: proje oluştur/güncelle, kişi ekle/güncelle, iş ekle/güncelle/sil, bağımlılık ekle
 - [x] Her araç çağrısı = öneri kartı (AiAction); Uygula / Vazgeç / hepsini uygula; mevcut servislerden geçer
 - [x] Kart metni modelden değil veriden üretilir; kabul/red loglanır (öneri kabul oranı ölçümü için)
@@ -84,7 +84,7 @@
 - [ ] Senaryo karşılaştırma ekranı
 
 ### FAZ 8 — AI katmanı (analiz yorumları)
-- [x] `IChatModel`: Mock + Claude (Faz 2.5'te)
+- [x] `IChatModel`: Mock + Gemini + Claude (Faz 2.5'te)
 - [x] ContextBuilder, sürümlü prompt (Faz 2.5'te)
 - [ ] Analiz cevapları için sayı doğrulayıcı (cevaptaki her sayı bağlamda olmalı)
 - [ ] Eksik iş önerisinin LLM katmanı (hibrit)

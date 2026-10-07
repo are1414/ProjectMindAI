@@ -25,16 +25,18 @@ dotnet ef database update -p src/ProjectMind.Infrastructure -s src/ProjectMind.W
 dotnet run --project src/ProjectMind.Web
 ```
 
-### AI (Claude) bağlantısı
+### AI bağlantısı (Gemini)
 
-Anahtarı repoya yazmadan, user-secrets ile girin (console.anthropic.com → API Keys):
+1. https://aistudio.google.com/apikey adresinden Gemini API anahtarı alın.
+2. `src/ProjectMind.Web/appsettings.Local.example.json` dosyasını aynı klasöre `appsettings.Local.json` adıyla kopyalayın
+   ve anahtarı yazın. Bu dosya `.gitignore`'dadır, GitHub'a gitmez. (**Anahtarı `appsettings.json`'a yazmayın.**)
 
-```bash
-dotnet user-secrets set "AI:ApiKey" "<anahtar>" --project src/ProjectMind.Web
+```json
+{ "AI": { "Provider": "Gemini", "Gemini": { "ApiKey": "..." } } }
 ```
 
-Anahtar yoksa uygulama Mock modda çalışır (ücretsiz, AI cevap vermez). Model ve ayarlar:
-`src/ProjectMind.Web/appsettings.json` → `AI` bölümü (`Model`, `Effort`, `MaxTokens`…).
+Anahtar yoksa uygulama Mock modda çalışır (AI cevap vermez). Model ve diğer ayarlar `appsettings.json` → `AI` bölümünde
+(`AI:Gemini:Model`). Claude'a geçmek için `"Provider": "Claude"` ve `"Claude": { "ApiKey": "..." }`.
 
 ```bash
 dotnet test                                # testler

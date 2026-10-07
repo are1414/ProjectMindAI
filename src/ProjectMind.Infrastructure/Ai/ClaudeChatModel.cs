@@ -19,7 +19,7 @@ public sealed class ClaudeChatModel(IOptions<AiOptions> options, ILogger<ClaudeC
     public async Task<ChatTurnResult> CompleteTurnAsync(ChatTurnRequest request, IChatToolExecutor tools, CancellationToken ct)
     {
         var o = options.Value;
-        AnthropicClient client = new() { ApiKey = o.ApiKey };
+        AnthropicClient client = new() { ApiKey = o.Claude.ApiKey };
 
         List<MessageParam> messages = request.History
             .Select(h => new MessageParam { Role = h.Role == ChatRole.User ? Role.User : Role.Assistant, Content = h.Content })
@@ -36,17 +36,17 @@ public sealed class ClaudeChatModel(IOptions<AiOptions> options, ILogger<ClaudeC
             {
                 response = await client.Messages.Create(new MessageCreateParams
                 {
-                    Model = o.Model,
+                    Model = o.Claude.Model,
                     MaxTokens = o.MaxTokens,
                     System = request.SystemPrompt,
-                    OutputConfig = new OutputConfig { Effort = ParseEffort(o.Effort) },
+                    OutputConfig = new OutputConfig { Effort = ParseEffort(o.ClaudeEffort) },
                     Tools = toolDefinitions,
                     Messages = messages
                 }, ct);
             }
             catch (AnthropicUnauthorizedException ex)
             {
-                throw Fail(ex, "API anahtarı geçersiz. 'AI:ApiKey' ayarını kontrol edin.");
+                throw Fail(ex, "API anahtarı geçersiz. 'AI:Claude:ApiKey' ayarını kontrol edin.");
             }
             catch (AnthropicRateLimitException ex)
             {
@@ -66,10 +66,10 @@ public sealed class ClaudeChatModel(IOptions<AiOptions> options, ILogger<ClaudeC
             }
 
             logger.LogInformation("Claude turu: model {Model}, giriş {In} / çıkış {Out} token",
-                o.Model, response.Usage.InputTokens, response.Usage.OutputTokens);
+                o.Claude.Model, response.Usage.InputTokens, response.Usage.OutputTokens);
 
             if (response.StopReason == StopReason.Refusal)
-                return new ChatTurnResult("Bu isteği işleyemiyorum. Lütfen farklı şekilde ifade edin.", o.Model);
+                return new ChatTurnResult("Bu isteği işleyemiyorum. Lütfen farklı şekilde ifade edin.", o.Claude.Model);
 
             List<ContentBlockParam> assistantContent = [];
             List<ContentBlockParam> toolResults = [];
@@ -98,7 +98,7 @@ public sealed class ClaudeChatModel(IOptions<AiOptions> options, ILogger<ClaudeC
             }
 
             if (toolResults.Count == 0)
-                return new ChatTurnResult(reply.ToString(), o.Model);
+                return new ChatTurnResult(reply.ToString(), o.Claude.Model);
 
             messages.Add(new MessageParam { Role = Role.Assistant, Content = assistantContent });
             messages.Add(new MessageParam { Role = Role.User, Content = toolResults });
@@ -106,7 +106,7 @@ public sealed class ClaudeChatModel(IOptions<AiOptions> options, ILogger<ClaudeC
 
         logger.LogWarning("Araç turu sınırına ({Max}) ulaşıldı", o.MaxToolRounds);
         reply.AppendLine("(İşlem çok uzun sürdü; şu ana kadarki önerileri kontrol edin.)");
-        return new ChatTurnResult(reply.ToString(), o.Model);
+        return new ChatTurnResult(reply.ToString(), o.Claude.Model);
     }
 
     private ChatModelException Fail(Exception ex, string message)
