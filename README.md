@@ -12,10 +12,14 @@ gerçekleşmeyi takip eder, gecikmeyi tahmin eder, what-if senaryolarını simü
 
 ## Çalıştırma (lokal)
 
-Gereksinimler: .NET 10 SDK, Docker.
+Gereksinimler: .NET 10 SDK, lokal SQL Server (Windows Authentication).
+
+Bağlantı: `src/ProjectMind.Web/appsettings.Development.json` → `ConnectionStrings:Default`
+(varsayılan: `Data Source=.` = bu bilgisayardaki varsayılan SQL Server instance'ı, veritabanı `ProjectMindAIDb`).
+Named instance kullanıyorsan `Data Source=.\SQLEXPRESS` gibi değiştir. SQL Server kurulu değilse alternatif: `docker compose up -d`
+ve docker-compose içindeki `sa` bağlantısı.
 
 ```bash
-docker compose up -d                       # SQL Server
 dotnet tool restore                        # dotnet-ef
 dotnet ef database update -p src/ProjectMind.Infrastructure -s src/ProjectMind.Web
 dotnet run --project src/ProjectMind.Web   # tarayıcıda açılan adres → /projects

@@ -7,7 +7,7 @@ Bu kararlar ancak proje sahibinin açık onayıyla değişir. Değişirse eski k
 | D1 | Ürün adı **ProjectMind AI** | — |
 | D2 | **Tek kullanıcı** (proje yöneticisi). Login / rol / JWT yok. | Akademik değer katmıyor, süre yiyor. |
 | D3 | ~~ASP.NET Core Web API~~ → **(2026-10-07) Tek .NET 10 web uygulaması: ASP.NET Core MVC (Razor view, sunucu tarafı render).** Ayrı API katmanı yazılmaz. | Kapsamı dar tutmak; proje sahibinin uzmanlığı. |
-| D4 | Veritabanı: **Microsoft SQL Server**, EF Core migrations. Lokal ortam için `docker-compose` ile SQL Server. | Proje sahibi tercihi. |
+| D4 | Veritabanı: **Microsoft SQL Server**, EF Core migrations. Lokal ortam: **(2026-10-07) bilgisayardaki SQL Server, Windows Authentication, DB `ProjectMindAIDb`**; docker-compose sadece yedek seçenek. | Proje sahibi tercihi. |
 | D5 | Katmanlar: Domain / Application / Infrastructure / **Web** + Tests. Mikroservis yok. | Sade Clean Architecture yeterli. |
 | D6 | ~~React + TypeScript~~ → **(2026-10-07) Arayüz Razor view + Bootstrap 5.** Grafik/Gantt gerekince sadece küçük JS kütüphanesi (CDN değil, `wwwroot/lib`). npm/SPA yok. | Tek proje, tek dil. |
 | D7 | ~~Python FastAPI servisi~~ → **(2026-10-07) ML uygulama içinde ML.NET ile.** Python sadece opsiyonel olarak çevrimdışı analiz/grafik için (uygulamanın parçası değil). | Her şey tek .NET projesinde kalsın. |
