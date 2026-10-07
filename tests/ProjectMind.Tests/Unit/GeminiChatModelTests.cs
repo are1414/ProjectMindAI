@@ -42,7 +42,7 @@ public class GeminiChatModelTests
 
     private static GeminiChatModel Model(FakeHandler handler) => new(
         new HttpClient(handler),
-        new AiOptions { Gemini = new() { Model = "gemini-test", ApiKey = "KEY" } },
+        new AiOptions { Gemini = new() { Model = "gemini-test", ApiKey = "KEY" }, RetryDelayMs = 0 },
         NullLogger<GeminiChatModel>.Instance);
 
     private static ChatTurnRequest Request() => new(
@@ -119,6 +119,52 @@ public class GeminiChatModelTests
         Assert.Equal("gemini-4.0-flash", result.Model);
         Assert.Contains("/models?", handler.Requests[1].Url);
         Assert.EndsWith("models/gemini-4.0-flash:generateContent", handler.Requests[2].Url);
+    }
+
+    private const string Overloaded = """{"error":{"code":503,"message":"high demand","status":"UNAVAILABLE"}}""";
+
+    [Fact]
+    public async Task Temporary_overload_is_retried_and_succeeds()
+    {
+        var handler = new FakeHandler((HttpStatusCode.ServiceUnavailable, Overloaded), (HttpStatusCode.OK, TextResponse));
+
+        var result = await Model(handler).CompleteTurnAsync(Request(), new RecordingExecutor(), CancellationToken.None);
+
+        Assert.Equal("Projeyi önerdim.", result.Text.Trim());
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.All(handler.Requests, r => Assert.EndsWith("models/gemini-test:generateContent", r.Url));
+    }
+
+    [Fact]
+    public async Task Persistent_overload_switches_to_another_model_for_this_turn()
+    {
+        const string models = """
+            {"models":[
+              {"name":"models/gemini-test","supportedGenerationMethods":["generateContent"]},
+              {"name":"models/gemini-9-flash-lite","supportedGenerationMethods":["generateContent"]}]}
+            """;
+        var handler = new FakeHandler(
+            (HttpStatusCode.ServiceUnavailable, Overloaded), (HttpStatusCode.ServiceUnavailable, Overloaded),
+            (HttpStatusCode.ServiceUnavailable, Overloaded),          // 1 deneme + 2 tekrar
+            (HttpStatusCode.OK, models),
+            (HttpStatusCode.OK, TextResponse));
+
+        var result = await Model(handler).CompleteTurnAsync(Request(), new RecordingExecutor(), CancellationToken.None);
+
+        Assert.Equal("gemini-9-flash-lite", result.Model);
+        Assert.EndsWith("models/gemini-9-flash-lite:generateContent", handler.Requests[4].Url);
+    }
+
+    [Fact]
+    public async Task Overload_without_alternative_gives_friendly_message()
+    {
+        var handler = new FakeHandler(
+            (HttpStatusCode.ServiceUnavailable, Overloaded), (HttpStatusCode.ServiceUnavailable, Overloaded),
+            (HttpStatusCode.ServiceUnavailable, Overloaded), (HttpStatusCode.OK, """{"models":[]}"""));
+
+        var ex = await Assert.ThrowsAsync<ChatModelException>(() =>
+            Model(handler).CompleteTurnAsync(Request(), new RecordingExecutor(), CancellationToken.None));
+        Assert.Contains("çok yoğun", ex.Message);
     }
 
     [Fact]

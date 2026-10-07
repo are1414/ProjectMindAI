@@ -4,6 +4,16 @@ Her oturum sonunda en üste yeni kayıt eklenir. Format: yapılanlar · varsayı
 
 ---
 
+## 2026-10-07 (12) — Gemini yoğunluk (503) dayanıklılığı
+
+Proje sahibinin lokal denemesi: anahtar çalışıyor (istek Google'a ulaştı), ancak `gemini-3.5-flash` 503 "high demand" döndü.
+- Geçici hatalarda (503/429/500/504) artan beklemeyle tekrar deneme: `AI:RetryCount` (2), `AI:RetryDelayMs` (1500 → 3000).
+- Hâlâ yoğunsa o tur için başka uygun Gemini modeline geçilir (önce tam "flash", yoksa "lite"); kalıcı değildir.
+- Hiçbiri olmazsa Türkçe "Gemini şu an çok yoğun, birkaç dakika sonra tekrar deneyin" mesajı.
+- Testler 54/54 (tekrar deneme başarısı, yoğunlukta model değişimi, alternatif yoksa mesaj).
+
+---
+
 ## 2026-10-07 (11) — WBS numaraları, aç/kapat, sayfada düzenleme
 
 Proje sahibi isteği: id yerine 4.1 gibi numaralar, +/− ile daraltma, sayfa az yer kaplasın, saat ve metinler sayfadan düzenlensin.

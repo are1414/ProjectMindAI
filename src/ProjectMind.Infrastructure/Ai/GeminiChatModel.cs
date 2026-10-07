@@ -48,17 +48,33 @@ public sealed class GeminiChatModel(HttpClient http, AiOptions options, ILogger<
             JsonNode response;
             try
             {
-                response = await SendAsync(model, o.Gemini.ApiKey, body, ct);
+                response = await SendWithRetryAsync(model, o, body, ct);
             }
             catch (ModelNotFoundException)
             {
-                var fallback = await FindAvailableModelAsync(o.Gemini.ApiKey, ct)
+                var fallback = await FindAvailableModelAsync(o.Gemini.ApiKey, exclude: model, allowLite: false, ct)
                     ?? throw new ChatModelException(
                         $"Gemini modeli bulunamadı: '{model}' ve uygun bir yedek model de bulunamadı. " +
                         "appsettings 'AI:Gemini:Model' değerini AI Studio'daki güncel bir model adıyla değiştirin.");
                 logger.LogWarning("Gemini modeli '{Model}' kullanılamıyor; '{Fallback}' modeline geçildi", model, fallback);
                 _resolvedFallbackModel = model = fallback;
-                response = await SendAsync(model, o.Gemini.ApiKey, body, ct);
+                response = await SendWithRetryAsync(model, o, body, ct);
+            }
+            catch (ModelOverloadedException)
+            {
+                // Model geçici olarak yoğun: bu tur için başka bir uygun modele geç (kalıcı değil).
+                var alternative = await FindAvailableModelAsync(o.Gemini.ApiKey, exclude: model, allowLite: true, ct)
+                    ?? throw Overloaded();
+                logger.LogWarning("Gemini modeli '{Model}' yoğun; bu tur '{Alternative}' ile deneniyor", model, alternative);
+                model = alternative;
+                try
+                {
+                    response = await SendWithRetryAsync(model, o, body, ct);
+                }
+                catch (ModelOverloadedException)
+                {
+                    throw Overloaded();
+                }
             }
             var candidate = response["candidates"]?.AsArray().FirstOrDefault();
             var content = candidate?["content"];
@@ -106,6 +122,34 @@ public sealed class GeminiChatModel(HttpClient http, AiOptions options, ILogger<
         return new ChatTurnResult(reply.ToString(), model);
     }
 
+    /// <summary>Geçici hatalarda (503/429/500/504) artan beklemeyle tekrar dener.</summary>
+    private async Task<JsonNode> SendWithRetryAsync(string model, AiOptions o, JsonObject body, CancellationToken ct)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                return await SendAsync(model, o.Gemini.ApiKey, body, ct);
+            }
+            catch (ModelOverloadedException) when (attempt < o.RetryCount)
+            {
+                var delay = TimeSpan.FromMilliseconds(o.RetryDelayMs * Math.Pow(2, attempt));
+                logger.LogInformation("Gemini '{Model}' yoğun; {Delay} sonra tekrar denenecek ({Attempt}/{Max})",
+                    model, delay, attempt + 1, o.RetryCount);
+                await Task.Delay(delay, ct);
+            }
+        }
+    }
+
+    private static ChatModelException Overloaded() => new(
+        "Gemini şu an çok yoğun (Google tarafında geçici bir durum). Birkaç dakika sonra mesajınızı tekrar gönderin.");
+
+    private static readonly HashSet<HttpStatusCode> TransientStatusCodes =
+    [
+        HttpStatusCode.ServiceUnavailable, HttpStatusCode.TooManyRequests,
+        HttpStatusCode.InternalServerError, HttpStatusCode.GatewayTimeout
+    ];
+
     private async Task<JsonNode> SendAsync(string model, string? apiKey, JsonObject body, CancellationToken ct)
     {
         using var message = new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl}models/{model}:generateContent")
@@ -133,6 +177,12 @@ public sealed class GeminiChatModel(HttpClient http, AiOptions options, ILogger<
                 throw new ModelNotFoundException();
             }
 
+            if (TransientStatusCodes.Contains(response.StatusCode))
+            {
+                logger.LogWarning("Gemini geçici hata {Status} ({Model}): {Body}", (int)response.StatusCode, model, text);
+                throw new ModelOverloadedException();
+            }
+
             if (!response.IsSuccessStatusCode)
             {
                 logger.LogError("Gemini hata {Status}: {Body}", (int)response.StatusCode, text);
@@ -142,8 +192,6 @@ public sealed class GeminiChatModel(HttpClient http, AiOptions options, ILogger<
                         "Gemini API anahtarı geçersiz. ⚙ Ayarlar sayfasından anahtarı kontrol edip yeniden kaydedin.",
                     HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized =>
                         "Gemini API anahtarının bu modele erişimi yok.",
-                    HttpStatusCode.TooManyRequests =>
-                        "Gemini kullanım limiti doldu veya çok fazla istek gönderildi. Biraz sonra tekrar deneyin.",
                     _ => "AI servisinden beklenmeyen bir hata döndü. Ayrıntı loglarda."
                 });
             }
@@ -156,9 +204,9 @@ public sealed class GeminiChatModel(HttpClient http, AiOptions options, ILogger<
 
     /// <summary>
     /// ListModels ile generateContent destekleyen, sohbete uygun en yeni "flash" modelini bulur
-    /// (lite / görüntü / ses / canlı / önizleme sürümleri tercih edilmez).
+    /// (görüntü / ses / canlı / önizleme sürümleri hariç). allowLite: tam sürüm yoksa "lite" da kabul edilir.
     /// </summary>
-    private async Task<string?> FindAvailableModelAsync(string? apiKey, CancellationToken ct)
+    private async Task<string?> FindAvailableModelAsync(string? apiKey, string exclude, bool allowLite, CancellationToken ct)
     {
         using var message = new HttpRequestMessage(HttpMethod.Get, $"{BaseUrl}models?pageSize=1000");
         message.Headers.Add("x-goog-api-key", apiKey);
@@ -167,19 +215,23 @@ public sealed class GeminiChatModel(HttpClient http, AiOptions options, ILogger<
             return null;
 
         var models = JsonNode.Parse(await response.Content.ReadAsStringAsync(ct))?["models"]?.AsArray() ?? [];
-        string[] excluded = ["lite", "image", "tts", "audio", "live", "embedding", "preview", "exp"];
+        string[] excluded = ["image", "tts", "audio", "live", "embedding", "preview", "exp"];
         return models
             .Where(m => m?["supportedGenerationMethods"]?.AsArray()
                 .Any(x => x?.GetValue<string>() == "generateContent") == true)
             .Select(m => m!["name"]!.GetValue<string>().Replace("models/", ""))
-            .Where(n => n.StartsWith("gemini-") && n.Contains(PreferredFamily) && !excluded.Any(n.Contains))
-            .OrderByDescending(n => n, StringComparer.Ordinal)
+            .Where(n => n.StartsWith("gemini-") && n.Contains(PreferredFamily) && !excluded.Any(n.Contains) && n != exclude)
+            .Where(n => allowLite || !n.Contains("lite"))
+            .OrderBy(n => n.Contains("lite"))                          // önce tam sürüm
+            .ThenByDescending(n => n, StringComparer.Ordinal)          // sonra en yeni
             .FirstOrDefault();
     }
 
     public static void ResetModelCache() => _resolvedFallbackModel = null;
 
     private sealed class ModelNotFoundException : Exception;
+
+    private sealed class ModelOverloadedException : Exception;
 
     private ChatModelException Fail(Exception ex, string message)
     {

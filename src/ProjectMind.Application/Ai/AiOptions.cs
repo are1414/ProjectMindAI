@@ -16,6 +16,12 @@ public sealed class AiOptions
     public int MaxToolRounds { get; set; } = 8;
     public int MaxHistoryMessages { get; set; } = 20;
 
+    /// <summary>Sağlayıcı geçici olarak yoğunsa (503/429/500) kaç kez daha denensin.</summary>
+    public int RetryCount { get; set; } = 2;
+
+    /// <summary>İlk tekrar denemeden önceki bekleme; her denemede iki katına çıkar.</summary>
+    public int RetryDelayMs { get; set; } = 1500;
+
     public ProviderOptions Gemini { get; set; } = new() { Model = "gemini-3.5-flash" };
     public ProviderOptions Claude { get; set; } = new() { Model = "claude-opus-5-5" };
 
