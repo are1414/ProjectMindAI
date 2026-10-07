@@ -74,6 +74,32 @@ else
         </section>
     </div>
 
+    @if (s.Delay is { } delay)
+    {
+        <section class="delay-card">
+            <div>
+                <span class="kpi-label">Gecikme olasılığı (ML)</span>
+                <div class="delay-prob">%@Format.Number((decimal)Math.Round(delay.Probability * 100))</div>
+                <div class="status-pill status-@RiskCss(delay.Risk)">@RiskIcon(delay.Risk) @RiskText(delay.Risk) risk</div>
+            </div>
+            <div class="delay-compare">
+                <div><span>ML tahmini bitiş</span><strong>@Format.Date(delay.ForecastFinish)</strong>
+                    <em class="muted">plan süresinin ×@delay.DurationRatio.ToString("0.00", Tr)</em></div>
+                <div><span>EVM tahmini bitiş</span><strong>@Format.Date(s.Evm?.ForecastFinish)</strong>
+                    <em class="muted">Earned Schedule</em></div>
+                <div><span>Hedef</span><strong>@Format.Date(s.Overview.Project.TargetEndDate)</strong></div>
+            </div>
+            <p class="muted small">
+                Model: @delay.Model.Classifier (sentetik veride test AUC @delay.Model.TestAuc.ToString("0.00", Tr)) ·
+                <a href="/experiments">deney sonuçları</a>
+                @if (delay.OutsideTrainingRange)
+                {
+                    <br /><span>▲ Proje, modelin eğitildiği ilerleme aralığının dışında; tahmini dikkatle yorumlayın.</span>
+                }
+            </p>
+        </section>
+    }
+
     <h2>Uyarılar <span class="count">@s.Alerts.Count</span></h2>
     @if (s.Alerts.Count == 0)
     {
@@ -213,6 +239,10 @@ else
     private static string IndexCss(decimal? v) => v is null ? "muted" : v < 1 ? "late" : "ontime";
     private static string IndexHint(decimal? v, string bad, string good) => v is null ? "henüz veri yok" : v < 1 ? bad : good;
 
+    private static readonly System.Globalization.CultureInfo Tr = System.Globalization.CultureInfo.GetCultureInfo("tr-TR");
+    private static string RiskCss(DelayRisk r) => r switch { DelayRisk.Low => "good", DelayRisk.Medium => "warning", _ => "critical" };
+    private static string RiskIcon(DelayRisk r) => r switch { DelayRisk.Low => "✓", DelayRisk.Medium => "▲", _ => "✕" };
+    private static string RiskText(DelayRisk r) => r switch { DelayRisk.Low => "Düşük", DelayRisk.Medium => "Orta", _ => "Yüksek" };
     private static string LevelCss(HealthLevel? l) => l switch { HealthLevel.Good => "good", HealthLevel.Warning => "warning", _ => "critical" };
     private static string LevelIcon(HealthLevel? l) => l switch { HealthLevel.Good => "✓", HealthLevel.Warning => "▲", _ => "✕" };
     private static string LevelText(HealthLevel? l) => l switch { HealthLevel.Good => "İyi", HealthLevel.Warning => "Dikkat", _ => "Kritik" };

@@ -38,7 +38,30 @@ public abstract class ServiceTestBase : IDisposable
 
     protected ProjectMind.Application.Analytics.ProjectStatusService NewStatusService(DateTimeOffset? now = null) =>
         new(Db, NewScheduleService(now), new FixedClock(now ?? Today),
-            Microsoft.Extensions.Options.Options.Create(new ProjectMind.Application.Analytics.HealthOptions()));
+            Microsoft.Extensions.Options.Options.Create(new ProjectMind.Application.Analytics.HealthOptions()), Predictor);
+
+    /// <summary>ML modeli eğitmeden sabit tahmin döndürür; son aldığı özellikleri saklar.</summary>
+    protected FakeDelayPredictor Predictor { get; } = new();
+
+    protected sealed class FakeDelayPredictor : ProjectMind.Application.Ml.IDelayPredictor
+    {
+        public static readonly ProjectMind.Application.Ml.DelayModelInfo Info =
+            new("FastTree", "FastTreeRegression", "test", 1, 1, 1, 0.9, 0.8, 0.1, DateTimeOffset.UnixEpoch);
+
+        public ProjectMind.Application.Ml.DelayFeatures? LastFeatures { get; private set; }
+        public ProjectMind.Application.Ml.DelayModelInfo? CurrentModel => Info;
+        public ProjectMind.Application.Ml.DelayExperimentReport? LastReport => null;
+
+        public Task<ProjectMind.Application.Ml.DelayPrediction?> PredictAsync(ProjectMind.Application.Ml.DelayFeatures features,
+            ProjectMind.Application.Analytics.EvmResult evm, CancellationToken ct)
+        {
+            LastFeatures = features;
+            return Task.FromResult<ProjectMind.Application.Ml.DelayPrediction?>(new(0.7f, 1.2f, null, false, Info));
+        }
+
+        public Task<ProjectMind.Application.Ml.DelayExperimentReport> RunExperimentAsync(CancellationToken ct) =>
+            throw new NotSupportedException();
+    }
 
     protected AiActionService NewActionService() =>
         new(Db, new ProjectService(Db), new PersonService(Db), new WorkItemService(Db), new DependencyService(Db),

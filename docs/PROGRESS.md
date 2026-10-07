@@ -4,6 +4,45 @@ Her oturum sonunda en üste yeni kayıt eklenir. Format: yapılanlar · varsayı
 
 ---
 
+## 2026-10-07 (16) — Faz 6: Veri ve ML (gecikme tahmini, EVM ile karşılaştırma)
+
+- Yeni paketler: `Microsoft.ML` 5.0.0 ve `Microsoft.ML.FastTree` 5.0.0 (Infrastructure). Gerekçe: D7 kararı ML'in uygulama
+  içinde ML.NET ile yapılmasını öngörüyor; LogisticRegression/FastTree/FastForest elle yazmak hem riskli hem gereksiz.
+  FastTree ayrı pakette olduğu için ikisi birden gerekli.
+- `Application/Ml`: `SyntheticProjectGenerator` (haftalık ayrık simülasyon; gizli: ekip verimliliği, tahmin iyimserliği,
+  kapsam oynaklığı, engel oranı; gürültü: izin/kullanılabilirlik, devir, raporlama; "%90 sendromu": ilerleme tahmini efora göre
+  raporlanır, gerçek büyüklük ilerledikçe ortaya çıkar), `DelayFeatures`, `ClassificationMetrics` (doğruluk, kesinlik,
+  duyarlılık, F1, AUC, MAE), `DelayExperiment` (proje bazlı ayrım, EVM kuralı ve ML aynı test satırlarında, kontrol noktası
+  bazında; permütasyon önemi), `DelayFeatureBuilder` (gerçek projeden aynı özellikler; son 2 hafta hızı snapshot'lardan),
+  `DelayPredictionService` (tekil; kayıtlı modeli yükler, yoksa eğitir).
+- `Infrastructure/Ml`: `MlNetDelayLearner` (LbfgsLogisticRegression + normalizasyon, FastTree, FastForest + Platt kalibrasyonu,
+  FastTree regresyonu), `FileDelayModelStore` (`App_Data/models`: classifier.zip, regressor.zip, model.json; veri sürümü
+  değişirse yeniden eğitilir). `.gitignore`'a `App_Data/` eklendi.
+- Arayüz: Durum sekmesinde **Gecikme olasılığı (ML)** kartı (olasılık, risk ikon+metin, ML ve EVM tahmini bitiş, hedef,
+  model ve test AUC; eğitim aralığı dışında uyarı). Yeni **Deneyler (ML)** sayfası: yeniden eğit, sonuç tablosu
+  (★ en iyi F1), özellik önemi çubukları, CSV indir. AI `get_project_status` cevabına `mlDelayPrediction` eklendi.
+- İlk sonuçlar (400 proje, tohum 42, test 120 proje / 358 satır, geciken oranı %63,2):
+  EVM F1 0,525 / 0,551 / 0,697 (%25/%50/%75), kesinliği yüksek (0,93–1,00) ama duyarlılığı düşük (0,37–0,54) — gecikmeyi geç
+  fark ediyor. ML F1 0,77 / 0,86 / 0,87; tümünde LogisticRegression F1 0,830, AUC 0,877 (EVM AUC 0,852). Süre MAE: ML 0,191,
+  EVM 0,264. En önemli göstergeler: CPI, tamamlanma, kapsam büyümesi (RQ1, RQ2 için ilk kanıt — sentetik veri sınırlılığı raporda
+  belirtilmeli).
+- Testler 105/105: metriklerin elle hesabı, üretecin tohumla tekrarlanabilirliği ve kontrol noktaları, gizli değişkenin
+  sonuca etkisi, proje bazlı ayrımda çakışma olmaması, permütasyon öneminin kullanılan özelliği bulması, özellik oluşturucunun
+  2 haftalık penceresi, ML.NET deneyinin şanstan iyi olması ve modelin kaydet/yükle sonrası aynı tahmini vermesi, durum
+  servisinin tahmin servisine doğru özellikleri göndermesi.
+- Görsel kontrol (Playwright, SQLite kopya): Durum kartı ve Deneyler sayfası, CSV indirme; konsol hatası yok.
+
+**Varsayımlar**: Bloke payı gerçek projede "bloke işlerin kalan efor payı", simülasyonda "engellerle kaybolan kapasite payı"
+olarak ölçülür (yakın anlam). Snapshot geçmişi 14 günden kısaysa son hız = SPI. Model ilk kullanımda eğitildiği için ilk Durum
+açılışı birkaç saniye sürebilir. Eşikler: risk Orta ≥ %40, Yüksek ≥ %60 (`DelayPrediction` sabitleri); deney ayarları `Ml` bölümü.
+
+**Bilinen sorunlar**: Model sentetik veriyle eğitildi; gerçek projelerde kalibrasyon doğrulanmadı. Küçük demo projelerinde
+(ör. 4 haftalık) süre oranı tahmini uç değerlere gidebilir.
+
+**Sıradaki adım**: Faz 7 — What-if (kişi ekle/çıkar, iş çıkar, kapasite/deadline), Monte Carlo P50/P80, Brooks etkisi.
+
+---
+
 ## 2026-10-07 (15) — Faz 5: Takip ve analiz (EVM, AHP sağlık skoru, risk, S-eğrisi)
 
 - `StatusUpdates` (her durum/%/saat değişikliği) ve `ProjectSnapshots` (proje × gün tekil) tabloları — migration

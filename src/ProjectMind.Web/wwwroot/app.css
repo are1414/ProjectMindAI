@@ -254,3 +254,28 @@ a { color: var(--primary); text-decoration: none; }
 
 /* Sayfa geçişinde başlığa verilen odak (erişilebilirlik) görünür çerçeve çizmesin */
 h1:focus { outline: none; }
+
+/* ML gecikme tahmini (Durum sekmesi) */
+.delay-card { margin-top: 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; display: grid; grid-template-columns: 200px 1fr; gap: .5rem 1rem; }
+.delay-card > p { grid-column: 1 / -1; margin: .25rem 0 0; }
+.delay-prob { font-size: 2.2rem; font-weight: 700; line-height: 1.1; margin: .25rem 0; }
+.delay-compare { display: grid; grid-template-columns: repeat(3, 1fr); gap: .75rem; align-content: start; }
+.delay-compare div { display: grid; gap: .1rem; }
+.delay-compare span { color: var(--muted); font-size: .8rem; }
+.delay-compare em { font-style: normal; font-size: .78rem; }
+
+/* Deneyler sayfası */
+.experiments { max-width: 1000px; margin: 0 auto; padding: 1.5rem; overflow-y: auto; height: 100vh; }
+.experiments p { line-height: 1.5; }
+.experiment-actions { display: flex; gap: .5rem; margin: 1rem 0; }
+.table td.num, .table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.evm-row td { background: #fafbfc; }
+.importance { list-style: none; padding: 0; margin: .5rem 0 2rem; display: grid; gap: .45rem; max-width: 640px; }
+.importance li { display: grid; grid-template-columns: 170px 1fr 52px; align-items: center; gap: .6rem; font-size: .85rem; }
+.importance-bar { height: 10px; background: var(--grid); border-radius: 3px; overflow: hidden; }
+.importance-bar span { display: block; height: 100%; background: var(--series-1); border-radius: 0 4px 4px 0; }
+.importance-value { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+@media (max-width: 720px) {
+    .delay-card, .delay-compare { grid-template-columns: 1fr; }
+    .importance li { grid-template-columns: 110px 1fr 46px; }
+}

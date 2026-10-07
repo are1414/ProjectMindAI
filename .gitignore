@@ -483,3 +483,6 @@ $RECYCLE.BIN/
 
 # Kişisel ayarlar / API anahtarları (asla commit edilmez)
 appsettings.Local.json
+
+# ML modelleri (uygulama ilk ihtiyaçta yeniden eğitir)
+App_Data/

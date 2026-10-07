@@ -53,6 +53,11 @@ public class ProjectStatusServiceTests : ServiceTestBase
         Assert.NotNull(status.Health.Score);
         Assert.NotEqual(HealthLevel.Good, status.Health.Level);   // kritik uyarı varken "İyi" gösterilmez
 
+        // ML tahmini: EVM'den türetilen özellikler tahmin servisine gider.
+        Assert.NotNull(status.Delay);
+        Assert.Equal(0.92f, Predictor.LastFeatures!.SpiTime, 3);
+        Assert.Equal(22f / 40f, Predictor.LastFeatures.PercentComplete, 3);
+
         await NewStatusService(nov4).GetAsync(project.Id, _ct);   // aynı gün ikinci kez → tek snapshot
         var snapshot = await Db.ProjectSnapshots.SingleAsync(_ct);
         Assert.Equal(22, snapshot.EarnedValue);

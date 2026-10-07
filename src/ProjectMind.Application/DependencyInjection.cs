@@ -4,6 +4,7 @@ using ProjectMind.Application.Analytics;
 using ProjectMind.Application.Chat;
 using ProjectMind.Application.Dependencies;
 using ProjectMind.Application.MissingWork;
+using ProjectMind.Application.Ml;
 using ProjectMind.Application.Overview;
 using ProjectMind.Application.People;
 using ProjectMind.Application.Planning;
@@ -28,6 +29,8 @@ public static class DependencyInjection
         services.AddScoped<ScheduleService>();
         services.AddScoped<ProjectStatusService>();
         services.AddOptions<HealthOptions>();
+        services.AddOptions<MlOptions>();
+        services.AddSingleton<IDelayPredictor, DelayPredictionService>();
         services.AddScoped<ReadOnlyToolHandler>();
         services.AddSingleton(TimeProvider.System);
         return services;

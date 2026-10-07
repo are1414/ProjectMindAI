@@ -118,6 +118,16 @@ public sealed class ReadOnlyToolHandler(
                     healthComponents = s.Health.Components.Select(c => new { criterion = c.Criterion.ToString(), c.Weight, c.Score }),
                     ahpConsistencyRatio = s.Health.Ahp.ConsistencyRatio,
                     scopeGrowthPercent = s.ScopeGrowthPercent,
+                    mlDelayPrediction = s.Delay is not { } d ? null : new
+                    {
+                        delayProbabilityPercent = Math.Round(d.Probability * 100),
+                        risk = d.Risk.ToString(),
+                        forecastDurationRatio = Math.Round(d.DurationRatio, 2),
+                        forecastFinish = d.ForecastFinish,
+                        model = d.Model.Classifier,
+                        outsideTrainingRange = d.OutsideTrainingRange,
+                        note = "Sentetik veriyle eğitilmiş model; EVM tahminiyle birlikte yorumlanmalı."
+                    },
                     alerts = s.Alerts.Select(a => new { severity = a.Severity.ToString(), a.Title, a.Detail })
                 };
                 return new ToolExecutionResult(JsonSerializer.Serialize(payload, AiJson.Options), false);

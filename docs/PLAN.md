@@ -2,7 +2,7 @@
 
 **Akademik başlık:** Yapay Zekâ Destekli Yazılım Proje Planlama ve Karar Destek Sistemi: Zamanlama, Kaynak ve Kapsam Yönetimi Üzerine Bir Uygulama
 
-**Aktif faz: FAZ 6 — Veri ve ML**
+**Aktif faz: FAZ 7 — What-if**
 
 ## Ürün akışı (tek kullanıcı: proje yöneticisi)
 
@@ -75,12 +75,13 @@
 - [x] Dashboard: Durum sekmesi (sağlık, EVM kartları, uyarılar, S-eğrisi + tablo görünümü)
 - [x] AI: get_project_status aracı; NumberGuard (doğrulanamayan sayıları işaretler)
 
-### FAZ 6 — Veri ve ML
-- [ ] Sentetik proje üreteci (gürültü + gizli değişken, formül ezberini önlemek için)
-- [ ] Haftalık snapshot veri seti
-- [ ] ML.NET: LogisticRegression / FastTree (GBM) / FastForest, metrikler (F1, AUC, MAE)
-- [ ] EVM baseline ile karşılaştırma, özellik önemi (Permutation Feature Importance)
-- [ ] `IPredictionService` ile uygulamaya entegrasyon
+### FAZ 6 — Veri ve ML ✅
+- [x] Sentetik proje üreteci (haftalık simülasyon; gizli değişkenler + gürültü + "%90 sendromu"; synthetic-v1, tohumlu)
+- [x] Haftalık snapshot veri seti (%25/%50/%75 kontrol noktaları; proje bazlı eğitim/test ayrımı)
+- [x] ML.NET: LogisticRegression / FastTree (GBM) / FastForest + FastTree süre regresyonu, metrikler (F1, AUC, MAE)
+- [x] EVM (Earned Schedule) kuralı ile aynı test satırlarında karşılaştırma, permütasyon özellik önemi (AUC düşüşü)
+- [x] `IDelayPredictor` ile entegrasyon: Durum sekmesinde gecikme olasılığı + ML/EVM bitiş, `get_project_status`'ta tahmin
+- [x] Deneyler sayfası (`/experiments`): yeniden eğit, sonuç tablosu, özellik önemi, CSV indir
 
 ### FAZ 7 — What-if
 - [ ] Senaryolar: kişi ekle/çıkar, iş çıkar, kapasite değiştir, deadline değiştir
@@ -120,4 +121,5 @@ docs/                          Plan, kararlar, ilerleme
 
 ## Fikir Havuzu (uygulanmadı — sadece not)
 
-- (boş)
+- Projeye özel açıklama: tahmini en çok etkileyen göstergeler (yerel katkı) Durum kartında
+- Gerçek proje snapshot'larıyla (Faz 9 demo) modelin ince ayarı / doğrulanması

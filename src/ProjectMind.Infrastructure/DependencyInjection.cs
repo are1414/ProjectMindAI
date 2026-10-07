@@ -3,7 +3,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using ProjectMind.Application.Abstractions;
 using ProjectMind.Application.Ai;
+using ProjectMind.Application.Ml;
 using ProjectMind.Infrastructure.Ai;
+using ProjectMind.Infrastructure.Ml;
 using ProjectMind.Infrastructure.Persistence;
 
 namespace ProjectMind.Infrastructure;
@@ -14,6 +16,8 @@ public static class DependencyInjection
     {
         services.AddDbContext<AppDbContext>(o => o.UseSqlServer(connectionString));
         services.AddScoped<IAppDbContext>(sp => sp.GetRequiredService<AppDbContext>());
+        services.AddSingleton<IDelayLearner, MlNetDelayLearner>();
+        services.AddSingleton<IDelayModelStore, FileDelayModelStore>();
 
         // Ayarlar sayfasından anahtar değişince yeniden başlatmadan geçerli olsun: her kapsamda güncel değer.
         services.AddScoped(sp => sp.GetRequiredService<IOptionsMonitor<AiOptions>>().CurrentValue);

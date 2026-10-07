@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using ProjectMind.Application.Abstractions;
+using ProjectMind.Application.Ml;
 using ProjectMind.Application.Overview;
 using ProjectMind.Application.Planning;
 using ProjectMind.Application.WorkItems;
@@ -20,14 +21,17 @@ public sealed record ProjectStatusReport(
     IReadOnlyList<RiskAlert> Alerts,
     decimal ScopeGrowthPercent,
     PlanResult Plan,
-    IReadOnlyList<SnapshotPoint> History);
+    IReadOnlyList<SnapshotPoint> History,
+    DelayFeatures? DelayFeatures = null,
+    DelayPrediction? Delay = null);
 
 /// <summary>
 /// Projenin güncel durumu: EVM (baseline varsa), AHP ağırlıklı sağlık skoru, kural tabanlı riskler.
 /// Her hesaplamada günün snapshot'ı eklenir/güncellenir (S-eğrisi ve ML veri seti için).
 /// </summary>
 public sealed class ProjectStatusService(
-    IAppDbContext db, ScheduleService schedules, TimeProvider clock, IOptions<HealthOptions> options)
+    IAppDbContext db, ScheduleService schedules, TimeProvider clock, IOptions<HealthOptions> options,
+    IDelayPredictor predictor)
 {
     public async Task<ProjectStatusReport> GetAsync(int projectId, CancellationToken ct)
     {
@@ -85,7 +89,21 @@ public sealed class ProjectStatusService(
             .Select(s => new SnapshotPoint(s.Date, s.PlannedValue, s.EarnedValue, s.ActualCost, s.HealthScore))
             .ToListAsync(ct);
 
-        return new ProjectStatusReport(overview, today, preview.LatestBaseline, evm, health, alerts, scopeGrowth, preview.Plan, history);
+        // ML gecikme tahmini (baseline ve başlamış proje gerekir). Özellik tanımları sentetik veriyle aynıdır.
+        DelayFeatures? features = null;
+        DelayPrediction? delay = null;
+        if (evm is not null)
+        {
+            var remainingEffort = leaves.Sum(w => w.EstimatedHours * (100 - w.PercentComplete) / 100m);
+            var blockedRemaining = blocked.Sum(w => w.EstimatedHours * (100 - w.PercentComplete) / 100m);
+            features = DelayFeatureBuilder.FromStatus(evm, history, scopeGrowth,
+                remainingEffort > 0 ? blockedRemaining / remainingEffort : 0, overview.People.Count);
+            if (features is not null && evm.EarnedValue < evm.BudgetAtCompletion)
+                delay = await predictor.PredictAsync(features, evm, ct);
+        }
+
+        return new ProjectStatusReport(overview, today, preview.LatestBaseline, evm, health, alerts, scopeGrowth, preview.Plan, history,
+            features, delay);
     }
 
     private async Task UpsertSnapshotAsync(int projectId, DateOnly today, Baseline? baseline, EvmResult? evm, HealthResult health,

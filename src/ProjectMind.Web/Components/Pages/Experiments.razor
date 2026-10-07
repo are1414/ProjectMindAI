@@ -1,0 +1,155 @@
+@page "/experiments"
+@inject IDelayPredictor Predictor
+@inject IJSRuntime JS
+@inject Microsoft.Extensions.Options.IOptions<MlOptions> MlSettings
+
+<PageTitle>Deneyler · ProjectMind AI</PageTitle>
+
+<div class="experiments">
+    <h1>Gecikme tahmini deneyi (ML vs EVM)</h1>
+    <p class="muted">
+        Sentetik projeler haftalık simülasyonla üretilir; gecikme gizli değişkenlerden (ekip verimliliği, tahmin iyimserliği,
+        kapsam oynaklığı, engeller) ve rastlantısal olaylardan doğar. Modeller sadece gerçek bir projede ölçülebilen
+        göstergeleri görür. Projeler eğitim/test olarak ayrılır; aynı test satırlarında ML modelleri ile EVM kuralı
+        (tahmini süre = plan / SPI(t)) karşılaştırılır. Gecikme: gerçek sürenin planı
+        %@Format.Number((decimal)Math.Round(MlSettings.Value.DelayTolerance * 100))'dan fazla aşması.
+    </p>
+
+    <div class="experiment-actions">
+        <button class="btn btn-primary" disabled="@_running" @onclick="RunAsync">
+            @(_running ? "Eğitiliyor…" : "Deneyi çalıştır ve modeli yeniden eğit")
+        </button>
+        @if (_report is not null)
+        {
+            <button class="btn" @onclick="DownloadAsync">CSV indir</button>
+        }
+    </div>
+
+    @if (_error is not null)
+    {
+        <div class="inline-error">@_error</div>
+    }
+
+    @if (Predictor.CurrentModel is { } m)
+    {
+        <p class="small">
+            Kullanılan model: <strong>@m.Classifier</strong> + @m.Regressor ·
+            veri @m.DatasetVersion (@m.Projects proje, tohum @m.Seed, @m.TrainRows eğitim satırı) ·
+            test AUC @m.TestAuc.ToString("0.000", Tr), F1 @m.TestF1.ToString("0.000", Tr), süre MAE @m.TestMae.ToString("0.000", Tr) ·
+            eğitim @m.TrainedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm", Tr)
+        </p>
+    }
+    else if (_report is null)
+    {
+        <p class="muted">Henüz eğitilmiş model yok. Deneyi çalıştırın (birkaç saniye sürer).</p>
+    }
+
+    @if (_report is { } r)
+    {
+        <p class="small">
+            @r.Synthetic.Projects proje · eğitim @r.TrainProjects proje (@r.TrainRows satır) · test @r.TestProjects proje
+            (@r.TestRows satır) · geciken proje oranı %@Format.Number((decimal)Math.Round(r.DelayedShare * 100, 1)) ·
+            seçilen model (en yüksek test AUC): <strong>@r.SelectedClassifier</strong>
+        </p>
+
+        <h2>Sonuçlar (test seti)</h2>
+        <div class="table-wrap">
+            <table class="table table-compact">
+                <thead>
+                    <tr>
+                        <th>Yöntem</th><th>Kontrol noktası</th><th class="num">Doğruluk</th><th class="num">Kesinlik</th>
+                        <th class="num">Duyarlılık</th><th class="num">F1</th><th class="num">AUC</th><th class="num">Süre MAE</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var group in r.Evaluations.GroupBy(e => e.Checkpoint).OrderBy(g => g.Key == DelayExperimentReport.AllCheckpoints ? int.MaxValue : g.Key))
+                    {
+                        var bestF1 = group.Max(e => e.Metrics.F1);
+                        foreach (var e in group)
+                        {
+                            <tr class="@(e.Method == DelayExperimentReport.EvmMethod ? "evm-row" : "")">
+                                <td>@e.Method</td>
+                                <td>@CheckpointText(e.Checkpoint)</td>
+                                <td class="num">@N(e.Metrics.Accuracy)</td>
+                                <td class="num">@N(e.Metrics.Precision)</td>
+                                <td class="num">@N(e.Metrics.Recall)</td>
+                                <td class="num">@if (e.Metrics.F1 == bestF1) { <strong>@N(e.Metrics.F1) ★</strong> } else { @N(e.Metrics.F1) }</td>
+                                <td class="num">@N(e.Metrics.Auc)</td>
+                                <td class="num">@N(e.DurationMae)</td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+        <p class="muted small">
+            ★ kontrol noktasındaki en iyi F1. Süre MAE: gerçek/planlanan süre oranındaki ortalama mutlak hata
+            (ML satırlarında FastTree regresyonu, EVM satırında 1/SPI(t)). Kontrol noktası: planlanan sürenin yüzdesi.
+        </p>
+
+        <h2>Özellik önemi (@r.SelectedClassifier, permütasyon)</h2>
+        <p class="muted small">Özellik test setinde karıştırılınca AUC'nin ortalama düşüşü. Büyük değer = model bu göstergeye dayanıyor.</p>
+        <ul class="importance">
+            @{ var max = Math.Max(r.Importance.Max(f => f.AucDrop), 1e-6); }
+            @foreach (var f in r.Importance)
+            {
+                <li title="AUC düşüşü @f.AucDrop.ToString("0.0000", Tr)">
+                    <span class="importance-name">@FeatureText(f.Feature)</span>
+                    <span class="importance-bar"><span style="width:@(Math.Max(0, f.AucDrop / max * 100).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture))%"></span></span>
+                    <span class="importance-value">@f.AucDrop.ToString("0.000", Tr)</span>
+                </li>
+            }
+        </ul>
+    }
+</div>
+
+@code {
+    private static readonly System.Globalization.CultureInfo Tr = System.Globalization.CultureInfo.GetCultureInfo("tr-TR");
+    private DelayExperimentReport? _report;
+    private bool _running;
+    private string? _error;
+
+    protected override void OnInitialized() => _report = Predictor.LastReport;
+
+    private async Task RunAsync()
+    {
+        _running = true;
+        _error = null;
+        try
+        {
+            _report = await Predictor.RunExperimentAsync(CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _error = "Deney çalıştırılamadı: " + ex.Message;
+        }
+        finally
+        {
+            _running = false;
+        }
+    }
+
+    private async Task DownloadAsync()
+    {
+        if (_report is not null)
+            await JS.InvokeVoidAsync("pmDownload", $"gecikme-deneyi-{_report.CreatedAt:yyyyMMdd-HHmm}.csv", _report.ToCsv());
+    }
+
+    private static string N(double v) => double.IsNaN(v) ? "—" : v.ToString("0.000", Tr);
+
+    private static string CheckpointText(int c) => c == DelayExperimentReport.AllCheckpoints ? "Tümü" : $"%{c}";
+
+    private static string FeatureText(string name) => name switch
+    {
+        nameof(DelayFeatures.ElapsedRatio) => "Geçen süre oranı",
+        nameof(DelayFeatures.PercentComplete) => "Tamamlanma (EV/BAC)",
+        nameof(DelayFeatures.Spi) => "SPI",
+        nameof(DelayFeatures.Cpi) => "CPI (efor verimi)",
+        nameof(DelayFeatures.SpiTime) => "SPI(t)",
+        nameof(DelayFeatures.RecentVelocity) => "Son 2 hafta hızı",
+        nameof(DelayFeatures.ScopeGrowth) => "Kapsam büyümesi",
+        nameof(DelayFeatures.BlockedShare) => "Bloke iş payı",
+        nameof(DelayFeatures.TeamSize) => "Ekip büyüklüğü",
+        _ => name
+    };
+}
