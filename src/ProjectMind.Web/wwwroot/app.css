@@ -310,3 +310,11 @@ h1:focus { outline: none; }
 .scenario-card > .btn { justify-self: start; }
 .whatif .status-pill { white-space: nowrap; }
 .change-row select:first-child { min-width: 150px; }
+
+/* AI yorumu kartı (Durum / What-if) */
+.ai-comment { margin-top: 1rem; background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--primary); border-radius: var(--radius); padding: .75rem 1rem; }
+.ai-comment h2 { margin: 0; font-size: 1rem; }
+.ai-comment h3 { margin: .75rem 0 .25rem; font-size: .85rem; color: var(--muted); font-weight: 600; }
+.ai-comment ul { margin: 0; padding-left: 1.2rem; line-height: 1.5; }
+.ai-comment-summary { margin: .5rem 0 0; line-height: 1.55; }
+.ai-comment-warning { margin: .5rem 0; padding: .4rem .6rem; background: #fffbeb; color: var(--text); border-left: 3px solid var(--warning); border-radius: 6px; font-size: .88rem; }

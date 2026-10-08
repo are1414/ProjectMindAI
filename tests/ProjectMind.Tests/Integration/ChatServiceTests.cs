@@ -10,12 +10,12 @@ public class ChatServiceTests : ServiceTestBase
     private readonly CancellationToken _ct = CancellationToken.None;
 
     /// <summary>LLM yerine senaryolu sahte model: önceden belirlenen araç çağrılarını yapar.</summary>
-    private sealed class ScriptedModel(params (string Tool, object Input)[] calls) : IChatModel
+    private sealed class ScriptedModel(params (string Tool, object Input)[] calls) : ChatOnlyModel
     {
         public ChatTurnRequest? LastRequest { get; private set; }
         public List<ToolExecutionResult> Results { get; } = [];
 
-        public async Task<ChatTurnResult> CompleteTurnAsync(ChatTurnRequest request, IChatToolExecutor tools, CancellationToken ct)
+        public override async Task<ChatTurnResult> CompleteTurnAsync(ChatTurnRequest request, IChatToolExecutor tools, CancellationToken ct)
         {
             LastRequest = request;
             foreach (var (tool, input) in calls)
@@ -186,21 +186,62 @@ public class ChatServiceTests : ServiceTestBase
         Assert.Equal([ChatRole.User, ChatRole.Assistant], (await chat.ListMessagesAsync(session.Id, _ct)).Select(m => m.Role));
     }
 
-    private sealed class TimingOutModel : IChatModel
+    private sealed class TimingOutModel : ChatOnlyModel
     {
-        public Task<ChatTurnResult> CompleteTurnAsync(ChatTurnRequest request, IChatToolExecutor tools, CancellationToken ct) =>
+        public override Task<ChatTurnResult> CompleteTurnAsync(ChatTurnRequest request, IChatToolExecutor tools, CancellationToken ct) =>
             throw new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout");
     }
 
-    private sealed class TextModel(string text) : IChatModel
+    private sealed class TextModel(string text) : ChatOnlyModel
     {
-        public Task<ChatTurnResult> CompleteTurnAsync(ChatTurnRequest request, IChatToolExecutor tools, CancellationToken ct) =>
+        public override Task<ChatTurnResult> CompleteTurnAsync(ChatTurnRequest request, IChatToolExecutor tools, CancellationToken ct) =>
             Task.FromResult(new ChatTurnResult(text, "text"));
     }
 
-    private sealed class FailingModel : IChatModel
+    private sealed class FailingModel : ChatOnlyModel
     {
-        public Task<ChatTurnResult> CompleteTurnAsync(ChatTurnRequest request, IChatToolExecutor tools, CancellationToken ct) =>
+        public override Task<ChatTurnResult> CompleteTurnAsync(ChatTurnRequest request, IChatToolExecutor tools, CancellationToken ct) =>
             throw new ChatModelException("AI servisine bağlanılamadı.");
+    }
+
+    [Fact]
+    public async Task Every_chat_turn_is_audited_with_tools_and_unverified_numbers()
+    {
+        var chat = NewChatService(new ScriptedModel(
+            (AiTools.CreateProject, new { name = "E-ticaret", startDate = "2026-12-01", targetEndDate = "2027-03-31" }),
+            (AiTools.AddWorkItem, new { name = "Ödeme", phase = "Development", requiredSkill = "Backend", estimatedHours = 60 })));
+        var session = await chat.CreateSessionAsync(_ct);
+        var first = await chat.SendAsync(session.Id, "Proje aç", _ct);
+
+        var flagged = await NewChatService(new TextModel("Kalan efor 137 saat, 245 saat değil.")).SendAsync(session.Id, "Kalan?", _ct);
+        var failed = await NewChatService(new FailingModel()).SendAsync(session.Id, "Merhaba", _ct);
+
+        var logs = await Db.AiAnalysisLogs.AsNoTracking().OrderBy(l => l.Id).ToListAsync(_ct);
+        Assert.Equal(3, logs.Count);
+        Assert.All(logs, l =>
+        {
+            Assert.Equal(AiAnalysisKind.Chat, l.Kind);
+            Assert.Equal(ChatPrompts.Version, l.PromptVersion);
+            Assert.Equal(session.Id, l.ChatSessionId);
+            Assert.True(l.ContextLength > 0);
+            Assert.Null(l.SchemaValid);   // sohbet cevabı serbest metin
+            Assert.Null(l.ResultJson);
+        });
+
+        Assert.Equal(first.Id, logs[0].ChatMessageId);
+        Assert.Equal("create_project,add_work_item", logs[0].ToolsCalled);
+        Assert.Equal("scripted", logs[0].Model);
+        Assert.Equal(0, logs[0].UnverifiedNumberCount);
+
+        Assert.Equal(flagged.Id, logs[1].ChatMessageId);
+        Assert.Null(logs[1].ToolsCalled);
+        Assert.Equal(2, logs[1].UnverifiedNumberCount);                     // NumberGuard sonucu ile aynı
+        Assert.Contains("Doğrulanamayan sayılar: 137, 245", flagged.Content);
+        Assert.Equal("""["137","245"]""", logs[1].UnverifiedNumbers);
+        Assert.Equal(AiAnalysisOutcome.Success, logs[1].Outcome);
+
+        Assert.Equal(failed.Id, logs[2].ChatMessageId);
+        Assert.Equal(AiAnalysisOutcome.ModelError, logs[2].Outcome);
+        Assert.Equal("AI servisine bağlanılamadı.", logs[2].ErrorMessage);
     }
 }

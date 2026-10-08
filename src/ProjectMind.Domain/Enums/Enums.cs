@@ -78,3 +78,28 @@ public enum AiActionStatus
     [Display(Name = "Reddedildi")] Rejected,
     [Display(Name = "Hata")] Failed
 }
+
+/// <summary>Önerinin içeriği nereden geldi (RQ4: kabul oranı kaynağa göre). Bu alandan önceki kayıtlar Unknown.</summary>
+public enum AiActionSource
+{
+    [Display(Name = "Bilinmiyor")] Unknown,
+    [Display(Name = "Kural / şablon")] Rule,
+    [Display(Name = "LLM")] Llm,
+    [Display(Name = "Kullanıcı")] User
+}
+
+/// <summary>Denetim kaydı tutulan AI analiz cevabı türü.</summary>
+public enum AiAnalysisKind
+{
+    Chat,
+    ProjectComment,
+    ScenarioComment
+}
+
+/// <summary>AI analiz çağrısının sonucu.</summary>
+public enum AiAnalysisOutcome
+{
+    Success,
+    InvalidSchema,
+    ModelError
+}

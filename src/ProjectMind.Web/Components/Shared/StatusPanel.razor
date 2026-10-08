@@ -100,6 +100,9 @@ else
         </section>
     }
 
+    <AiCommentCard Result="_comment" Busy="_commentBusy" OnGenerate="GenerateCommentAsync"
+                   Hint="EVM, sağlık skoru, ML tahmini ve uyarıların sade Türkçe açıklaması için butona basın." />
+
     <h2>Uyarılar <span class="count">@s.Alerts.Count</span></h2>
     @if (s.Alerts.Count == 0)
     {
@@ -217,6 +220,8 @@ else
     private string? _error;
     private bool _showTable;
     private int? _hover;
+    private AnalysisCommentResult? _comment;
+    private bool _commentBusy;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -227,10 +232,28 @@ else
         {
             _status = await Scope.RunAsync<ProjectStatusService, ProjectStatusReport>(s => s.GetAsync(ProjectId, CancellationToken.None));
             _error = null;
+            var status = _status;
+            // Girdi (durum verisi) değişmediyse son yorum gösterilir; LLM çağrılmaz.
+            _comment = await Scope.RunAsync<ProjectCommentService, AnalysisCommentResult?>(c => c.FindProjectCommentAsync(status, CancellationToken.None));
         }
         catch (BusinessRuleException ex)
         {
             _error = ex.Message;
+        }
+    }
+
+    private async Task GenerateCommentAsync()
+    {
+        if (_status is not { } status)
+            return;
+        _commentBusy = true;
+        try
+        {
+            _comment = await Scope.RunAsync<ProjectCommentService, AnalysisCommentResult>(c => c.GenerateProjectCommentAsync(status, CancellationToken.None));
+        }
+        finally
+        {
+            _commentBusy = false;
         }
     }
 

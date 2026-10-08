@@ -90,50 +90,7 @@ public sealed class ReadOnlyToolHandler(
                     return new ToolExecutionResult("Henüz proje yok; önce proje oluşturulmalı.", true);
 
                 var s = await statuses.GetAsync(id, ct);
-                var e = s.Evm;
-                var payload = new
-                {
-                    statusDate = s.StatusDate,
-                    hasBaseline = s.Baseline is not null,
-                    evm = e is null ? null : new
-                    {
-                        unit = "saat (efor)",
-                        budgetAtCompletion = e.BudgetAtCompletion,
-                        descopedHours = e.DescopedHours,
-                        plannedValue = e.PlannedValue,
-                        earnedValue = e.EarnedValue,
-                        actualCost = e.ActualCost,
-                        scheduleVariance = e.ScheduleVariance,
-                        costVariance = e.CostVariance,
-                        spi = e.Spi,
-                        cpi = e.Cpi,
-                        spiTime = e.SpiTime,
-                        estimateAtCompletion = e.EstimateAtCompletion,
-                        percentComplete = e.PercentComplete,
-                        plannedFinish = e.PlannedFinish,
-                        forecastFinish = e.ForecastFinish,
-                        budgetAtCompletionCost = e.BudgetAtCompletionCost,
-                        estimateAtCompletionCost = e.EstimateAtCompletionCost
-                    },
-                    targetEndDate = s.Overview.Project.TargetEndDate,
-                    healthScore = s.Health.Score,
-                    healthLevel = s.Health.Level?.ToString(),
-                    healthComponents = s.Health.Components.Select(c => new { criterion = c.Criterion.ToString(), c.Weight, c.Score }),
-                    ahpConsistencyRatio = s.Health.Ahp.ConsistencyRatio,
-                    scopeGrowthPercent = s.ScopeGrowthPercent,
-                    mlDelayPrediction = s.Delay is not { } d ? null : new
-                    {
-                        delayProbabilityPercent = Math.Round(d.Probability * 100),
-                        risk = d.Risk.ToString(),
-                        forecastDurationRatio = Math.Round(d.DurationRatio, 2),
-                        forecastFinish = d.ForecastFinish,
-                        model = d.Model.Classifier,
-                        outsideTrainingRange = d.OutsideTrainingRange,
-                        note = "Sentetik veriyle eğitilmiş model; EVM tahminiyle birlikte yorumlanmalı."
-                    },
-                    alerts = s.Alerts.Select(a => new { severity = a.Severity.ToString(), a.Title, a.Detail })
-                };
-                return new ToolExecutionResult(JsonSerializer.Serialize(payload, AiJson.Options), false);
+                return new ToolExecutionResult(JsonSerializer.Serialize(AnalysisPayloads.ProjectStatus(s), AiJson.Options), false);
             }
             case AiTools.SimulateWhatIf:
             {
@@ -142,34 +99,12 @@ public sealed class ReadOnlyToolHandler(
 
                 var scenario = await ToScenarioAsync(id, Parse<SimulateWhatIfPayload>(input), ct);
                 var result = await whatIf.CompareAsync(id, [scenario], ct);
-                object Describe(ScenarioResult r) => new
-                {
-                    name = r.Name,
-                    changes = r.Notes,
-                    targetEndDate = r.TargetDate,
-                    deterministicFinish = r.Plan.Finish,
-                    p50Finish = r.MonteCarlo.P50Finish,
-                    p80Finish = r.MonteCarlo.P80Finish,
-                    onTimeProbabilityPercent = Math.Round(r.MonteCarlo.OnTimeProbability * 100),
-                    p50Cost = r.MonteCarlo.P50Cost,
-                    p80Cost = r.MonteCarlo.P80Cost,
-                    p80DeltaWorkdaysVsCurrent = r.P80DeltaWorkdays,
-                    warnings = r.Plan.Warnings
-                };
-                var o = result.Assumptions;
                 var payload = new
                 {
-                    current = Describe(result.Current),
-                    scenario = Describe(result.Scenarios[0]),
-                    assumptions = new
-                    {
-                        monteCarloIterations = o.Iterations,
-                        effortMultiplier = new { min = o.EffortMin, mostLikely = o.EffortMode, max = o.EffortMax },
-                        newPersonRampUpWeeks = o.RampUpWeeks,
-                        newPersonRampUpProductivityPercent = o.RampUpProductivity * 100,
-                        mentoringSharePercent = o.MentoringShare * 100
-                    },
-                    deltaMeaning = "pozitif = senaryoda P80 bitiş daha geç, negatif = daha erken (iş günü)"
+                    current = AnalysisPayloads.Scenario(result.Current),
+                    scenario = AnalysisPayloads.Scenario(result.Scenarios[0]),
+                    assumptions = AnalysisPayloads.Assumptions(result.Assumptions),
+                    deltaMeaning = AnalysisPayloads.DeltaMeaning
                 };
                 return new ToolExecutionResult(JsonSerializer.Serialize(payload, AiJson.Options), false);
             }

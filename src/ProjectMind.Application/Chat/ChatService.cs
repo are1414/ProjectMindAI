@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using ProjectMind.Application.Abstractions;
@@ -23,6 +24,9 @@ public sealed class ChatService(
     AiOptions options)
 {
     private const string NewSessionTitle = "Yeni proje sohbeti";
+    private const int MaxToolsLength = 1000, MaxUnverifiedLength = 2000, MaxErrorLength = 1000;
+
+    private static string Truncate(string text, int max) => text.Length > max ? text[..max] : text;
 
     public async Task<IReadOnlyList<ChatSessionResponse>> ListSessionsAsync(CancellationToken ct) =>
         await db.ChatSessions.AsNoTracking()
@@ -139,6 +143,10 @@ public sealed class ChatService(
 
         string reply;
         string? modelName = null;
+        IReadOnlyList<string> unverified = [];
+        var outcome = AiAnalysisOutcome.Success;
+        string? error = null;
+        var started = Stopwatch.GetTimestamp();
         try
         {
             var result = await model.CompleteTurnAsync(request, executor, ct);
@@ -151,23 +159,26 @@ public sealed class ChatService(
                 request.UserMessage,
                 .. history.Where(h => h.Role == ChatRole.User).Select(h => h.Content),
                 .. executor.Evidence]);
-            var unverified = NumberGuard.FindUnverified(reply, evidence);
+            unverified = NumberGuard.FindUnverified(reply, evidence);
             if (unverified.Count > 0)
                 reply += $"\n\n⚠ Doğrulanamayan sayılar: {string.Join(", ", unverified)} — bu değerler sistem verisinde yok, kontrol edin.";
         }
         catch (ChatModelException ex)
         {
-            reply = ex.Message;
+            reply = error = ex.Message;
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
             // Sağlayıcının çevirmediği zaman aşımı: sayfa çökmesin, kullanıcı mesajı cevapsız kalmasın.
-            reply = ChatModelMessages.Timeout;
+            reply = error = ChatModelMessages.Timeout;
         }
         catch (HttpRequestException)
         {
-            reply = ChatModelMessages.Unreachable;
+            reply = error = ChatModelMessages.Unreachable;
         }
+        if (error is not null)
+            outcome = AiAnalysisOutcome.ModelError;
+        var durationMs = (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds;
 
         var assistant = new ChatMessage
         {
@@ -183,6 +194,25 @@ public sealed class ChatService(
         if (executor.CreatedActionIds.Count > 0)
             await actions.AttachToMessageAsync(executor.CreatedActionIds, assistant.Id, ct);
 
+        // Denetim kaydı (Faz 8): tam bağlam metni ve anahtar saklanmaz, yalnız ölçümler.
+        db.AiAnalysisLogs.Add(new AiAnalysisLog
+        {
+            Kind = AiAnalysisKind.Chat,
+            ProjectId = await db.ChatSessions.Where(s => s.Id == sessionId).Select(s => s.ProjectId).FirstOrDefaultAsync(ct),
+            ChatSessionId = sessionId,
+            ChatMessageId = assistant.Id,
+            PromptVersion = ChatPrompts.Version,
+            Model = modelName,
+            ToolsCalled = executor.ToolNames.Count == 0 ? null : Truncate(string.Join(",", executor.ToolNames), MaxToolsLength),
+            ContextLength = context.Length,
+            UnverifiedNumberCount = unverified.Count,
+            UnverifiedNumbers = unverified.Count == 0 ? null : Truncate(JsonSerializer.Serialize(unverified, AiJson.Options), MaxUnverifiedLength),
+            Outcome = outcome,
+            ErrorMessage = error is null ? null : Truncate(error, MaxErrorLength),
+            DurationMs = durationMs
+        });
+        await db.SaveChangesAsync(ct);
+
         return new ChatMessageResponse(assistant.Id, assistant.Role, assistant.Content, assistant.CreatedAt);
     }
 
@@ -192,11 +222,15 @@ public sealed class ChatService(
     {
         public List<int> CreatedActionIds { get; } = [];
 
+        /// <summary>Bu turda çağrılan araçlar (sırasıyla; denetim kaydı için).</summary>
+        public List<string> ToolNames { get; } = [];
+
         /// <summary>Bu turda modele dönen araç sonuçları ve kart özetleri (sayı doğrulaması için kanıt).</summary>
         public List<string> Evidence { get; } = [];
 
         public async Task<ToolExecutionResult> ExecuteAsync(string toolName, JsonElement input, CancellationToken ct)
         {
+            ToolNames.Add(toolName);
             try
             {
                 Evidence.Add(input.GetRawText());

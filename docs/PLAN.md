@@ -92,10 +92,11 @@
 ### FAZ 8 — AI katmanı (analiz yorumları)
 - [x] `IChatModel`: Mock + Gemini + Claude (Faz 2.5'te)
 - [x] ContextBuilder, sürümlü prompt (Faz 2.5'te)
-- [ ] Analiz cevapları için sayı doğrulayıcı (cevaptaki her sayı bağlamda olmalı) — sohbet tarafı sertleştirildi (D23); yorum kartlarına bağlanınca kapanır
-- [ ] Eksik iş önerisinin LLM katmanı (hibrit)
-- [ ] Proje yorumu, senaryo yorumu (EVM/ML/Monte Carlo sonuçlarını açıklama)
-- [x] AI öneri kaydı (AiAction) — [ ] analiz cevapları için ayrıntılı audit
+- [x] JSON şemalı model çağrısı (`IChatModel.CompleteJsonAsync`: Gemini `responseJsonSchema`, Claude structured output) + C# şema doğrulaması (D25)
+- [x] Analiz cevapları için sayı doğrulayıcı (cevaptaki her sayı bağlamda olmalı) — sohbet (D23) ve yorum kartları (D25)
+- [ ] Eksik iş önerisinin LLM katmanı (hibrit) — `AiAction.Source` alanı eklendi (Tur 3)
+- [x] Proje yorumu, senaryo yorumu (EVM/ML/Monte Carlo sonuçlarını açıklama) — Durum ve What-if sekmelerinde "AI yorumu" kartı
+- [x] AI öneri kaydı (AiAction) — [x] analiz cevapları için ayrıntılı audit (`AiAnalysisLog`)
 - [ ] (Opsiyonel) Ollama sağlayıcısı ile karşılaştırma
 
 ### FAZ 9 — Demo ve değerlendirme

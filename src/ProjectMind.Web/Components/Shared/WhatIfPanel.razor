@@ -128,6 +128,9 @@
             </table>
         </div>
 
+        <AiCommentCard Result="_comment" Busy="_commentBusy" OnGenerate="GenerateCommentAsync"
+                       Hint="Senaryo farklarının (P80 bitiş, hedefe yetişme olasılığı, maliyet) sade Türkçe açıklaması için butona basın." />
+
         var chart = BuildChart(all);
         <h2>Bitiş tarihi olasılığı</h2>
         <div class="scurve cdf">
@@ -205,6 +208,8 @@
     private string? _error;
     private bool _busy;
     private int? _hover;
+    private AnalysisCommentResult? _comment;
+    private bool _commentBusy;
 
     private sealed class ScenarioDraft
     {
@@ -244,7 +249,12 @@
         try
         {
             var scenarios = _drafts.Select(d => new WhatIfScenario(d.Name, d.Changes.Select(c => c.ToChange()).ToList())).ToList();
+            _comment = null;
             _result = await Scope.RunAsync<WhatIfService, WhatIfComparison>(s => s.CompareAsync(Overview.Project.Id, scenarios, CancellationToken.None));
+            var result = _result;
+            // Aynı karşılaştırma daha önce yorumlandıysa (girdi aynı) kaydedilen yorum gösterilir; LLM çağrılmaz.
+            _comment = await Scope.RunAsync<ProjectCommentService, AnalysisCommentResult?>(c =>
+                c.FindScenarioCommentAsync(Overview.Project.Id, result, CancellationToken.None));
         }
         catch (BusinessRuleException ex)
         {
@@ -253,6 +263,26 @@
         finally
         {
             _busy = false;
+        }
+    }
+
+    private async Task GenerateCommentAsync()
+    {
+        if (_result is not { } result)
+            return;
+        _commentBusy = true;
+        try
+        {
+            _comment = await Scope.RunAsync<ProjectCommentService, AnalysisCommentResult>(c =>
+                c.GenerateScenarioCommentAsync(Overview.Project.Id, result, CancellationToken.None));
+        }
+        catch (BusinessRuleException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _commentBusy = false;
         }
     }
 

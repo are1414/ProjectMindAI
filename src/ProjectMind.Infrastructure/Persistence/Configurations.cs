@@ -101,10 +101,27 @@ internal sealed class AiActionConfiguration : IEntityTypeConfiguration<AiAction>
         b.Property(a => a.Summary).HasMaxLength(1000).IsRequired();
         b.Property(a => a.ResultMessage).HasMaxLength(1000);
         b.Property(a => a.Status).HasConversion<string>().HasMaxLength(20);
+        b.Property(a => a.Source).HasConversion<string>().HasMaxLength(20);
         b.HasOne(a => a.ChatSession).WithMany()
             .HasForeignKey(a => a.ChatSessionId).OnDelete(DeleteBehavior.Cascade);
         b.HasOne<ChatMessage>().WithMany()
             .HasForeignKey(a => a.ChatMessageId).OnDelete(DeleteBehavior.NoAction);
+    }
+}
+
+internal sealed class AiAnalysisLogConfiguration : IEntityTypeConfiguration<AiAnalysisLog>
+{
+    public void Configure(EntityTypeBuilder<AiAnalysisLog> b)
+    {
+        b.Property(x => x.Kind).HasConversion<string>().HasMaxLength(30);
+        b.Property(x => x.Outcome).HasConversion<string>().HasMaxLength(20);
+        b.Property(x => x.PromptVersion).HasMaxLength(50).IsRequired();
+        b.Property(x => x.Model).HasMaxLength(100);
+        b.Property(x => x.ToolsCalled).HasMaxLength(1000);
+        b.Property(x => x.UnverifiedNumbers).HasMaxLength(2000);
+        b.Property(x => x.ErrorMessage).HasMaxLength(1000);
+        b.Property(x => x.InputHash).HasMaxLength(64);
+        b.HasIndex(x => new { x.ProjectId, x.Kind, x.InputHash });
     }
 }
 

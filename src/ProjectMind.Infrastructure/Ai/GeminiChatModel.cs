@@ -46,36 +46,7 @@ public sealed class GeminiChatModel(HttpClient http, AiOptions options, ILogger<
             };
 
             JsonNode response;
-            try
-            {
-                response = await SendWithRetryAsync(model, o, body, ct);
-            }
-            catch (ModelNotFoundException)
-            {
-                var fallback = await FindAvailableModelAsync(o.Gemini.ApiKey, exclude: model, allowLite: false, ct)
-                    ?? throw new ChatModelException(
-                        $"Gemini modeli bulunamadı: '{model}' ve uygun bir yedek model de bulunamadı. " +
-                        "appsettings 'AI:Gemini:Model' değerini AI Studio'daki güncel bir model adıyla değiştirin.");
-                logger.LogWarning("Gemini modeli '{Model}' kullanılamıyor; '{Fallback}' modeline geçildi", model, fallback);
-                _resolvedFallbackModel = model = fallback;
-                response = await SendWithRetryAsync(model, o, body, ct);
-            }
-            catch (ModelOverloadedException)
-            {
-                // Model geçici olarak yoğun: bu tur için başka bir uygun modele geç (kalıcı değil).
-                var alternative = await FindAvailableModelAsync(o.Gemini.ApiKey, exclude: model, allowLite: true, ct)
-                    ?? throw Overloaded();
-                logger.LogWarning("Gemini modeli '{Model}' yoğun; bu tur '{Alternative}' ile deneniyor", model, alternative);
-                model = alternative;
-                try
-                {
-                    response = await SendWithRetryAsync(model, o, body, ct);
-                }
-                catch (ModelOverloadedException)
-                {
-                    throw Overloaded();
-                }
-            }
+            (response, model) = await SendWithFallbackAsync(model, o, body, ct);
             var candidate = response["candidates"]?.AsArray().FirstOrDefault();
             var content = candidate?["content"];
             if (content?["parts"] is not JsonArray parts)
@@ -120,6 +91,81 @@ public sealed class GeminiChatModel(HttpClient http, AiOptions options, ILogger<
         logger.LogWarning("Araç turu sınırına ({Max}) ulaşıldı", o.MaxToolRounds);
         reply.AppendLine("(İşlem çok uzun sürdü; şu ana kadarki önerileri kontrol edin.)");
         return new ChatTurnResult(reply.ToString(), model);
+    }
+
+    public bool IsConfigured => true;
+
+    /// <summary>
+    /// Araçsız, JSON şemalı tek çağrı: generationConfig.responseMimeType = application/json ve responseJsonSchema.
+    /// Düşünce parçaları atlanır; metin parçaları birleştirilip olduğu gibi döner (doğrulama çağıranda).
+    /// </summary>
+    public async Task<ChatJsonResult> CompleteJsonAsync(ChatJsonRequest request, CancellationToken ct)
+    {
+        var o = options;
+        var body = new JsonObject
+        {
+            ["systemInstruction"] = new JsonObject { ["parts"] = new JsonArray(new JsonObject { ["text"] = request.SystemPrompt }) },
+            ["contents"] = new JsonArray(TextContent("user", request.UserMessage)),
+            ["generationConfig"] = new JsonObject
+            {
+                ["maxOutputTokens"] = o.MaxTokens,
+                ["responseMimeType"] = JsonMimeType,
+                ["responseJsonSchema"] = JsonNode.Parse(request.Schema.GetRawText())
+            }
+        };
+
+        var (response, model) = await SendWithFallbackAsync(_resolvedFallbackModel ?? o.Gemini.Model, o, body, ct);
+        var candidate = response["candidates"]?.AsArray().FirstOrDefault();
+        if (candidate?["content"]?["parts"] is not JsonArray parts)
+        {
+            var reason = candidate?["finishReason"]?.GetValue<string>() ?? response["promptFeedback"]?["blockReason"]?.GetValue<string>();
+            logger.LogWarning("Gemini boş JSON cevabı döndü: {Reason}", reason);
+            throw new ChatModelException(ChatModelMessages.EmptyJson);
+        }
+
+        var json = string.Concat(parts.OfType<JsonObject>()
+            .Where(p => p["thought"]?.GetValue<bool>() != true && p["text"] is not null)
+            .Select(p => p["text"]!.GetValue<string>()));
+        return new ChatJsonResult(json, model);
+    }
+
+    private const string JsonMimeType = "application/json";
+
+    /// <summary>
+    /// İsteği gönderir; ayarlı model kapatılmışsa kalıcı yedek modele, yoğunsa bu çağrı için başka bir modele geçer.
+    /// Kullanılan modeli de döner.
+    /// </summary>
+    private async Task<(JsonNode Response, string Model)> SendWithFallbackAsync(string model, AiOptions o, JsonObject body, CancellationToken ct)
+    {
+        try
+        {
+            return (await SendWithRetryAsync(model, o, body, ct), model);
+        }
+        catch (ModelNotFoundException)
+        {
+            var fallback = await FindAvailableModelAsync(o.Gemini.ApiKey, exclude: model, allowLite: false, ct)
+                ?? throw new ChatModelException(
+                    $"Gemini modeli bulunamadı: '{model}' ve uygun bir yedek model de bulunamadı. " +
+                    "appsettings 'AI:Gemini:Model' değerini AI Studio'daki güncel bir model adıyla değiştirin.");
+            logger.LogWarning("Gemini modeli '{Model}' kullanılamıyor; '{Fallback}' modeline geçildi", model, fallback);
+            _resolvedFallbackModel = fallback;
+            return (await SendWithRetryAsync(fallback, o, body, ct), fallback);
+        }
+        catch (ModelOverloadedException)
+        {
+            // Model geçici olarak yoğun: bu çağrı için başka bir uygun modele geç (kalıcı değil).
+            var alternative = await FindAvailableModelAsync(o.Gemini.ApiKey, exclude: model, allowLite: true, ct)
+                ?? throw Overloaded();
+            logger.LogWarning("Gemini modeli '{Model}' yoğun; bu tur '{Alternative}' ile deneniyor", model, alternative);
+            try
+            {
+                return (await SendWithRetryAsync(alternative, o, body, ct), alternative);
+            }
+            catch (ModelOverloadedException)
+            {
+                throw Overloaded();
+            }
+        }
     }
 
     /// <summary>Geçici hatalarda (503/429/500/504) artan beklemeyle tekrar dener.</summary>

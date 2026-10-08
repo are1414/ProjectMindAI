@@ -35,6 +35,7 @@ public static class DependencyInjection
         services.AddScoped<WhatIfService>();
         services.AddSingleton<IDelayPredictor, DelayPredictionService>();
         services.AddScoped<ReadOnlyToolHandler>();
+        services.AddScoped<ProjectCommentService>();
         services.AddSingleton(TimeProvider.System);
         return services;
     }

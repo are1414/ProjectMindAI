@@ -215,4 +215,54 @@ public class GeminiChatModelTests
             Model(handler).CompleteTurnAsync(Request(), new RecordingExecutor(), CancellationToken.None));
         Assert.Contains("anahtarı geçersiz", ex.Message);
     }
+
+    private static ChatJsonRequest JsonRequest() => new(
+        "yorum sistemi", "<analiz_verisi>{}</analiz_verisi>", AnalysisCommentSchema.Name, AnalysisCommentSchema.Schema);
+
+    [Fact]
+    public async Task Json_call_sends_schema_without_tools_and_returns_text_without_thoughts()
+    {
+        var handler = new FakeHandler((HttpStatusCode.OK, """
+            {"candidates":[{"content":{"role":"model","parts":[
+              {"text":"plan","thought":true},{"text":"{\"summary\":\"İyi\","},{"text":"\"keyFindings\":[],\"recommendedActions\":[],\"caveats\":[]}"}]}}]}
+            """));
+
+        var result = await Model(handler).CompleteJsonAsync(JsonRequest(), CancellationToken.None);
+
+        Assert.Equal("""{"summary":"İyi","keyFindings":[],"recommendedActions":[],"caveats":[]}""", result.Json);
+        Assert.Equal("gemini-test", result.Model);
+        var body = handler.Requests.Single().Body;
+        Assert.Null(body["tools"]);
+        Assert.Equal("yorum sistemi", body["systemInstruction"]!["parts"]![0]!["text"]!.GetValue<string>());
+        var config = body["generationConfig"]!;
+        Assert.Equal("application/json", config["responseMimeType"]!.GetValue<string>());
+        Assert.Equal(["summary", "keyFindings", "recommendedActions", "caveats"],
+            config["responseJsonSchema"]!["required"]!.AsArray().Select(x => x!.GetValue<string>()));
+        Assert.False(config["responseJsonSchema"]!["additionalProperties"]!.GetValue<bool>());
+        Assert.NotNull(AnalysisCommentSchema.TryParse(result.Json, out _));
+    }
+
+    [Fact]
+    public async Task Json_call_with_empty_candidate_throws_friendly_exception()
+    {
+        var handler = new FakeHandler((HttpStatusCode.OK, """{"candidates":[{"finishReason":"SAFETY"}]}"""));
+
+        var ex = await Assert.ThrowsAsync<ChatModelException>(() =>
+            Model(handler).CompleteJsonAsync(JsonRequest(), CancellationToken.None));
+        Assert.Equal(ChatModelMessages.EmptyJson, ex.Message);
+    }
+
+    [Fact]
+    public async Task Json_call_uses_same_retired_model_fallback()
+    {
+        var handler = new FakeHandler(
+            (HttpStatusCode.NotFound, """{"error":{"code":404}}"""),
+            (HttpStatusCode.OK, """{"models":[{"name":"models/gemini-9-flash","supportedGenerationMethods":["generateContent"]}]}"""),
+            (HttpStatusCode.OK, """{"candidates":[{"content":{"parts":[{"text":"{}"}]}}]}"""));
+
+        var result = await Model(handler).CompleteJsonAsync(JsonRequest(), CancellationToken.None);
+
+        Assert.Equal("gemini-9-flash", result.Model);
+        Assert.EndsWith("models/gemini-9-flash:generateContent", handler.Requests[2].Url);
+    }
 }

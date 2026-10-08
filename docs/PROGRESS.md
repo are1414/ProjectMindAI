@@ -4,6 +4,50 @@ Her oturum sonunda en üste yeni kayıt eklenir. Format: yapılanlar · varsayı
 
 ---
 
+## 2026-10-08 (19) — Ekip turu 2: AI analiz yorumları
+
+Kapsam: `docs/team/ANALIZ.md` → "Lider kararları ve Tur 2 kapsamı": madde 3, 4, 5, 7 (lider kararları 1, 2, 4, 5 aynen).
+
+- **Madde 3 — JSON şemalı model çağrısı**: `IChatModel`'e `IsConfigured` ve `CompleteJsonAsync(ChatJsonRequest)` eklendi.
+  Gemini: araçsız istek, `generationConfig.responseMimeType = application/json` + `responseJsonSchema`; düşünce parçaları atlanır;
+  model kapatılmış/yoğun yedeği sohbetle ortak (`SendWithFallbackAsync`'e çıkarıldı, davranış aynı). Claude: SDK 12.53.0'ın
+  yapılandırılmış çıktısı `OutputConfig.Format = JsonOutputFormat { Schema }` (derlenerek doğrulandı; serileştirmede
+  `"type":"json_schema"` testle kontrol edildi); hata çevirisi `CreateAsync`'e çıkarıldı. Mock: `IsConfigured = false`.
+  Şema + C# doğrulayıcı: `Application/Ai/AnalysisCommentSchema.cs` (`summary`, `keyFindings[]`, `recommendedActions[]`,
+  `caveats[]`; ek alan, eksik alan, metin olmayan madde, aşırı uzunluk/madde sayısı → geçersiz).
+- **Madde 4/5 — Yorum kartları**: `Application/Ai/ProjectCommentService.cs` (proje + senaryo yorumu). Girdi
+  `AnalysisPayloads` (get_project_status / simulate_what_if yükleri buraya taşındı → tek kaynak; durum yüküne `currency` eklendi;
+  senaryo yorumu tüm karşılaştırmayı [mevcut + en fazla 4 senaryo] alır). Prompt'lar `ChatPrompts.ProjectCommentSystem` /
+  `ScenarioCommentSystem`, sürüm `comment-v1`. Yorumdaki her sayı NumberGuard ile **yalnız bu girdiye** karşı kontrol edilir;
+  doğrulanamayanlar kartta listelenir. Arayüz: ortak `Shared/AiCommentCard.razor` (yalnız gösterim), Durum sekmesinde uyarıların
+  üstünde, What-if sekmesinde karşılaştırma tablosunun altında; "AI yorumu üret / Yeniden üret" butonu. Mock modda yalnız
+  "AI bağlı değil — ⚙ Ayarlar'dan anahtar ekleyin" uyarısı. Şema dışı cevapta Türkçe hata, yorum gösterilmez.
+- **Madde 7 — Audit**: yeni `AiAnalysisLog` tablosu (tür, proje/sohbet/mesaj id, prompt sürümü, model, çağrılan araçlar,
+  bağlam karakter uzunluğu, doğrulanamayan sayı adedi + listesi, şema geçerli mi, sonuç, hata, süre ms, girdi özeti, yorum JSON'u).
+  Her sohbet turu (`ChatService`) ve her yorum üretimi kaydedilir. Önbellek: aynı proje + tür + girdi özeti (SHA-256; prompt sürümü
+  dahil) için son başarılı yorum, panel açılınca LLM çağrılmadan gösterilir.
+- **DB**: tek migration `20261008074127_AddAiAnalysisLogAndActionSource` — `AiActions.Source` (nvarchar(20), mevcut kayıtlar
+  `Unknown`) + `AiAnalysisLogs` tablosu (index: ProjectId, Kind, InputHash). Karar: D25.
+- Testler **175/175** (+25; 150'den): şema doğrulayıcı (11), Gemini JSON çağrısı (3: istek gövdesi, boş aday, yedek model),
+  Claude çıktı biçimi (1), proje yorumu (7: sayılar girdiden → temiz; uydurma "137" işaretlenir; önbellek; Mock; şema dışı; model hatası),
+  senaryo yorumu (1: 2 senaryo, P80 farkı + olasılık girdiyle aynı, uydurma sayı işaretlenir), sohbet audit (1: araçlar, NumberGuard
+  sayısı = kayıt, hata sonucu), DI çözümleme (1). `dotnet build` 0 uyarı / 0 hata.
+
+**Varsayımlar**: `AiAction.Source` bu turda yalnız alan olarak eklendi; sohbetten gelen öneriler `Unknown` kalır (kural/LLM
+ayrımı madde 6'da, hibrit eksik işte yapılacak). Audit kayıtları proje/sohbet silinince silinmez (yabancı anahtar yok; araştırma
+ölçümü kaybolmasın). Durum yorumu girdisi `statusDate` içerdiğinden önbellek her gün yenilenir. Kart, panelin yüklediği durum
+raporunu yorumlar (yeniden hesaplamaz, snapshot yazmaz). Yorum şemasında madde sınırı 8 (prompt 5 ister); sınırı aşan cevap geçersiz.
+
+**Bilinen sorunlar**: Arayüz SQL Server olmadan bu ortamda çalıştırılıp tarayıcıda görülemedi; bileşenler derleniyor ve servis
+katmanı testli, kartın görünümü ilk yerel çalıştırmada kontrol edilmeli. Gemini `responseJsonSchema` ve Claude structured output
+gerçek API'yle denenmedi (testler gerçek API çağırmaz); sağlayıcı şemayı reddederse kullanıcı Türkçe hata görür, kayıt `ModelError`
+olur. NumberGuard yuvarlama sınırı (Tur 1 bilinen sorunu) aynen geçerli.
+
+**Sıradaki adım**: Ekip turu 3 — madde 6 (hibrit eksik iş: LLM katmanı, `Source = Rule/Llm`), madde 8 (opsiyonel Ollama);
+gerçek anahtarla yorum kartlarının elle denenmesi.
+
+---
+
 ## 2026-10-08 (18) — Ekip turu 1: hata düzeltmeleri
 
 Kapsam: `docs/team/ANALIZ.md` → "Lider birleştirmesi (Tur 1)" T1–T6 ([hata]). Faz 8 yorum kartları Tur 2'de.

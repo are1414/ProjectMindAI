@@ -30,47 +30,15 @@ public sealed class ClaudeChatModel(AiOptions options, ILogger<ClaudeChatModel> 
 
         for (var round = 0; round < o.MaxToolRounds; round++)
         {
-            Message response;
-            try
+            var response = await CreateAsync(client, new MessageCreateParams
             {
-                response = await client.Messages.Create(new MessageCreateParams
-                {
-                    Model = o.Claude.Model,
-                    MaxTokens = o.MaxTokens,
-                    System = request.SystemPrompt,
-                    OutputConfig = new OutputConfig { Effort = ParseEffort(o.ClaudeEffort) },
-                    Tools = toolDefinitions,
-                    Messages = messages
-                }, ct);
-            }
-            catch (AnthropicUnauthorizedException ex)
-            {
-                throw Fail(ex, "API anahtarı geçersiz. 'AI:Claude:ApiKey' ayarını kontrol edin.");
-            }
-            catch (AnthropicRateLimitException ex)
-            {
-                throw Fail(ex, "AI servisi şu an yoğun veya kullanım limiti doldu. Biraz sonra tekrar deneyin.");
-            }
-            catch (AnthropicBadRequestException ex)
-            {
-                throw Fail(ex, "AI isteği reddedildi (kredi bitmiş veya ayar hatalı olabilir). Ayrıntı loglarda.");
-            }
-            catch (AnthropicIOException ex)
-            {
-                throw Fail(ex, ChatModelMessages.Unreachable);
-            }
-            catch (AnthropicException ex)
-            {
-                throw Fail(ex, "AI servisinden beklenmeyen bir hata döndü. Ayrıntı loglarda.");
-            }
-            catch (HttpRequestException ex)
-            {
-                throw Fail(ex, ChatModelMessages.Unreachable);
-            }
-            catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
-            {
-                throw Fail(ex, ChatModelMessages.Timeout);
-            }
+                Model = o.Claude.Model,
+                MaxTokens = o.MaxTokens,
+                System = request.SystemPrompt,
+                OutputConfig = new OutputConfig { Effort = ParseEffort(o.ClaudeEffort) },
+                Tools = toolDefinitions,
+                Messages = messages
+            }, ct);
 
             logger.LogInformation("Claude turu: model {Model}, giriş {In} / çıkış {Out} token",
                 o.Claude.Model, response.Usage.InputTokens, response.Usage.OutputTokens);
@@ -114,6 +82,86 @@ public sealed class ClaudeChatModel(AiOptions options, ILogger<ClaudeChatModel> 
         logger.LogWarning("Araç turu sınırına ({Max}) ulaşıldı", o.MaxToolRounds);
         reply.AppendLine("(İşlem çok uzun sürdü; şu ana kadarki önerileri kontrol edin.)");
         return new ChatTurnResult(reply.ToString(), o.Claude.Model);
+    }
+
+    public bool IsConfigured => true;
+
+    /// <summary>
+    /// Araçsız, yapılandırılmış çıktılı (OutputConfig.Format = JsonOutputFormat) tek çağrı. Metin blokları birleştirilip
+    /// olduğu gibi döner; şema doğrulaması çağıranda yapılır.
+    /// </summary>
+    public async Task<ChatJsonResult> CompleteJsonAsync(ChatJsonRequest request, CancellationToken ct)
+    {
+        var o = options;
+        AnthropicClient client = new() { ApiKey = o.Claude.ApiKey };
+        var response = await CreateAsync(client, new MessageCreateParams
+        {
+            Model = o.Claude.Model,
+            MaxTokens = o.MaxTokens,
+            System = request.SystemPrompt,
+            OutputConfig = new OutputConfig
+            {
+                Effort = ParseEffort(o.ClaudeEffort),
+                Format = ToOutputFormat(request.Schema)
+            },
+            Messages = [new MessageParam { Role = Role.User, Content = request.UserMessage }]
+        }, ct);
+
+        logger.LogInformation("Claude JSON çağrısı: model {Model}, giriş {In} / çıkış {Out} token",
+            o.Claude.Model, response.Usage.InputTokens, response.Usage.OutputTokens);
+        if (response.StopReason == StopReason.Refusal)
+            throw new ChatModelException("AI bu isteği işlemeyi reddetti.");
+
+        var json = new StringBuilder();
+        foreach (var block in response.Content)
+        {
+            if (block.TryPickText(out TextBlock? text))
+                json.Append(text.Text);
+        }
+        return new ChatJsonResult(json.ToString(), o.Claude.Model);
+    }
+
+    /// <summary>JSON şemasını SDK'nın yapılandırılmış çıktı biçimine çevirir (test edilebilsin diye ayrı).</summary>
+    public static JsonOutputFormat ToOutputFormat(JsonElement schema) => new()
+    {
+        Schema = schema.EnumerateObject().ToDictionary(p => p.Name, p => p.Value.Clone())
+    };
+
+    /// <summary>Messages API çağrısı; SDK/ağ hataları kullanıcıya gösterilebilir <see cref="ChatModelException"/>'a çevrilir.</summary>
+    private async Task<Message> CreateAsync(AnthropicClient client, MessageCreateParams parameters, CancellationToken ct)
+    {
+        try
+        {
+            return await client.Messages.Create(parameters, ct);
+        }
+        catch (AnthropicUnauthorizedException ex)
+        {
+            throw Fail(ex, "API anahtarı geçersiz. 'AI:Claude:ApiKey' ayarını kontrol edin.");
+        }
+        catch (AnthropicRateLimitException ex)
+        {
+            throw Fail(ex, "AI servisi şu an yoğun veya kullanım limiti doldu. Biraz sonra tekrar deneyin.");
+        }
+        catch (AnthropicBadRequestException ex)
+        {
+            throw Fail(ex, "AI isteği reddedildi (kredi bitmiş veya ayar hatalı olabilir). Ayrıntı loglarda.");
+        }
+        catch (AnthropicIOException ex)
+        {
+            throw Fail(ex, ChatModelMessages.Unreachable);
+        }
+        catch (AnthropicException ex)
+        {
+            throw Fail(ex, "AI servisinden beklenmeyen bir hata döndü. Ayrıntı loglarda.");
+        }
+        catch (HttpRequestException ex)
+        {
+            throw Fail(ex, ChatModelMessages.Unreachable);
+        }
+        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
+        {
+            throw Fail(ex, ChatModelMessages.Timeout);
+        }
     }
 
     private ChatModelException Fail(Exception ex, string message)

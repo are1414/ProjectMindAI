@@ -1,0 +1,59 @@
+@* AI analiz yorumu kartı (Durum ve What-if sekmeleri). Sadece gösterim: üretim/önbellek ProjectCommentService'te. *@
+
+<section class="ai-comment" aria-live="polite">
+    <div class="section-head">
+        <h2>AI yorumu</h2>
+        <button class="btn btn-sm" disabled="@Busy" @onclick="OnGenerate">
+            @(Busy ? "Yorum hazırlanıyor…" : Result?.Status == AnalysisCommentStatus.Ready ? "Yeniden üret" : "AI yorumu üret")
+        </button>
+    </div>
+
+    @if (Result is null)
+    {
+        <p class="muted small">@Hint</p>
+    }
+    else if (Result.Status == AnalysisCommentStatus.NotConfigured)
+    {
+        <div class="ai-comment-warning">▲ @Result.Message</div>
+    }
+    else if (Result.Status == AnalysisCommentStatus.Failed)
+    {
+        <div class="inline-error">@Result.Message</div>
+    }
+    else if (Result.Comment is { } c)
+    {
+        <p class="ai-comment-summary">@c.Summary</p>
+        @if (c.KeyFindings.Count > 0)
+        {
+            <h3>Önemli bulgular</h3>
+            <ul>@foreach (var x in c.KeyFindings) { <li>@x</li> }</ul>
+        }
+        @if (c.RecommendedActions.Count > 0)
+        {
+            <h3>Önerilen aksiyonlar</h3>
+            <ul>@foreach (var x in c.RecommendedActions) { <li>@x</li> }</ul>
+        }
+        @if (c.Caveats.Count > 0)
+        {
+            <h3>Varsayımlar ve sınırlar</h3>
+            <ul class="muted">@foreach (var x in c.Caveats) { <li>@x</li> }</ul>
+        }
+        @if (Result.UnverifiedNumbers is { Count: > 0 } unverified)
+        {
+            <div class="ai-comment-warning">
+                ▲ Doğrulanamayan sayılar: @string.Join(", ", unverified) — bu değerler sistem verisinde yok, kontrol edin.
+            </div>
+        }
+        <p class="muted small">
+            @Result.Model@(Result.CreatedAt is { } at ? $" · {at.ToLocalTime():dd.MM.yyyy HH:mm}" : "")@(Result.FromCache ? " · kaydedilmiş yorum (veri değişmedi)" : "")
+            · Sayılar sistem hesaplarından alınır; yorum veriyi değiştirmez.
+        </p>
+    }
+</section>
+
+@code {
+    [Parameter] public AnalysisCommentResult? Result { get; set; }
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public EventCallback OnGenerate { get; set; }
+    [Parameter] public string Hint { get; set; } = "Sonuçların sade Türkçe açıklaması için butona basın.";
+}

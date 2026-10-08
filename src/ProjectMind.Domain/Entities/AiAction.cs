@@ -17,5 +17,8 @@ public class AiAction : Entity
     public string? ResultMessage { get; set; }
     public DateTime? DecidedAt { get; set; }
 
+    /// <summary>Önerinin kaynağı (kural / LLM / kullanıcı). Eski kayıtlar ve henüz ayrıştırılmayan öneriler: Unknown.</summary>
+    public AiActionSource Source { get; set; } = AiActionSource.Unknown;
+
     public ChatSession? ChatSession { get; set; }
 }
