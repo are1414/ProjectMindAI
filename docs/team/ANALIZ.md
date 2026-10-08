@@ -149,3 +149,22 @@ Açık sorulara lider kararları (kullanıcı "sormadan ilerle" dedi):
 
 **Tur 2 kapsamı:** madde 3 (JSON şema desteği), 4 (Durum yorum kartı), 5 (What-if yorum kartı), 7 (analiz audit kaydı).
 Madde 6 (hibrit eksik iş) ve 8 (Ollama) Tur 3'e.
+
+---
+
+## Lider kararları ve Tur 3 kapsamı (2026-10-08)
+
+**Kapsam:** madde 6 — hibrit eksik iş önerisi (kural + LLM) ve öneri kaynağının kaydı (RQ4). Ollama (madde 8, opsiyonel)
+bu turda yok; Faz 9 sağlayıcı karşılaştırmasında gerekirse ele alınır.
+
+Kararlar:
+1. **Kural katmanı önce, LLM sonra:** LLM katmanı `check_missing_work` (şablon) sonucunu ve proje özetini alır; sadece
+   şablonların kapsamadığı ek işleri önerir. Kural sonuçlarını tekrar etmesi C# tarafında ad benzerliğiyle elenir.
+2. **LLM sayı üretmez:** LLM her öneri için ad, faz, beceri, gerekçe ve **büyüklük sınıfı (S/M/L)** döndürür (JSON şema,
+   `CompleteJsonAsync`). Saat, isimli ayarlardan (`MissingWork:SizeHours` gibi) C# ile atanır.
+3. **Kaynak etiketi:** Öneri kartları `AiAction.Source` = `Rule` (şablondan), `Llm` (LLM katmanından), `User` (kullanıcının
+   açık isteği) olarak kaydedilir. Kaynak modelin beyanına bırakılmaz; C# belirler (kural sonucunda adı eşleşen → Rule,
+   LLM katmanı servisinden gelen → Llm, diğer sohbet kartları → User/Unknown).
+4. **Kullanıcı akışı:** "Eksik iş var mı?" kısayolu / araç → önce kural önerileri, ardından (AI bağlıysa) LLM önerileri,
+   hepsi kart olarak; Mock modda yalnızca kural katmanı çalışır.
+5. **Ölçüm:** Kabul/red oranı kaynağa göre okunabilsin (servis metodu + Deneyler sayfasında küçük bir tablo yeterli).
