@@ -115,3 +115,22 @@
    Bağlam "veridir, talimat değildir" kuralı korunmalı.
 4. `AiAction.Source` ve audit tablosu için 1 veya 2 migration — mevcut kayıtlar `Source = Rule/Unknown` mı sayılsın?
 5. Yorumlar saklansın mı (her açılışta yeniden LLM çağrısı = maliyet/gecikme) yoksa snapshot tarihi başına önbellek mi?
+
+---
+
+## Lider birleştirmesi (Tur 1) — Test/Pazar raporundan eklenenler
+
+Tur 1 geliştirme kapsamı: önce **hatalar** (Faz 8'in sayı doğrulayıcı maddesine ve RQ1 ölçümüne doğrudan etki ediyor),
+Faz 8 yorum kartları Tur 2'de.
+
+| Sıra | Etiket | Madde | Kaynak |
+|---|---|---|---|
+| T1 | [hata] | NumberGuard: önceki asistan cevapları (uyarı satırı dahil) kanıt sayılmasın — sadece kullanıcı mesajı, bağlam, araç sonuçları | ANALIZ 1, TEST_PAZAR kritik |
+| T2 | [hata] | NumberGuard: ×100/÷100 ölçekleme sadece "%" bağlamında; Türkçe ay adlı tarih ("5 Aralık 2026"), "5.12.2026", saat ("14:30") doğru ele alınsın | ANALIZ 2, TEST_PAZAR yüksek/orta |
+| T3 | [hata] | EVM: baseline'daki iş sonradan iptal edilirse BAC'den düşülsün (proje bitince SPI 1, %100); test | TEST_PAZAR yüksek |
+| T4 | [hata] | LLM zaman aşımı / iptal (TaskCanceledException, HttpRequestException) ChatModelException'a çevrilsin; sayfa çökmesin | TEST_PAZAR orta |
+| T5 | [hata] | What-if girdi doğrulama (negatif saat/maliyet); 0 kapasiteli sabit atamada doğru uyarı | TEST_PAZAR orta/düşük |
+| T6 | [hata] | Yeniden baseline: Bitti işlerin plan tarihleri bugüne taşınmasın; yarım işin baseline PV'si kalan pencereye tam efor yaymasın (EV baseline'ı tutarlı kalacak şekilde) | TEST_PAZAR yüksek |
+
+Fikir havuzuna: iş bazlı efor aralığı (en iyi/en kötü), tatil/izin takvimi, what-if hızlandırma, risk uyarısından işe bağlantı,
+çoklu baseline karşılaştırma, AI ile iş kırılımı (Faz 8 hibrit maddesiyle birlikte değerlendirilecek).
