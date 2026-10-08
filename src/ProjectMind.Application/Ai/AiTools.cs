@@ -139,7 +139,8 @@ public static class AiTools
             }, "workItemId")),
 
         new(RemoveWorkItem,
-            "Bir işi (ve bağımlılıklarını) silmeyi önerir.",
+            "Bir işi (ve bağımlılıklarını) silmeyi önerir. Baseline'da ilerlemesi/harcaması olan iş silinmez, iptal edilir " +
+            "(kart bunu belirtir).",
             Schema(new { workItemId = Int("İş id") }, "workItemId")),
 
         new(CheckMissingWork,

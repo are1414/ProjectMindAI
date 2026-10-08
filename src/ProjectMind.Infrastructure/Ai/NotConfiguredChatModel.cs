@@ -9,6 +9,8 @@ public sealed class NotConfiguredChatModel(AiOptions options) : IChatModel
 
     public bool IsConfigured => false;
 
+    public string ProviderKey => ModelName;
+
     /// <summary>Mock modda analiz yorumu üretilmez (LLM'siz metin yok); çağıran bu durumu uyarıya çevirir.</summary>
     public Task<ChatJsonResult> CompleteJsonAsync(ChatJsonRequest request, CancellationToken ct) =>
         throw new ChatModelException(ChatModelMessages.NotConfigured);

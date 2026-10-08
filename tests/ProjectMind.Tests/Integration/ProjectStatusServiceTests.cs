@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using ProjectMind.Application.Ai;
 using ProjectMind.Application.Analytics;
 using ProjectMind.Application.People;
 using ProjectMind.Application.Projects;
@@ -153,5 +154,98 @@ public class ProjectStatusServiceTests : ServiceTestBase
         Assert.Equal(1m, end.Evm!.Spi);
         Assert.Equal(1m, end.Evm.SpiTime);
         Assert.Equal(new DateOnly(2026, 11, 11), end.Evm.ForecastFinish);
+    }
+
+    private async Task SetProgressOnAsync(DateTimeOffset day, int projectId, int id, WorkItemStatus status, int percent, decimal actual)
+    {
+        var items = new WorkItemService(Db, new FixedClock(day));
+        var req = WorkItemRequest.From(await items.GetAsync(projectId, id, _ct));
+        req.Status = status; req.PercentComplete = percent; req.ActualHours = actual;
+        await items.UpdateAsync(projectId, id, req, _ct);
+        Db.ChangeTracker.Clear();
+    }
+
+    [Fact]
+    public async Task Finished_project_spi_t_is_frozen_at_completion_day()
+    {
+        // Tur 4a H1. Plan: A 2–3, B 4–10 Kasım (PD 7 iş günü). A 3 Kasım'da, B 10 Kasım'da (planda) bitti; durum 20 Kasım:
+        // AT tamamlanma gününde (7. iş günü) donar → SPI(t) = 7 / 7 = 1; takvim uyarısı yok, tahmini bitiş 10 Kasım.
+        var (projectId, a, b) = await SeedTwoTasksAsync();
+        await SetProgressOnAsync(new DateTimeOffset(2026, 11, 3, 17, 0, 0, TimeSpan.Zero), projectId, a, WorkItemStatus.Done, 100, 16);
+        await SetProgressOnAsync(new DateTimeOffset(2026, 11, 6, 17, 0, 0, TimeSpan.Zero), projectId, b, WorkItemStatus.InProgress, 60, 24);
+        await SetProgressOnAsync(new DateTimeOffset(2026, 11, 10, 17, 0, 0, TimeSpan.Zero), projectId, b, WorkItemStatus.Done, 100, 40);
+        await SetProgressOnAsync(new DateTimeOffset(2026, 11, 12, 17, 0, 0, TimeSpan.Zero), projectId, b, WorkItemStatus.Done, 100, 42);
+
+        var status = await NewStatusService(new DateTimeOffset(2026, 11, 20, 18, 0, 0, TimeSpan.Zero)).GetAsync(projectId, _ct);
+
+        Assert.Equal(7, status.Evm!.ActualTime);
+        Assert.Equal(1m, status.Evm.SpiTime);
+        Assert.Equal(new DateOnly(2026, 11, 10), status.Evm.ForecastFinish);
+        Assert.DoesNotContain(status.Alerts, x => x.Title.Contains("SPI(t)"));
+        Assert.Equal(1m, (await Db.ProjectSnapshots.SingleAsync(_ct)).SpiTime);
+    }
+
+    private async Task<AiActionResponse> ProposeRemovalAsync(int projectId, int workItemId)
+    {
+        var session = new ProjectMind.Domain.Entities.ChatSession { Title = "Sil", ProjectId = projectId };
+        Db.ChatSessions.Add(session);
+        await Db.SaveChangesAsync(_ct);
+        return await NewActionService().ProposeAsync(session.Id, AiTools.RemoveWorkItem,
+            System.Text.Json.JsonSerializer.SerializeToElement(new { workItemId }), _ct);
+    }
+
+    [Fact]
+    public async Task Removing_baselined_work_with_progress_cancels_it_instead_of_deleting()
+    {
+        // Tur 4a H2 (TEST_PAZAR Q2). A bitti; B %25, 10 s harcandı. "B'yi sil" kartı iptal edeceğini söyler; uygulanınca B iptal
+        // olur, harcanan saat ve geçmiş kalır. 4 Kasım: BAC 16 (B'nin 40 s'i kapsam dışı), EV 16, AC 16 + 10 = 26, %100.
+        var (projectId, a, b) = await SeedTwoTasksAsync();
+        await SetProgressAsync(projectId, a, WorkItemStatus.Done, 100, 16);
+        await SetProgressAsync(projectId, b, WorkItemStatus.InProgress, 25, 10);
+
+        var card = await ProposeRemovalAsync(projectId, b);
+        Assert.StartsWith("İşi iptal et (silinmez): B", card.Summary);
+
+        var applied = await NewActionService().ApplyAsync(card.Id, _ct);
+        Assert.Equal(AiActionStatus.Applied, applied.Status);
+        Assert.StartsWith("İş iptal edildi", applied.ResultMessage);
+        Db.ChangeTracker.Clear();
+
+        var itemB = await Db.WorkItems.AsNoTracking().SingleAsync(w => w.Id == b, _ct);
+        Assert.Equal(WorkItemStatus.Cancelled, itemB.Status);
+        Assert.Equal(10, itemB.ActualHours);
+        Assert.Equal(2, await Db.StatusUpdates.CountAsync(u => u.WorkItemId == b, _ct));   // %25 kaydı + iptal kaydı
+
+        var status = await NewStatusService(new DateTimeOffset(2026, 11, 4, 18, 0, 0, TimeSpan.Zero)).GetAsync(projectId, _ct);
+        Assert.Equal(16, status.Evm!.BudgetAtCompletion);
+        Assert.Equal(40, status.Evm.DescopedHours);
+        Assert.Equal(16, status.Evm.EarnedValue);
+        Assert.Equal(26, status.Evm.ActualCost);
+        Assert.Equal(100, status.Evm.PercentComplete);
+
+        // Bitmiş ve baseline'daki A için silme kartı oluşmaz (geçmiş korunur).
+        await Assert.ThrowsAsync<ProjectMind.Application.Common.BusinessRuleException>(() => ProposeRemovalAsync(projectId, a));
+    }
+
+    [Fact]
+    public async Task Deleted_baseline_work_is_treated_as_descoped()
+    {
+        // B hiç başlamadı → kart "İşi sil", iş silinir. Baseline'daki B satırı artık eşleşmez → kapsam dışı (iptal gibi):
+        // 4 Kasım: BAC 16, EV 16 → SPI 1, %100 (eskiden BAC 56, %29 ve SPI < 1 kalıyordu).
+        var (projectId, a, b) = await SeedTwoTasksAsync();
+        await SetProgressAsync(projectId, a, WorkItemStatus.Done, 100, 16);
+
+        var card = await ProposeRemovalAsync(projectId, b);
+        Assert.Equal("İşi sil: B", card.Summary);
+        Assert.Equal("İş silindi.", (await NewActionService().ApplyAsync(card.Id, _ct)).ResultMessage);
+        Db.ChangeTracker.Clear();
+        Assert.False(await Db.WorkItems.AnyAsync(w => w.Id == b, _ct));
+
+        var status = await NewStatusService(new DateTimeOffset(2026, 11, 4, 18, 0, 0, TimeSpan.Zero)).GetAsync(projectId, _ct);
+        Assert.Equal(16, status.Evm!.BudgetAtCompletion);
+        Assert.Equal(40, status.Evm.DescopedHours);
+        Assert.Equal(1m, status.Evm.Spi);
+        Assert.Equal(100, status.Evm.PercentComplete);
+        Assert.Equal(0, status.ScopeGrowthPercent);
     }
 }

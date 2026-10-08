@@ -55,7 +55,10 @@ public sealed class ReadOnlyToolHandler(
                     {
                         status = hybrid.LlmStatus.ToString(),
                         promptVersion = ChatPrompts.MissingWorkVersion,
-                        note = hybrid.LlmMessage
+                        note = hybrid.LlmMessage,
+                        droppedAsDuplicate = hybrid.Duplicates.Select(d => new { name = d.Name, duplicateOf = d.DuplicateOf }),
+                        notShownOverLimit = hybrid.OverLimit.Select(d => d.Name),
+                        truncatedCount = hybrid.LlmTruncated
                     },
                     alreadyCovered = result.Covered.ToDictionary(c => c.Key, c => c.Value),
                     totalSuggestedHours = result.TotalDefaultHours + hybrid.Llm.Sum(l => l.Hours),

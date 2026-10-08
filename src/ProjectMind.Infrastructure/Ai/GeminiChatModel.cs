@@ -95,6 +95,8 @@ public sealed class GeminiChatModel(HttpClient http, AiOptions options, ILogger<
 
     public bool IsConfigured => true;
 
+    public string ProviderKey => $"{AiOptions.GeminiProvider}/{options.Gemini.Model}";
+
     /// <summary>
     /// Araçsız, JSON şemalı tek çağrı: generationConfig.responseMimeType = application/json ve responseJsonSchema.
     /// Düşünce parçaları atlanır; metin parçaları birleştirilip olduğu gibi döner (doğrulama çağıranda).

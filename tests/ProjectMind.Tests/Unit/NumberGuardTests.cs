@@ -31,7 +31,7 @@ public class NumberGuardTests
 
     [Theory]
     [InlineData("SPI 1,2 iken 120 saat kaldı.", "120")]           // spi 1.2 ×100 → yüzde bağlamı yok
-    [InlineData("CPI 0,87; ek maliyet 87 bin TL.", "87")]           // cpi 0.87 ×100 → yüzde bağlamı yok
+    [InlineData("CPI 0,87; ek maliyet 87 bin TL.", "87 bin")]       // cpi 0.87 ×100 → yüzde bağlamı yok; "bin" çarpanı okunur (Tur 4a)
     public void Ratio_scaling_is_not_applied_without_percent_sign(string answer, string expected) =>
         Assert.Equal([expected], NumberGuard.FindUnverified(answer, """{"spi":1.2,"cpi":0.87}"""));
 
@@ -68,4 +68,42 @@ public class NumberGuardTests
     [Fact]
     public void Unparseable_number_like_token_is_reported() =>
         Assert.Equal(["12,5,75"], NumberGuard.FindUnverified("Değerler 12,5,75 şeklinde.", """{"a":12.5,"b":75}"""));
+
+    // ---- Tur 4a H3: Türkçe biçimli kanıt ve "bin/milyon" çarpanları ----
+
+    [Theory]
+    [InlineData("Bütçe 1.250.000 TL.", "Kullanıcı: Bütçe 1.250.000 TL olsun")]                 // kullanıcı mesajı (Türkçe binlik)
+    [InlineData("Bütçe 1.250.000,00 ₺.", "Proje oluştur: Mobil · 01.11.2026 → 30.04.2027 · 1.250.000 TRY")]   // kart özeti
+    [InlineData("Toplam 1.500 saat.", """{"totalHours":1500}""")]                              // JSON kanıt, Türkçe cevap
+    [InlineData("SPI 0,87 seviyesinde.", """{"spi":0.87}""")]                                  // JSON ondalık ↔ Türkçe ondalık
+    [InlineData("Bütçe 250.000 TL.", "Bütçe 250.000 TL olsun")]                                // tek gruplu binlik
+    [InlineData("Kalan 37,5 saat.", "Senaryo notu: 37,5 saat kişi kapasitesi")]               // kanıtta Türkçe ondalık
+    [InlineData("PV eğrisi 16 ve 24 saatte.", """{"curve":[8,16,24]}""")]                      // JSON listesi ayrı sayılar
+    public void Turkish_formatted_evidence_is_read_correctly(string answer, string evidence) =>
+        Assert.Empty(NumberGuard.FindUnverified(answer, evidence));
+
+    [Fact]
+    public void Turkish_decimal_in_evidence_is_not_read_as_thousands_or_integer()
+    {
+        // Eskiden kanıttaki "0,87" JSON gibi okunup 87 oluyordu ve "87 saat" doğrulanmış görünüyordu (TEST_PAZAR Q5b).
+        Assert.Equal(["87"], NumberGuard.FindUnverified("Kalan 87 saat.", "Uyarı: SPI 0,87"));
+        Assert.Equal(["137"], NumberGuard.FindUnverified("Bütçe 1.250.000 TL, 137 saat.", "Bütçe 1.250.000 TL olsun"));
+    }
+
+    [Theory]
+    [InlineData("Bütçe 1,2 milyon TL.", """{"budget":1200000}""")]
+    [InlineData("Bütçe yaklaşık 1,25 milyon TL.", """{"budget":1250000}""")]
+    [InlineData("Bütçe yaklaşık 1,3 milyon TL.", """{"budget":1250000}""")]                   // 1.250.000 / 10⁶ → 1,3 (yuvarlama)
+    [InlineData("Ek maliyet 120 bin TL.", """{"extraCost":120000}""")]
+    [InlineData("Ek maliyet 120.000 TL.", "Kullanıcı: ek maliyet 120 bin TL olabilir")]      // kanıtta çarpan
+    [InlineData("Toplam 2 milyar TL.", """{"total":2000000000}""")]                          // küçük taban sayı muaf değil, eşleşir
+    public void Multiplier_words_are_compared_with_multiplied_value(string answer, string evidence) =>
+        Assert.Empty(NumberGuard.FindUnverified(answer, evidence));
+
+    [Theory]
+    [InlineData("Bütçe 2 milyon TL.", """{"budget":1200000}""", "2 milyon")]               // ≤ 10 muafiyeti çarpanlıda yok
+    [InlineData("Ek maliyet 150 bin TL.", """{"extraCost":120000}""", "150 bin")]
+    [InlineData("Ek maliyet 120 bin TL.", """{"hours":120}""", "120 bin")]                  // taban sayı kanıtta olsa da 120.000 yok
+    public void Multiplier_words_with_wrong_value_are_reported(string answer, string evidence, string expected) =>
+        Assert.Equal([expected], NumberGuard.FindUnverified(answer, evidence));
 }

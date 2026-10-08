@@ -80,6 +80,9 @@ public class HybridMissingWorkServiceTests : ServiceTestBase
 
         Assert.Contains("KVKK uyum incelemesi (M): Kişisel veri işleniyor.", reply.Content);
         Assert.DoesNotContain("Doğrulanamayan", reply.Content);
+        // Tur 4a H5: elenen tekrarlar cevapta ve denetim kaydında görünür.
+        Assert.Contains("Tekrar sayılıp elenen AI önerileri (2): Veritabanı kurulumu (≈ Veritabanı kurulumu), " +
+                        "Backend API geliştirmesi (≈ Backend API).", reply.Content);
 
         // LLM'e veritabanı değil özet gider: mevcut işler ve kural önerileri; şema adı ve prompt.
         var request = Assert.Single(model.Requests);
@@ -97,6 +100,7 @@ public class HybridMissingWorkServiceTests : ServiceTestBase
         Assert.Equal(projectId, log.ProjectId);
         Assert.Equal(sessionId, log.ChatSessionId);
         Assert.Contains("KVKK uyum incelemesi", log.ResultJson);
+        Assert.Contains("\"duplicateOf\":\"Backend API\"", log.ResultJson);
     }
 
     [Fact]
@@ -168,6 +172,7 @@ public class HybridMissingWorkServiceTests : ServiceTestBase
     {
         public List<ToolExecutionResult> Results { get; } = [];
         public bool IsConfigured => true;
+        public string ProviderKey => "hybrid-chat";
 
         public async Task<ChatTurnResult> CompleteTurnAsync(ChatTurnRequest request, IChatToolExecutor tools, CancellationToken ct)
         {

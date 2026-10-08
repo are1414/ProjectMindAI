@@ -38,6 +38,12 @@ public interface IChatModel
     /// <summary>Gerçek bir LLM'e bağlı mı? Mock (anahtar yok) modda false; analiz yorumu üretilmez.</summary>
     bool IsConfigured { get; }
 
+    /// <summary>
+    /// Ayarlı sağlayıcı ve model ("Gemini/gemini-3.5-flash"). Yorum önbelleği anahtarına girer: sağlayıcı/model değişince
+    /// eski sağlayıcının yorumu "kaydedilmiş yorum" olarak gösterilmez (Faz 9 sağlayıcı karşılaştırması).
+    /// </summary>
+    string ProviderKey { get; }
+
     Task<ChatTurnResult> CompleteTurnAsync(ChatTurnRequest request, IChatToolExecutor tools, CancellationToken ct);
 
     /// <summary>Araçsız, cevabı JSON şemasına zorlanmış tek çağrı. Hata durumunda <see cref="ChatModelException"/>.</summary>

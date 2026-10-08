@@ -14,7 +14,7 @@ using ProjectMind.Domain.Enums;
 namespace ProjectMind.Application.Ai;
 
 public sealed record AiActionResponse(
-    int Id, int ChatSessionId, int? ChatMessageId, string ToolName, string Summary,
+    int Id, int? ChatSessionId, int? ChatMessageId, string ToolName, string Summary,
     AiActionStatus Status, string? ResultMessage, AiActionSource Source = AiActionSource.Unknown)
 {
     public static AiActionResponse From(AiAction a) =>
@@ -24,17 +24,35 @@ public sealed record AiActionResponse(
 /// <summary>
 /// Bir öneri kaynağının kabul/red sayıları (RQ4). Kabul oranı = Uygulandı / (Uygulandı + Reddedildi); bekleyen ve
 /// uygulanırken hata veren öneriler orana girmez (karar verilmemiş / kullanıcı reddetmemiş). Karar yoksa oran null.
+/// "Hepsini uygula" ile toplu uygulanan kartlar (<see cref="AppliedInBulk"/>) kartlara tek tek bakılmadan kabul edildiği için
+/// ayrıca sayılır: <see cref="IndividualAcceptanceRate"/> yalnız tek tek verilen kararları kullanır (red her zaman tek tektir).
 /// </summary>
-public sealed record SourceAcceptance(AiActionSource Source, int Total, int Applied, int Rejected, int Failed, int Pending)
+public sealed record SourceAcceptance(
+    AiActionSource Source, int Total, int Applied, int Rejected, int Failed, int Pending, int AppliedInBulk = 0)
 {
     public double? AcceptanceRate => Applied + Rejected == 0 ? null : (double)Applied / (Applied + Rejected);
 
+    /// <summary>Tek tek uygulanan / (tek tek uygulanan + reddedilen).</summary>
+    public double? IndividualAcceptanceRate
+    {
+        get
+        {
+            var individual = Applied - AppliedInBulk;
+            return individual + Rejected == 0 ? null : (double)individual / (individual + Rejected);
+        }
+    }
+
     /// <summary>Kaynak sırasına göre (Rule, Llm, User, Unknown) yalnız kaydı olan kaynaklar.</summary>
     public static IReadOnlyList<SourceAcceptance> Compute(IEnumerable<(AiActionSource Source, AiActionStatus Status)> actions) =>
+        Compute(actions.Select(a => (a.Source, a.Status, false)));
+
+    public static IReadOnlyList<SourceAcceptance> Compute(
+        IEnumerable<(AiActionSource Source, AiActionStatus Status, bool InBulk)> actions) =>
         actions.GroupBy(a => a.Source)
             .Select(g => new SourceAcceptance(g.Key, g.Count(),
                 g.Count(a => a.Status == AiActionStatus.Applied), g.Count(a => a.Status == AiActionStatus.Rejected),
-                g.Count(a => a.Status == AiActionStatus.Failed), g.Count(a => a.Status == AiActionStatus.Pending)))
+                g.Count(a => a.Status == AiActionStatus.Failed), g.Count(a => a.Status == AiActionStatus.Pending),
+                g.Count(a => a.Status == AiActionStatus.Applied && a.InBulk)))
             .OrderBy(r => SourceOrder(r.Source))
             .ToList();
 
@@ -95,8 +113,8 @@ public sealed class AiActionService(
     /// <summary>Tüm öneriler için kaynağa göre kabul/red sayıları ve kabul oranı (Deneyler sayfası, RQ4).</summary>
     public async Task<IReadOnlyList<SourceAcceptance>> GetAcceptanceBySourceAsync(CancellationToken ct)
     {
-        var rows = await db.AiActions.AsNoTracking().Select(a => new { a.Source, a.Status }).ToListAsync(ct);
-        return SourceAcceptance.Compute(rows.Select(r => (r.Source, r.Status)));
+        var rows = await db.AiActions.AsNoTracking().Select(a => new { a.Source, a.Status, a.DecidedInBulk }).ToListAsync(ct);
+        return SourceAcceptance.Compute(rows.Select(r => (r.Source, r.Status, r.DecidedInBulk)));
     }
 
     private async Task<AiActionSource> ResolveSourceAsync(ChatSession session, string toolName, JsonElement input, CancellationToken ct)
@@ -131,14 +149,18 @@ public sealed class AiActionService(
             .ExecuteUpdateAsync(s => s.SetProperty(a => a.ChatMessageId, messageId), ct);
     }
 
-    public async Task<AiActionResponse> ApplyAsync(int actionId, CancellationToken ct)
+    public Task<AiActionResponse> ApplyAsync(int actionId, CancellationToken ct) => ApplyAsync(actionId, inBulk: false, ct);
+
+    private async Task<AiActionResponse> ApplyAsync(int actionId, bool inBulk, CancellationToken ct)
     {
         var action = await db.AiActions.FirstOrDefaultAsync(a => a.Id == actionId, ct)
             ?? throw new NotFoundException("Öneri", actionId);
         if (action.Status != AiActionStatus.Pending)
             throw new BusinessRuleException("Bu öneri zaten karara bağlanmış.");
 
-        var session = await FindSessionAsync(action.ChatSessionId, ct);
+        var session = await FindSessionAsync(action.ChatSessionId
+            ?? throw new BusinessRuleException("Önerinin sohbeti silinmiş."), ct);
+        action.DecidedInBulk = inBulk;
         try
         {
             action.ResultMessage = await ExecuteAsync(session, action, ct);
@@ -155,7 +177,10 @@ public sealed class AiActionService(
         return AiActionResponse.From(action);
     }
 
-    /// <summary>Sohbetteki tüm bekleyen önerileri mantıklı sırayla (proje → kişi → iş → bağımlılık) uygular.</summary>
+    /// <summary>
+    /// Sohbetteki tüm bekleyen önerileri mantıklı sırayla (proje → kişi → iş → bağımlılık) uygular. Bu yolla karara bağlanan
+    /// kartlar <see cref="AiAction.DecidedInBulk"/> ile işaretlenir (RQ4 kabul oranında ayrı gösterilir).
+    /// </summary>
     public async Task<IReadOnlyList<AiActionResponse>> ApplyAllPendingAsync(int sessionId, CancellationToken ct)
     {
         var pending = await db.AiActions.AsNoTracking()
@@ -169,7 +194,7 @@ public sealed class AiActionService(
                      .OrderBy(a => AiTools.ApplyOrder(a.ToolName))
                      .ThenBy(a => HasParent(a.PayloadJson))
                      .ThenBy(a => a.Id))
-            results.Add(await ApplyAsync(a.Id, ct));
+            results.Add(await ApplyAsync(a.Id, inBulk: true, ct));
         return results;
     }
 
@@ -249,7 +274,12 @@ public sealed class AiActionService(
             case AiTools.RemoveWorkItem:
             {
                 var p = Parse<RemoveWorkItemPayload>(input);
-                return $"İşi sil: {await WorkItemNameAsync(session, p.WorkItemId, ct)}";
+                var name = await WorkItemNameAsync(session, p.WorkItemId, ct);
+                // Baseline'da ilerlemesi olan iş silinmez, iptal edilir (D27); kart bunu açıkça söyler.
+                return await workItems.PreviewDeleteAsync(session.ProjectId!.Value, p.WorkItemId, ct) == WorkItemRemoval.Cancelled
+                    ? $"İşi iptal et (silinmez): {name} · baseline'da ve ilerlemesi/harcaması var; bitmemiş kısmı kapsamdan çıkarılır, " +
+                      "harcanan saat korunur"
+                    : $"İşi sil: {name}";
             }
             case AiTools.AddDependency:
             {
@@ -389,8 +419,9 @@ public sealed class AiActionService(
             case AiTools.RemoveWorkItem:
             {
                 var p = Parse<RemoveWorkItemPayload>(input);
-                await workItems.DeleteAsync(projectId, p.WorkItemId, ct);
-                return "İş silindi.";
+                return await workItems.DeleteAsync(projectId, p.WorkItemId, ct) == WorkItemRemoval.Cancelled
+                    ? "İş iptal edildi (baseline'da ve ilerlemesi olduğu için silinmedi; kapsam dışı sayılır)."
+                    : "İş silindi.";
             }
             case AiTools.AddDependency:
             {

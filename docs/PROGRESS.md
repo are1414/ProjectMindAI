@@ -4,6 +4,67 @@ Her oturum sonunda en üste yeni kayıt eklenir. Format: yapılanlar · varsayı
 
 ---
 
+## 2026-10-08 (21) — Ekip turu 4a: hata düzeltmeleri
+
+Kapsam: `docs/team/ANALIZ.md` → "Tur 4a — hatalar" (H1–H6), kanıtlar TEST_PAZAR Q1, Q2, Q5, Q6, Q8, Q10, Q12 ve ANALIZ madde 1–2.
+Tur 4b (demo) başlatılmadı.
+
+- **H1 — Biten projede SPI(t)** (`EarnedValue.cs`, `ProjectStatusService.cs`): `EvmProgress.CompletedOn` eklendi. EV ≥ BAC olunca
+  AT, kalan işlerin en geç tamamlanma gününde donar (SPI(t) = PD / gerçek süre, tahmini bitiş = tamamlanma günü). Tamamlanma günü
+  `StatusUpdate` geçmişinden: son kesintisiz Bitti/%100 dizisinin ilk günü (`EarnedValue.CompletedOn`; Bitti işe sonradan saat
+  girilmesi günü değiştirmez). Snapshot'a doğru `SpiTime` yazılır.
+- **H2 — Silme → iptal** (`WorkItemService.DeleteAsync/PreviewDeleteAsync`, `AiActionService`, `AiTools`): son baseline'da olup
+  kendisinin/alt işinin ilerlemesi veya harcanan saati olan iş silinmez; bitmemiş işler İptal'e çevrilir (Bitti işler kalır,
+  hepsi bitmişse Türkçe hata → kart oluşmaz). Kart metni: "İşi iptal et (silinmez): B · baseline'da ve ilerlemesi/harcaması var;
+  …", sonuç "İş iptal edildi (… silinmedi; kapsam dışı sayılır)." İlerlemesi olmayan iş yine silinir; baseline'da olup projede
+  olmayan iş `ProjectStatusService`'te iptal gibi kapsam dışı sayılır (`DescopedHours`, kapsam büyümesi de buna göre). Karar D27.
+- **H3 — NumberGuard** (`NumberGuard.cs`): kanıttaki virgüllü sayı Türkçe ondalık ("0,87" artık 87 değil), "[" ile başlayan
+  virgüllü dizi JSON listesi (`[8,16,24]` → 8, 16, 24; eskiden 81624 oluyordu), "1.250.000"/"250.000" hem JSON hem Türkçe okunur.
+  "bin/milyon/milyar" çarpanları cevapta ve kanıtta tanınır; "1,2 milyon" ↔ 1.200.000, "1,3 milyon" ↔ 1.250.000 (birime yuvarlama);
+  çarpanlı sayı ≤ 10 muafiyetine girmez ("2 milyon" kontrol edilir). D23 testleri yeşil.
+- **H4 — RQ4 veri bütünlüğü** (`AiAction`, `Configurations`, `ChatService`, `AiActionService`, `Experiments.razor`, migration):
+  geçmiş temizlenince yalnız bekleyen kartlar silinir, karara bağlananlar kalır (`ChatMessageId = null`); sohbet silinince
+  `ChatSessionId = null` (FK `SET NULL`). `ApplyAllPendingAsync` kartları `DecidedInBulk = true` işaretler. `SourceAcceptance`:
+  `AppliedInBulk` + `IndividualAcceptanceRate`; Deneyler tablosunda "Toplu uygulanan" ve "Kabul oranı (tek tek)" sütunları. Karar D28.
+- **H5 — Hibrit tekrar eleme** (`HybridMissingWork`, `LlmMissingWorkSchema`, `MissingWorkService`, `ChatService`,
+  `ReadOnlyToolHandler`): tek anlamlı kelimelik ad yalnız tam eşitlikte eler ("Test" ≠ "Güvenlik testi", "API" ≠ "API
+  dokümantasyonu"); kök eşleşmesinde ek en çok 4 harf ("veri" ≠ "veritabanı", "test" ~ "testleri"). Üst sınırı aşan öneri
+  `DroppedSuggestion(DuplicateOf = null, OverLimit)` olarak kayda girer. 10'dan fazla madde cevabı geçersiz kılmaz: ilk 10 okunur,
+  kesilen sayı `Truncated` (kayıtta `SchemaValid = false`). Kısayol cevabı: "Tekrar sayılıp elenen AI önerileri (n): X (≈ Y)" ve
+  "Üst sınır nedeniyle gösterilmeyen AI önerisi: n (…)"; araç çıktısında `aiLayer.droppedAsDuplicate / notShownOverLimit /
+  truncatedCount`; `ResultJson`'a `truncated`.
+- **H6** — `IChatModel.ProviderKey` ("Gemini/model", "Claude/model", "mock"); yorum önbelleği özeti
+  `tür | prompt sürümü | sağlayıcı/model | girdi`. BAC = 0 (tüm kapsam iptal) iken SPI/SPI(t)/CPI/EAC null → Durum kartında "—".
+- **DB**: yeni migration `20261008172727_PreserveAiActionsAndBulkDecision` (AiActions.ChatSessionId nullable + FK SET NULL,
+  `DecidedInBulk bit not null default 0`). Eski migration'lar değişmedi; `has-pending-model-changes` → "No changes".
+- **Testler 249/249** (213'ten +36): EVM birim 5 (zamanında bitiş → 1, 2 gün geç → 5/7 = 0,71 ve sabit kalır, iptalli bitiş → 1,
+  tamamlanma günü, BAC = 0 → CPI null), durum entegrasyonu 3 (AT donar + snapshot, silme kartı → iptal + AC korunur, silinen
+  baseline işi kapsam dışı), NumberGuard 17 (Türkçe kanıt 7 + 2 negatif, çarpan 6 + 3 negatif), kabul oranı 1 (2 tek + 1 red +
+  3 toplu → 5/6 ve 2/3) + entegrasyon 1 (temizle/sil sonrası sayılar aynı, toplu bayrak), hibrit 8 yeni ad vakası + kesme + cevap
+  metni, önbellek sağlayıcı 1. `dotnet build` 0 uyarı.
+- **Bilerek değişen test beklentileri**: `IsSameWork("Test", "Güvenlik testi")` true → false (H5 kuralı); Filter testinde üst sınır
+  önerisi artık `Dropped`'ta; "çok madde → geçersiz" testi "kesilir" testine dönüştü; "87 bin TL" artık "87 bin" olarak işaretlenir
+  (çarpan okunuyor, değer yine doğrulanamıyor); geçmiş temizleme / proje+sohbet silme testleri artık karara bağlanmış kartların
+  kaldığını doğruluyor (H4).
+
+**Varsayımlar**: "İlerleme/harcama var" = %tamamlanma > 0, harcanan saat > 0 veya Bitti (yalnız son baseline'daki işler için).
+İptal edilen alt ağaçta Bitti işler korunur (iptal EV'yi silerdi). Tamamlanma günü plan başlangıcından önceyse tutarsız kayıt
+sayılıp durum günü kullanılır. Kanıtta tek gruplu "1.500" hem 1,5 hem 1500 kabul edilir (biraz gevşek, Türkçe metin kanıtı için
+gerekli). Kök eki sınırı 4 harf seçildi (Q6 ≤ 3 önermişti; Türkçe çoğul+iyelik "leri" kaçmasın). Gemini'nin otomatik yedek modele
+geçmesi önbellek anahtarını değiştirmez (ayarlı model esas).
+
+**Bilinen sorunlar**: NumberGuard yön kelimeleri (geride/ileride, erken/geç) ve ≤ 10 tam sayılar (gün/kişi birimi) bu turda yok
+(TEST_PAZAR Q3/Q4). Migration SQL Server'da çalıştırılmadı (yalnız SQLite testleri); FK `SET NULL` ChatSessions → AiActions tek
+basamaklı yol (ChatMessages → AiActions NO ACTION) olduğu için çoklu cascade hatası beklenmiyor. Sohbetsiz kalan kartlar bir
+projeye bağlanamıyor (AiAction'da ProjectId yok). Kapsam tamamen iptalken ayrı "bilgi" uyarısı yok (Fikir Havuzu). Q8'deki büyüklük
+harf duyarlılığı ve "(M)" gösterimi bu turda değişmedi. Arayüz değişikliği (Deneyler sütunları) SQL Server olmadan tarayıcıda
+görülemedi; bileşen derleniyor.
+
+**Sıradaki adım**: Tur 4b — demo projesi "Mobile Banking Modernization" (ANALIZ madde 3) ve snapshot'a ML olasılığı/tahmini
+(madde 4, migration).
+
+---
+
 ## 2026-10-08 (20) — Ekip turu 3: hibrit eksik iş önerisi
 
 Kapsam: `docs/team/ANALIZ.md` → "Lider kararları ve Tur 3 kapsamı": madde 6 (lider kararları 1–5 aynen). Ollama bu turda yok.

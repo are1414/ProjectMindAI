@@ -6,6 +6,9 @@ using ProjectMind.Domain.Enums;
 
 namespace ProjectMind.Application.WorkItems;
 
+/// <summary>Silme isteğinin sonucu: silindi ya da (baseline'da ilerlemesi olduğu için) iptal edildi.</summary>
+public enum WorkItemRemoval { Deleted, Cancelled }
+
 public sealed class WorkItemService(IAppDbContext db, TimeProvider? clock = null)
 {
     private const int FullyComplete = 100;
@@ -47,12 +50,47 @@ public sealed class WorkItemService(IAppDbContext db, TimeProvider? clock = null
         return WorkItemResponse.From(item);
     }
 
-    /// <summary>İşi, tüm alt işlerini ve bunlara ait bağımlılıkları siler.</summary>
-    public async Task DeleteAsync(int projectId, int id, CancellationToken ct)
+    /// <summary>
+    /// Silme isteği ne yapacak? İş veya alt işlerinden biri son baseline'da ve ilerlemesi / harcanan saati varsa iş silinmez,
+    /// iptal edilir (silinirse baseline satırı hiç kazanılamaz ve ilerleme geçmişi kaybolur, D27). İptal edilecek bitmemiş iş
+    /// yoksa (hepsi tamamlanmış) Türkçe hata verir. Veri değiştirmez (öneri kartı için).
+    /// </summary>
+    public async Task<WorkItemRemoval> PreviewDeleteAsync(int projectId, int id, CancellationToken ct) =>
+        (await PlanDeleteAsync(projectId, id, ct)).Removal;
+
+    private async Task<(WorkItemRemoval Removal, HashSet<int> Subtree, List<WorkItem> Open)> PlanDeleteAsync(
+        int projectId, int id, CancellationToken ct)
     {
-        await FindAsync(projectId, id, ct);
-        var parents = await ParentMapAsync(projectId, ct);
-        var subtree = WorkItemTree.SubtreeIds(parents, id);
+        var target = await FindAsync(projectId, id, ct);
+        var subtree = WorkItemTree.SubtreeIds(await ParentMapAsync(projectId, ct), id);
+        if (!await HasBaselinedProgressAsync(projectId, subtree, ct))
+            return (WorkItemRemoval.Deleted, subtree, []);
+
+        var open = await db.WorkItems
+            .Where(w => subtree.Contains(w.Id) && w.Status != WorkItemStatus.Done && w.Status != WorkItemStatus.Cancelled)
+            .ToListAsync(ct);
+        if (open.Count == 0)
+            throw new BusinessRuleException(
+                $"'{target.Name}' baseline'da ve tamamlanmış; ilerleme geçmişi korunmak için silinmez veya iptal edilmez.");
+        return (WorkItemRemoval.Cancelled, subtree, open);
+    }
+
+    /// <summary>
+    /// İşi, tüm alt işlerini ve bunlara ait bağımlılıkları siler. İş baseline'da ve ilerlemesi/harcaması varsa silinmez;
+    /// bitmemiş işler (alt işler dahil) İptal'e çevrilir ve kapsam dışı sayılır (D24, D27). Bitti işler olduğu gibi kalır.
+    /// </summary>
+    public async Task<WorkItemRemoval> DeleteAsync(int projectId, int id, CancellationToken ct)
+    {
+        var (removal, subtree, open) = await PlanDeleteAsync(projectId, id, ct);
+        if (removal == WorkItemRemoval.Cancelled)
+        {
+            foreach (var item in open)
+                item.Status = WorkItemStatus.Cancelled;
+            await db.SaveChangesAsync(ct);
+            foreach (var item in open)
+                await RecordProgressAsync(item, ct);
+            return WorkItemRemoval.Cancelled;
+        }
 
         // Tek kayıtta: önce bağımlılıklar, sonra işler. EF kendine referanslı kayıtları doğru sırada
         // (önce alt işler) siler ve bellekteki kayıtları da günceller.
@@ -63,6 +101,19 @@ public sealed class WorkItemService(IAppDbContext db, TimeProvider? clock = null
         var items = await db.WorkItems.Where(w => subtree.Contains(w.Id)).ToListAsync(ct);
         db.WorkItems.RemoveRange(items);
         await db.SaveChangesAsync(ct);
+        return WorkItemRemoval.Deleted;
+    }
+
+    private async Task<bool> HasBaselinedProgressAsync(int projectId, IReadOnlyCollection<int> ids, CancellationToken ct)
+    {
+        var baselineId = await db.Baselines.Where(b => b.ProjectId == projectId)
+            .OrderByDescending(b => b.Id).Select(b => (int?)b.Id).FirstOrDefaultAsync(ct);
+        if (baselineId is null)
+            return false;
+        var baselined = await db.Baselines.Where(b => b.Id == baselineId)
+            .SelectMany(b => b.Items).Select(i => i.WorkItemId).Where(w => ids.Contains(w)).Distinct().ToListAsync(ct);
+        return await db.WorkItems.AnyAsync(w => baselined.Contains(w.Id)
+            && (w.PercentComplete > 0 || w.ActualHours > 0 || w.Status == WorkItemStatus.Done), ct);
     }
 
     /// <summary>İlerleme geçmişi (EVM trendi ve ML veri seti için).</summary>

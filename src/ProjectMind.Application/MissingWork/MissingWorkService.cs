@@ -43,7 +43,15 @@ public sealed record HybridMissingWorkResult(
     IReadOnlyList<DroppedSuggestion> Dropped,
     IReadOnlyList<string> UnverifiedNumbers,
     MissingWorkImpact? Impact,
-    string? LlmModel = null);
+    string? LlmModel = null,
+    int LlmTruncated = 0)
+{
+    /// <summary>Tekrar sayılıp elenen LLM önerileri (cevapta ve denetim kaydında gösterilir).</summary>
+    public IReadOnlyList<DroppedSuggestion> Duplicates => Dropped.Where(d => !d.OverLimit).ToList();
+
+    /// <summary>Tekrar değil ama üst sınır (MaxLlmSuggestions) dolduğu için gösterilmeyen LLM önerileri.</summary>
+    public IReadOnlyList<DroppedSuggestion> OverLimit => Dropped.Where(d => d.OverLimit).ToList();
+}
 
 public sealed class MissingWorkService(
     ProjectOverviewService overviews,
@@ -79,7 +87,8 @@ public sealed class MissingWorkService(
 
         var llm = await RunLlmLayerAsync(overview, rule, chatSessionId, ct);
         var impact = await ImpactAsync(projectId, overview, rule, llm.Kept, ct);
-        return new HybridMissingWorkResult(rule, llm.Kept, llm.Status, llm.Message, llm.Dropped, llm.Unverified, impact, llm.Model);
+        return new HybridMissingWorkResult(rule, llm.Kept, llm.Status, llm.Message, llm.Dropped, llm.Unverified, impact, llm.Model,
+            llm.Truncated);
     }
 
     /// <summary>Projede en son başarılı LLM katmanı çağrısının önerdiği iş adları (kart kaynağını belirlemek için).</summary>
@@ -106,10 +115,14 @@ public sealed class MissingWorkService(
 
     private sealed record LlmLayerOutcome(
         IReadOnlyList<LlmMissingWorkItem> Kept, IReadOnlyList<DroppedSuggestion> Dropped, LlmLayerStatus Status,
-        string? Message, IReadOnlyList<string> Unverified, string? Model = null);
+        string? Message, IReadOnlyList<string> Unverified, string? Model = null, int Truncated = 0);
 
-    /// <summary>Denetim kaydında saklanan doğrulanmış LLM sonucu (ResultJson).</summary>
-    private sealed record StoredLlmResult(IReadOnlyList<LlmMissingWorkItem> Kept, IReadOnlyList<DroppedSuggestion> Dropped, int DroppedInvalid);
+    /// <summary>
+    /// Denetim kaydında saklanan doğrulanmış LLM sonucu (ResultJson): kalanlar, elenenler (tekrar: duplicateOf dolu; üst sınır:
+    /// overLimit), şema dışı düşen ve sınır aşımıyla kesilen madde sayıları.
+    /// </summary>
+    private sealed record StoredLlmResult(
+        IReadOnlyList<LlmMissingWorkItem> Kept, IReadOnlyList<DroppedSuggestion> Dropped, int DroppedInvalid, int Truncated = 0);
 
     private async Task<LlmLayerOutcome> RunLlmLayerAsync(
         ProjectOverview overview, MissingWorkResult rule, int? chatSessionId, CancellationToken ct)
@@ -152,13 +165,14 @@ public sealed class MissingWorkService(
                 var unverified = NumberGuard.FindUnverified(
                     string.Join("\n", kept.Select(k => $"{k.Name}\n{k.Reason}")), input);
                 log.Outcome = AiAnalysisOutcome.Success;
-                log.SchemaValid = parsed.DroppedInvalid == 0;
+                log.SchemaValid = parsed.DroppedInvalid == 0 && parsed.Truncated == 0;
                 log.UnverifiedNumberCount = unverified.Count;
                 log.UnverifiedNumbers = unverified.Count == 0
                     ? null
                     : Truncate(JsonSerializer.Serialize(unverified, AiJson.Options), MaxUnverifiedLength);
-                log.ResultJson = JsonSerializer.Serialize(new StoredLlmResult(kept, dropped, parsed.DroppedInvalid), AiJson.Options);
-                outcome = new LlmLayerOutcome(kept, dropped, LlmLayerStatus.Success, null, unverified, answer.Model);
+                log.ResultJson = JsonSerializer.Serialize(
+                    new StoredLlmResult(kept, dropped, parsed.DroppedInvalid, parsed.Truncated), AiJson.Options);
+                outcome = new LlmLayerOutcome(kept, dropped, LlmLayerStatus.Success, null, unverified, answer.Model, parsed.Truncated);
             }
         }
         catch (ChatModelException ex)

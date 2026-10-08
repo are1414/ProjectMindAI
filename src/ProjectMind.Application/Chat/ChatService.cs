@@ -74,7 +74,7 @@ public sealed class ChatService(
     }
 
     /// <summary>
-    /// Sohbeti siler (mesajlar ve AI önerileri dahil). deleteProject true ise bağlı proje ve tüm verisi de silinir.
+    /// Sohbeti siler (mesajlar ve bekleyen AI önerileri dahil; karara bağlanmış öneriler sohbetsiz kalır). deleteProject true ise bağlı proje ve tüm verisi de silinir.
     /// Projeye bağlı bir sohbet, proje silinmeden kaldırılamaz (proje listede görünmez olurdu); onun için ClearHistoryAsync.
     /// </summary>
     public async Task DeleteSessionAsync(int sessionId, bool deleteProject, CancellationToken ct)
@@ -90,10 +90,15 @@ public sealed class ChatService(
         }
 
         await RemoveHistoryAsync(sessionId, ct);
+        await db.AiActions.Where(a => a.ChatSessionId == sessionId)
+            .ExecuteUpdateAsync(u => u.SetProperty(a => a.ChatSessionId, (int?)null), ct);
         await db.ChatSessions.Where(s => s.Id == sessionId).ExecuteDeleteAsync(ct);
     }
 
-    /// <summary>Sohbet geçmişini (mesajlar ve AI önerileri) siler; sohbet ve bağlı proje kalır.</summary>
+    /// <summary>
+    /// Sohbet geçmişini (mesajlar ve bekleyen AI önerileri) siler; sohbet ve bağlı proje kalır. Karara bağlanmış öneriler
+    /// (uygulandı / reddedildi / hata) RQ4 kabul verisi olarak kalır, mesaj bağlantısı boşaltılır.
+    /// </summary>
     public async Task ClearHistoryAsync(int sessionId, CancellationToken ct)
     {
         if (!await db.ChatSessions.AnyAsync(s => s.Id == sessionId, ct))
@@ -103,8 +108,10 @@ public sealed class ChatService(
 
     private async Task RemoveHistoryAsync(int sessionId, CancellationToken ct)
     {
-        // Öneriler mesajlara NO ACTION ile bağlı; önce öneriler, sonra mesajlar silinir.
-        await db.AiActions.Where(a => a.ChatSessionId == sessionId).ExecuteDeleteAsync(ct);
+        // Öneriler mesajlara NO ACTION ile bağlı: önce bekleyenler silinir, kalanların mesaj bağlantısı boşaltılır, sonra mesajlar.
+        await db.AiActions.Where(a => a.ChatSessionId == sessionId && a.Status == AiActionStatus.Pending).ExecuteDeleteAsync(ct);
+        await db.AiActions.Where(a => a.ChatSessionId == sessionId && a.ChatMessageId != null)
+            .ExecuteUpdateAsync(u => u.SetProperty(a => a.ChatMessageId, (int?)null), ct);
         await db.ChatMessages.Where(m => m.ChatSessionId == sessionId).ExecuteDeleteAsync(ct);
     }
 
@@ -298,6 +305,15 @@ public sealed class ChatService(
         }
         else if (hybrid.LlmStatus == LlmLayerStatus.Success)
             lines.Add("AI katmanı şablonlar dışında ek eksik iş önermedi.");
+
+        // Elenen AI önerileri görünür olsun (RQ4: LLM katmanının ne önerdiği ve neden gösterilmediği).
+        if (hybrid.Duplicates.Count > 0)
+            lines.Add($"Tekrar sayılıp elenen AI önerileri ({hybrid.Duplicates.Count}): " +
+                      string.Join(", ", hybrid.Duplicates.Select(d => $"{d.Name} (≈ {d.DuplicateOf})")) + ".");
+        var notShown = hybrid.OverLimit.Count + hybrid.LlmTruncated;
+        if (notShown > 0)
+            lines.Add($"Üst sınır nedeniyle gösterilmeyen AI önerisi: {notShown}" +
+                      (hybrid.OverLimit.Count > 0 ? $" ({string.Join(", ", hybrid.OverLimit.Select(d => d.Name))})" : "") + ".");
 
         if (hybrid.LlmMessage is not null)
             lines.Add(hybrid.LlmMessage);

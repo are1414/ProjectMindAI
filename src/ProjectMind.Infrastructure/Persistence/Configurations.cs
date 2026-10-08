@@ -102,8 +102,9 @@ internal sealed class AiActionConfiguration : IEntityTypeConfiguration<AiAction>
         b.Property(a => a.ResultMessage).HasMaxLength(1000);
         b.Property(a => a.Status).HasConversion<string>().HasMaxLength(20);
         b.Property(a => a.Source).HasConversion<string>().HasMaxLength(20);
+        // Sohbet silinince öneri kaydı silinmez (RQ4 kabul verisi); servis karara bağlanmamış önerileri ayrıca siler.
         b.HasOne(a => a.ChatSession).WithMany()
-            .HasForeignKey(a => a.ChatSessionId).OnDelete(DeleteBehavior.Cascade);
+            .HasForeignKey(a => a.ChatSessionId).OnDelete(DeleteBehavior.SetNull);
         b.HasOne<ChatMessage>().WithMany()
             .HasForeignKey(a => a.ChatMessageId).OnDelete(DeleteBehavior.NoAction);
     }

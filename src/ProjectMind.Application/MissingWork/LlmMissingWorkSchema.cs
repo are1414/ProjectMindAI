@@ -6,19 +6,24 @@ namespace ProjectMind.Application.MissingWork;
 /// <summary>LLM katmanının tek bir ek iş önerisi (doğrulanmış). Saat yok: büyüklük sınıfından C# atar.</summary>
 public sealed record LlmMissingWorkSuggestion(string Name, WorkPhase Phase, Skill Skill, string Reason, WorkSize Size);
 
-/// <summary>Doğrulama sonucu: geçerli öneriler ve şemaya uymadığı için düşürülen madde sayısı.</summary>
-public sealed record LlmMissingWorkParseResult(IReadOnlyList<LlmMissingWorkSuggestion> Suggestions, int DroppedInvalid);
+/// <summary>
+/// Doğrulama sonucu: geçerli öneriler, şemaya uymadığı için düşürülen madde sayısı ve <see cref="LlmMissingWorkSchema.MaxItems"/>
+/// sınırını aştığı için okunmayan (kesilen) madde sayısı.
+/// </summary>
+public sealed record LlmMissingWorkParseResult(
+    IReadOnlyList<LlmMissingWorkSuggestion> Suggestions, int DroppedInvalid, int Truncated = 0);
 
 /// <summary>
 /// Hibrit eksik iş LLM katmanının JSON şeması ve C# doğrulayıcısı (CLAUDE.md §3, D26). Şema sağlayıcıya gönderilir;
 /// sağlayıcının zorlamasına güvenilmez, cevap burada yeniden doğrulanır. Üst yapı bozuksa cevabın tamamı geçersizdir;
 /// tek bir madde bozuksa (eksik alan, bilinmeyen faz/beceri/büyüklük, sayı gibi ek alan) yalnız o madde düşer.
+/// Sınırdan fazla madde cevabı geçersiz kılmaz: ilk <see cref="MaxItems"/> madde okunur, kalanı kesilir ve sayısı raporlanır.
 /// </summary>
 public static class LlmMissingWorkSchema
 {
     public const string Name = "missing_work_suggestions";
 
-    /// <summary>Cevaptaki en fazla madde; aşan cevap geçersizdir.</summary>
+    /// <summary>Cevaptan okunan en fazla madde; fazlası kesilir (cevap geçersiz sayılmaz).</summary>
     public const int MaxItems = 10;
 
     public const int MaxNameLength = 120;
@@ -107,15 +112,11 @@ public static class LlmMissingWorkSchema
                 error = $"'{SuggestionsField}' alanı eksik veya liste değil";
                 return null;
             }
-            if (array.GetArrayLength() > MaxItems)
-            {
-                error = $"'{SuggestionsField}' listesinde çok fazla madde var";
-                return null;
-            }
+            var truncated = Math.Max(array.GetArrayLength() - MaxItems, 0);
 
             var suggestions = new List<LlmMissingWorkSuggestion>();
             var dropped = 0;
-            foreach (var item in array.EnumerateArray())
+            foreach (var item in array.EnumerateArray().Take(MaxItems))
             {
                 var parsed = ParseItem(item);
                 if (parsed is null)
@@ -123,7 +124,7 @@ public static class LlmMissingWorkSchema
                 else
                     suggestions.Add(parsed);
             }
-            return new LlmMissingWorkParseResult(suggestions, dropped);
+            return new LlmMissingWorkParseResult(suggestions, dropped, truncated);
         }
     }
 

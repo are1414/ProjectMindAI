@@ -77,7 +77,7 @@ public class ChatServiceTests : ServiceTestBase
     }
 
     [Fact]
-    public async Task Clear_history_keeps_session_and_project_but_removes_messages_and_actions()
+    public async Task Clear_history_keeps_session_and_project_but_removes_messages_and_pending_actions()
     {
         var chat = NewChatService(new ScriptedModel(
             (AiTools.CreateProject, new { name = "P", startDate = "2026-12-01", targetEndDate = "2027-03-31" })));
@@ -88,7 +88,10 @@ public class ChatServiceTests : ServiceTestBase
         await chat.ClearHistoryAsync(session.Id, _ct);
 
         Assert.Empty(await chat.ListMessagesAsync(session.Id, _ct));
-        Assert.Empty(await NewActionService().ListAsync(session.Id, _ct));
+        // Tur 4a H4: karara bağlanmış kart RQ4 verisi olarak kalır, mesaj bağlantısı boşalır (sohbette görünmez).
+        var kept = Assert.Single(await NewActionService().ListAsync(session.Id, _ct));
+        Assert.Equal(AiActionStatus.Applied, kept.Status);
+        Assert.Null(kept.ChatMessageId);
         Assert.NotNull((await chat.GetSessionAsync(session.Id, _ct)).ProjectId);
         Assert.Single(Db.Projects);
     }
@@ -110,7 +113,8 @@ public class ChatServiceTests : ServiceTestBase
 
         Assert.Empty(Db.ChatSessions);
         Assert.Empty(Db.ChatMessages);
-        Assert.Empty(Db.AiActions);
+        // Tur 4a H4: uygulanmış kartlar sohbetsiz kalır (kabul oranı verisi silinmez).
+        Assert.Equal(2, await Db.AiActions.CountAsync(a => a.ChatSessionId == null && a.ChatMessageId == null, _ct));
         Assert.Empty(Db.Projects);
         Assert.Empty(Db.WorkItems);
     }
@@ -243,5 +247,43 @@ public class ChatServiceTests : ServiceTestBase
         Assert.Equal(failed.Id, logs[2].ChatMessageId);
         Assert.Equal(AiAnalysisOutcome.ModelError, logs[2].Outcome);
         Assert.Equal("AI servisine bağlanılamadı.", logs[2].ErrorMessage);
+    }
+
+    [Fact]
+    public async Task Clearing_or_deleting_chat_keeps_acceptance_numbers_and_bulk_flag()
+    {
+        // Tur 4a H4 (ANALIZ madde 2): 1 kart toplu uygulandı (proje), 1 tek tek uygulandı, 1 reddedildi, 1 bekliyor.
+        var chat = NewChatService(new ScriptedModel(
+            (AiTools.CreateProject, new { name = "P", startDate = "2026-12-01", targetEndDate = "2027-03-31" })));
+        var session = await chat.CreateSessionAsync(_ct);
+        await chat.SendAsync(session.Id, "Proje aç", _ct);
+        var bulk = Assert.Single(await NewActionService().ApplyAllPendingAsync(session.Id, _ct));
+
+        var second = NewChatService(new ScriptedModel(
+            (AiTools.AddWorkItem, new { name = "A", phase = "Development", requiredSkill = "Backend", estimatedHours = 8 }),
+            (AiTools.AddWorkItem, new { name = "B", phase = "Development", requiredSkill = "Backend", estimatedHours = 8 }),
+            (AiTools.AddWorkItem, new { name = "C", phase = "Development", requiredSkill = "Backend", estimatedHours = 8 })));
+        await second.SendAsync(session.Id, "İşleri ekle", _ct);
+        var cards = (await NewActionService().ListAsync(session.Id, _ct)).Where(a => a.Status == AiActionStatus.Pending).ToList();
+        Assert.Equal(3, cards.Count);
+        await NewActionService().ApplyAsync(cards[0].Id, _ct);
+        await NewActionService().RejectAsync(cards[1].Id, _ct);
+
+        Assert.True((await Db.AiActions.AsNoTracking().SingleAsync(a => a.Id == bulk.Id, _ct)).DecidedInBulk);
+        Assert.False((await Db.AiActions.AsNoTracking().SingleAsync(a => a.Id == cards[0].Id, _ct)).DecidedInBulk);
+
+        var before = await NewActionService().GetAcceptanceBySourceAsync(_ct);
+        var user = Assert.Single(before);
+        Assert.Equal((4, 2, 1, 1, 1), (user.Total, user.Applied, user.AppliedInBulk, user.Rejected, user.Pending));
+        Assert.Equal(2d / 3, user.AcceptanceRate);              // 2 / (2 + 1)
+        Assert.Equal(0.5, user.IndividualAcceptanceRate);       // 1 / (1 + 1)
+
+        await chat.ClearHistoryAsync(session.Id, _ct);
+        var afterClear = Assert.Single(await NewActionService().GetAcceptanceBySourceAsync(_ct));
+        Assert.Equal(user with { Total = 3, Pending = 0 }, afterClear);   // yalnız bekleyen kart silindi
+
+        await chat.DeleteSessionAsync(session.Id, deleteProject: true, _ct);
+        Assert.Equal(afterClear, Assert.Single(await NewActionService().GetAcceptanceBySourceAsync(_ct)));
+        Assert.Empty(Db.ChatSessions);
     }
 }

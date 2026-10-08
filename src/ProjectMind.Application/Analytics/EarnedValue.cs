@@ -4,7 +4,9 @@ namespace ProjectMind.Application.Analytics;
 
 public sealed record EvmBaselineItem(int WorkItemId, DateOnly Start, DateOnly End, decimal Hours, decimal HourlyCost);
 
-public sealed record EvmProgress(int WorkItemId, int PercentComplete, decimal ActualHours, bool IsDone, bool IsCancelled = false);
+/// <param name="CompletedOn">İşin son kez tamamlandığı gün (ilerleme geçmişinden; bilinmiyorsa null). Biten projede AT'yi dondurur.</param>
+public sealed record EvmProgress(
+    int WorkItemId, int PercentComplete, decimal ActualHours, bool IsDone, bool IsCancelled = false, DateOnly? CompletedOn = null);
 
 public sealed record EvmResult(
     DateOnly StatusDate,
@@ -41,6 +43,9 @@ public sealed record EvmResult(
 /// Para birimi değerleri saat × saatlik maliyetten türetilir. Baseline'da olmayan (sonradan eklenen) işler EV/AC'ye girmez.
 /// Baseline'daki bir iş sonradan iptal edilirse kapsamdan çıkarılır (descope): BAC'den ve PV eğrisinden düşülür,
 /// <see cref="EvmResult.DescopedHours"/> olarak raporlanır; o işe harcanmış saat ise gerçekleşen maliyet olarak AC'de kalır.
+/// Kalan kapsamın tamamı kazanıldıysa (EV ≥ BAC) AT, tamamlanma gününde dondurulur (standart ES: SPI(t) = PD / gerçek süre);
+/// tamamlanma günü, kalan işlerin <see cref="EvmProgress.CompletedOn"/> değerlerinin en geç olanıdır (biri bilinmiyorsa durum günü).
+/// Kapsamın tamamı iptal edildiyse (BAC = 0) SPI, SPI(t), CPI ve EAC anlamsızdır: null döner.
 /// </summary>
 public static class EarnedValue
 {
@@ -95,29 +100,63 @@ public static class EarnedValue
             acCost += p.ActualHours * rate;
         }
 
-        decimal? spi = pv > 0 ? Round(ev / pv) : null;
-        decimal? cpi = ac > 0 ? Round(ev / ac) : null;
+        var hasScope = bac > 0;
+        decimal? spi = hasScope && pv > 0 ? Round(ev / pv) : null;
+        decimal? cpi = hasScope && ac > 0 ? Round(ev / ac) : null;
         decimal? eac = cpi is > 0 ? Round(bac / cpi.Value) : null;
 
         decimal? es = null, at = null, spiT = null;
         DateOnly? forecast = null;
-        if (statusIndex >= 0)
+        if (statusIndex >= 0 && hasScope)
         {
-            at = statusIndex + 1;   // geçen iş günü (durum günü dahil)
+            var finished = ev >= bac;
+            // Biten projede gerçek süre tamamlanma gününde durur; aksi halde durum gününe kadar geçen iş günü (dahil).
+            var atIndex = statusIndex;
+            // Plan başlangıcından önceki bir tamamlanma günü tutarsız kayıttır (saat farkı vb.): yok sayılır.
+            if (finished && CompletionDate(active, progressById) is { } completed
+                && completed < statusDate && completed >= calendar.FirstDay)
+                atIndex = WorkCalendar.WorkdaysBetween(calendar.FirstDay, completed);
+            at = atIndex + 1;
             es = EarnedScheduleDays(curve, ev);
-            spiT = at > 0 ? Round(es.Value / at.Value) : null;
-            if (ev >= bac && bac > 0)
-                forecast = calendar.ToDate(Math.Max((int)Math.Ceiling(at.Value) - 1, 0));   // iş bitti: bugün
+            spiT = Round(es.Value / at.Value);
+            if (finished)
+                forecast = calendar.ToDate(atIndex);   // iş bitti: tamamlanma günü
             else if (spiT is > 0)
                 forecast = calendar.ToDate(Math.Max((int)Math.Ceiling(days / spiT.Value) - 1, 0));
         }
 
         var bacCost = active.Sum(b => b.Hours * b.HourlyCost);
-        decimal? costCpi = acCost > 0 ? evCost / acCost : null;
+        decimal? costCpi = hasScope && acCost > 0 ? evCost / acCost : null;
         decimal? eacCost = costCpi is > 0 ? Math.Round(bacCost / costCpi.Value, 0) : null;
 
         return new EvmResult(statusDate, bac, Round(pv), Round(ev), Round(ac), spi, cpi, es is null ? null : Round(es.Value),
             at, spiT, eac, days, calendar.FirstDay, plannedFinish, forecast, bacCost, eacCost, curve, descoped);
+    }
+
+    /// <summary>Kalan kapsamdaki işlerin en geç tamamlanma günü; herhangi birinin günü bilinmiyorsa null.</summary>
+    private static DateOnly? CompletionDate(IEnumerable<EvmBaselineItem> active, IReadOnlyDictionary<int, EvmProgress> progress)
+    {
+        DateOnly? latest = null;
+        foreach (var id in active.Select(b => b.WorkItemId).Distinct())
+        {
+            if (!progress.TryGetValue(id, out var p) || p.CompletedOn is not { } day)
+                return null;
+            if (latest is null || day > latest)
+                latest = day;
+        }
+        return latest;
+    }
+
+    /// <summary>
+    /// İlerleme geçmişinden (eskiden yeniye) işin son tamamlanma günü: tamamlanmış (Bitti veya %100) son kesintisiz kayıt
+    /// dizisinin ilk günü. Son kayıt tamamlanmış değilse null. Bitti işe sonradan saat girilmesi günü değiştirmez.
+    /// </summary>
+    public static DateOnly? CompletedOn(IEnumerable<(DateOnly Date, bool Complete)> history)
+    {
+        DateOnly? since = null;
+        foreach (var (date, complete) in history)
+            since = complete ? since ?? date : null;
+        return since;
     }
 
     /// <summary>PV eğrisinde EV'ye ulaşılan zaman: tam gün sayısı + kesirli kısım (doğrusal ara değer).</summary>

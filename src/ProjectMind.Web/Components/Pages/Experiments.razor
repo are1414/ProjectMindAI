@@ -123,8 +123,11 @@
             <table class="table table-compact">
                 <thead>
                     <tr>
-                        <th>Kaynak</th><th class="num">Toplam</th><th class="num">Uygulandı</th><th class="num">Reddedildi</th>
-                        <th class="num">Hata</th><th class="num">Bekliyor</th><th class="num">Kabul oranı</th>
+                        <th>Kaynak</th><th class="num">Toplam</th><th class="num">Uygulandı</th>
+                        <th class="num" title="'Hepsini uygula' ile kartlara tek tek bakılmadan uygulananlar">Toplu uygulanan</th>
+                        <th class="num">Reddedildi</th><th class="num">Hata</th><th class="num">Bekliyor</th>
+                        <th class="num">Kabul oranı</th>
+                        <th class="num" title="Toplu uygulananlar hariç: tek tek uygulanan / (tek tek uygulanan + reddedilen)">Kabul oranı (tek tek)</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -134,10 +137,12 @@
                             <td>@Format.Name(a.Source)</td>
                             <td class="num">@a.Total</td>
                             <td class="num">@a.Applied</td>
+                            <td class="num">@a.AppliedInBulk</td>
                             <td class="num">@a.Rejected</td>
                             <td class="num">@a.Failed</td>
                             <td class="num">@a.Pending</td>
-                            <td class="num">@(a.AcceptanceRate is { } rate ? "%" + Format.Number((decimal)Math.Round(rate * 100, 1)) : "—")</td>
+                            <td class="num">@Rate(a.AcceptanceRate)</td>
+                            <td class="num">@Rate(a.IndividualAcceptanceRate)</td>
                         </tr>
                     }
                 </tbody>
@@ -147,6 +152,8 @@
 </div>
 
 @code {
+    private static string Rate(double? rate) => rate is { } r ? "%" + Format.Number((decimal)Math.Round(r * 100, 1)) : "—";
+
     private static readonly System.Globalization.CultureInfo Tr = System.Globalization.CultureInfo.GetCultureInfo("tr-TR");
     private DelayExperimentReport? _report;
     private bool _running;

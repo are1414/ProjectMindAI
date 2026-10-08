@@ -33,6 +33,8 @@ public sealed class ProjectStatusService(
     IAppDbContext db, ScheduleService schedules, TimeProvider clock, IOptions<HealthOptions> options,
     IDelayPredictor predictor)
 {
+    private const int FullPercent = 100;
+
     public async Task<ProjectStatusReport> GetAsync(int projectId, CancellationToken ct)
     {
         var o = options.Value;
@@ -48,11 +50,16 @@ public sealed class ProjectStatusService(
         decimal scopeGrowth = 0;
         if (baseline is { Items.Count: > 0 })
         {
+            var completedOn = await CompletionDatesAsync(projectId, ct);
+            var progress = overview.WorkItems.Select(w => new EvmProgress(w.Id, w.PercentComplete, w.ActualHours,
+                w.Status == WorkItemStatus.Done, w.Status == WorkItemStatus.Cancelled, completedOn.GetValueOrDefault(w.Id))).ToList();
+            // Baseline'da olup artık projede olmayan (silinmiş) iş kapsam dışı sayılır — iptal ile aynı (D27).
+            var existing = progress.Select(p => p.WorkItemId).ToHashSet();
+            progress.AddRange(baseline.Items.Select(i => i.WorkItemId).Distinct().Where(id => !existing.Contains(id))
+                .Select(id => new EvmProgress(id, 0, 0, false, IsCancelled: true)));
             evm = EarnedValue.Compute(
                 baseline.Items.Select(i => new EvmBaselineItem(i.WorkItemId, i.PlannedStart, i.PlannedEnd, i.Hours, i.HourlyCost)).ToList(),
-                overview.WorkItems.Select(w => new EvmProgress(w.Id, w.PercentComplete, w.ActualHours,
-                    w.Status == WorkItemStatus.Done, w.Status == WorkItemStatus.Cancelled)).ToList(),
-                today);
+                progress, today);
             // Kapsam büyümesi, iptal edilen (kapsamdan çıkarılan) baseline işleri düşüldükten sonraki baseline'a göre ölçülür.
             var current = leaves.Sum(w => w.EstimatedHours);
             var baselineScope = baseline.TotalHours - evm.DescopedHours;
@@ -107,6 +114,19 @@ public sealed class ProjectStatusService(
 
         return new ProjectStatusReport(overview, today, preview.LatestBaseline, evm, health, alerts, scopeGrowth, preview.Plan, history,
             features, delay);
+    }
+
+    /// <summary>Her işin son tamamlanma günü (ilerleme geçmişinden; bkz. <see cref="EarnedValue.CompletedOn"/>).</summary>
+    private async Task<Dictionary<int, DateOnly?>> CompletionDatesAsync(int projectId, CancellationToken ct)
+    {
+        var updates = await db.StatusUpdates.AsNoTracking()
+            .Where(u => u.ProjectId == projectId)
+            .OrderBy(u => u.Date).ThenBy(u => u.Id)
+            .Select(u => new { u.WorkItemId, u.Date, u.Status, u.PercentComplete })
+            .ToListAsync(ct);
+        return updates.GroupBy(u => u.WorkItemId).ToDictionary(g => g.Key,
+            g => EarnedValue.CompletedOn(g.Select(u =>
+                (u.Date, u.Status == WorkItemStatus.Done || u.PercentComplete >= FullPercent))));
     }
 
     private async Task UpsertSnapshotAsync(int projectId, DateOnly today, Baseline? baseline, EvmResult? evm, HealthResult health,

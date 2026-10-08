@@ -141,6 +141,20 @@ public class ProjectCommentServiceTests : ServiceTestBase
     }
 
     [Fact]
+    public async Task Cached_comment_belongs_to_the_provider_that_generated_it()
+    {
+        // Tur 4a H6 (TEST_PAZAR Q10): Gemini'nin yorumu, sağlayıcı Claude'a geçince "kaydedilmiş yorum" olarak açılmaz.
+        var status = await SeedStatusAsync(Nov4);
+        await NewService(new ScriptedJsonModel(_ => Comment("Gemini yorumu", [], []), providerKey: "Gemini/g"))
+            .GenerateProjectCommentAsync(status, _ct);
+
+        Assert.NotNull(await NewService(new ScriptedJsonModel(_ => "{}", providerKey: "Gemini/g")).FindProjectCommentAsync(status, _ct));
+        Assert.Null(await NewService(new ScriptedJsonModel(_ => "{}", providerKey: "Claude/c")).FindProjectCommentAsync(status, _ct));
+        Assert.NotEqual(ProjectCommentService.InputHash(AiAnalysisKind.ProjectComment, "x", "Gemini/g"),
+            ProjectCommentService.InputHash(AiAnalysisKind.ProjectComment, "x", "Claude/c"));
+    }
+
+    [Fact]
     public async Task Mock_mode_only_warns_and_does_not_call_model_or_log()
     {
         var status = await SeedStatusAsync(Nov4);

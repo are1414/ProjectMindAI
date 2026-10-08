@@ -86,6 +86,8 @@ public sealed class ClaudeChatModel(AiOptions options, ILogger<ClaudeChatModel> 
 
     public bool IsConfigured => true;
 
+    public string ProviderKey => $"{AiOptions.ClaudeProvider}/{options.Claude.Model}";
+
     /// <summary>
     /// Araçsız, yapılandırılmış çıktılı (OutputConfig.Format = JsonOutputFormat) tek çağrı. Metin blokları birleştirilip
     /// olduğu gibi döner; şema doğrulaması çağıranda yapılır.

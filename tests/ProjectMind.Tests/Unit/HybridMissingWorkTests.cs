@@ -11,7 +11,14 @@ public class HybridMissingWorkTests
     [Theory]
     [InlineData("Veritabanı kurulumu", "veritabani KURULUMU", true)]          // Türkçe sadeleştirme + büyük/küçük harf
     [InlineData("Gereksinim analizi", "Detaylı gereksinim analizi", true)]    // kısa adın tüm kelimeleri uzun adda
-    [InlineData("Test", "Güvenlik testi", true)]                             // ortak kök: test ~ testi
+    [InlineData("Birim test", "Birim testleri", true)]                       // ortak kök: test ~ testleri (ek ≤ 4 harf)
+    [InlineData("Güvenlik test", "Güvenlik testi", true)]                    // ortak kök: test ~ testi
+    [InlineData("Test", "test", true)]                                       // tek kelime: tam eşitlik
+    [InlineData("Test", "Güvenlik testi", false)]                            // Tur 4a H5: tek kelimelik ad yalnız tam eşleşmede eler
+    [InlineData("Veri", "Veritabanı yedekleme", false)]
+    [InlineData("API", "API dokümantasyonu", false)]
+    [InlineData("Uygulama", "Uygulama içi bildirim izinleri", false)]
+    [InlineData("Veri modeli", "Veritabanı modeli", false)]                  // "veri" → "veritabani": ek 6 harf, ayrı kelime
     [InlineData("Backend API", "Backend API geliştirmesi", true)]
     [InlineData("Ödeme ve iade akışı", "Ödeme iade akışı", true)]            // bağlaç (ve) yok sayılır
     [InlineData("Yük testi", "Birim testleri", false)]                       // "yük" uzun adda yok
@@ -46,7 +53,7 @@ public class HybridMissingWorkTests
             S("KVKK uyum incelemesi", WorkSize.M),       // kalır → 24 saat
             S("KVKK uyum incelemesi yapılması", WorkSize.S), // az önce kalan öneriyle aynı
             S("Yük testi", WorkSize.L),                  // kalır → 80 saat
-            S("Ödeme sağlayıcı sözleşmesi", WorkSize.S)  // tekrar değil ama üst sınır (2) doldu → gösterilmez
+            S("Ödeme sağlayıcı sözleşmesi", WorkSize.S)  // tekrar değil ama üst sınır (2) doldu → gösterilmez, kayda "üst sınır"
         };
 
         var (kept, dropped) = HybridMissingWork.Filter(suggestions, ["Backend API"], ["Veritabanı kurulumu"],
@@ -56,8 +63,9 @@ public class HybridMissingWorkTests
         Assert.Equal([24m, 80m], kept.Select(k => k.Hours));
         Assert.Equal(
             [("Backend API geliştirmesi", "Backend API"), ("veritabanı KURULUMU", "Veritabanı kurulumu"),
-             ("KVKK uyum incelemesi yapılması", "KVKK uyum incelemesi")],
+             ("KVKK uyum incelemesi yapılması", "KVKK uyum incelemesi"), ("Ödeme sağlayıcı sözleşmesi", (string?)null)],
             dropped.Select(d => (d.Name, d.DuplicateOf)));
+        Assert.Equal([false, false, false, true], dropped.Select(d => d.OverLimit));
     }
 
     [Fact]
@@ -102,10 +110,32 @@ public class HybridMissingWorkTests
     }
 
     [Fact]
-    public void Schema_rejects_too_many_items()
+    public void Schema_truncates_too_many_items_instead_of_rejecting()
     {
-        var items = string.Join(",", Enumerable.Repeat(ValidItem, LlmMissingWorkSchema.MaxItems + 1));
-        Assert.Null(LlmMissingWorkSchema.TryParse($$"""{"suggestions":[{{items}}]}""", out _));
+        // Tur 4a H5 (TEST_PAZAR Q8): 12 madde → ilk 10 okunur, 2 kesilir; cevap geçersiz sayılmaz.
+        var items = string.Join(",", Enumerable.Repeat(ValidItem, LlmMissingWorkSchema.MaxItems + 2));
+        var result = LlmMissingWorkSchema.TryParse($$"""{"suggestions":[{{items}}]}""", out var error);
+
+        Assert.Null(error);
+        Assert.Equal(LlmMissingWorkSchema.MaxItems, result!.Suggestions.Count);
+        Assert.Equal(2, result.Truncated);
+        Assert.Equal(0, result.DroppedInvalid);
+    }
+
+    [Fact]
+    public void Reply_lists_duplicates_and_suggestions_hidden_by_limit()
+    {
+        var hybrid = new HybridMissingWorkResult(
+            new MissingWorkResult([], new Dictionary<string, IReadOnlyList<string>>()),
+            [new LlmMissingWorkItem("KVKK uyum incelemesi", WorkPhase.Analysis, Skill.Analysis, "Kişisel veri.", WorkSize.M, 24)],
+            LlmLayerStatus.Success, null,
+            [new DroppedSuggestion("Backend API geliştirmesi", "Backend API"), new DroppedSuggestion("Yük testi", null)],
+            [], null, "model", LlmTruncated: 2);
+
+        var reply = ProjectMind.Application.Chat.ChatService.MissingWorkReply(hybrid, "TRY");
+
+        Assert.Contains("Tekrar sayılıp elenen AI önerileri (1): Backend API geliştirmesi (≈ Backend API).", reply);
+        Assert.Contains("Üst sınır nedeniyle gösterilmeyen AI önerisi: 3 (Yük testi).", reply);   // 1 üst sınır + 2 kesilen
     }
 
     [Theory]
@@ -162,5 +192,26 @@ public class HybridMissingWorkTests
         Assert.Equal(0.5, rows[1].AcceptanceRate);                  // 1 / (1 + 1); hata veren orana girmez
         Assert.Equal(1, rows[1].Failed);
         Assert.Null(rows[2].AcceptanceRate);                        // karar yok
+    }
+
+    [Fact]
+    public void Bulk_applied_cards_are_reported_separately()
+    {
+        // Tur 4a H4 (ANALIZ madde 2 kabul örneği): 2 tek tek uygulandı + 1 reddedildi + 3 toplu uygulandı →
+        // tümü 5 / 6, yalnız tek tek kararlar 2 / 3.
+        var actions = new (AiActionSource, AiActionStatus, bool)[]
+        {
+            (AiActionSource.Llm, AiActionStatus.Applied, false), (AiActionSource.Llm, AiActionStatus.Applied, false),
+            (AiActionSource.Llm, AiActionStatus.Rejected, false),
+            (AiActionSource.Llm, AiActionStatus.Applied, true), (AiActionSource.Llm, AiActionStatus.Applied, true),
+            (AiActionSource.Llm, AiActionStatus.Applied, true),
+            (AiActionSource.Llm, AiActionStatus.Failed, true)                 // toplu ama hata: orana girmez
+        };
+
+        var row = Assert.Single(SourceAcceptance.Compute(actions));
+
+        Assert.Equal(new SourceAcceptance(AiActionSource.Llm, 7, 5, 1, 1, 0, 3), row);
+        Assert.Equal(5d / 6, row.AcceptanceRate);
+        Assert.Equal(2d / 3, row.IndividualAcceptanceRate);
     }
 }

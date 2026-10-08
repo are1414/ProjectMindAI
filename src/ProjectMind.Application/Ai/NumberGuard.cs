@@ -10,6 +10,10 @@ namespace ProjectMind.Application.Ai;
 /// yalnızca cevaptaki sayının yanında "%" veya "yüzde" varsa kabul edilir. Tarihler (05.12.2026, 5.12.2026,
 /// 5 Aralık 2026, 2026-12-05) gün bazında karşılaştırılır; kanıttaki tarihlerin yılı bilinen sayı sayılır.
 /// Saatler (14:30) sayı olarak değerlendirilmez. Ayrıştırılamayan sayı benzeri ifadeler işaretlenir.
+/// Kanıt JSON ve Türkçe biçimli metin karışımıdır: virgüllü sayı Türkçe ondalık okunur (JSON sayısı virgül içermez; "[" ile
+/// başlayan virgüllü dizi JSON listesidir), "1.250.000" gibi binlik gruplu sayı hem JSON hem Türkçe okunur.
+/// "1,2 milyon", "120 bin", "3 milyar" çarpanlı yazımlar (cevapta ve kanıtta) çarpılmış değerle karşılaştırılır; cevaptaki
+/// çarpanlı sayı, kanıttaki değerin o birime yuvarlanmış hâliyle eşleşmelidir (1.250.000 ↔ "1,25 milyon" / "1,3 milyon").
 /// </summary>
 public static partial class NumberGuard
 {
@@ -23,7 +27,16 @@ public static partial class NumberGuard
 
     private static readonly CultureInfo Turkish = CultureInfo.GetCultureInfo("tr-TR");
 
-    private sealed record Token(string Raw, decimal Value, int Decimals, bool IsPercent);
+    /// <summary>Value: çarpanla çarpılmış değer; Multiplier: "bin/milyon/milyar" çarpanı (yoksa 1).</summary>
+    private sealed record Token(string Raw, decimal Value, int Decimals, bool IsPercent, decimal Multiplier = 1);
+
+    /// <summary>Türkçe sayı çarpanları ("120 bin", "1,2 milyon").</summary>
+    private static readonly Dictionary<string, decimal> Multipliers = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["bin"] = 1_000m,
+        ["milyon"] = 1_000_000m,
+        ["milyar"] = 1_000_000_000m
+    };
 
     private sealed record DateToken(string Raw, DateOnly? Date, int? Month, int? Day);
 
@@ -53,7 +66,7 @@ public static partial class NumberGuard
         }
         foreach (var token in claimed.Numbers)
         {
-            if (token.Value <= SmallIntegerLimit && token.Value == decimal.Truncate(token.Value))
+            if (token.Multiplier == 1 && token.Value <= SmallIntegerLimit && token.Value == decimal.Truncate(token.Value))
                 continue;
             if (rawTokens.Contains(token.Raw) || known.Any(k => Matches(token, k)))
                 continue;
@@ -68,7 +81,9 @@ public static partial class NumberGuard
         IEnumerable<decimal> candidates = token.IsPercent
             ? [known, known * PercentScale, known / PercentScale]
             : [known];
-        return candidates.Any(c => Math.Round(c, token.Decimals, MidpointRounding.AwayFromZero) == token.Value);
+        // Çarpanlı sayı (1,2 milyon) çarpan biriminde karşılaştırılır: round(1.250.000 / 1.000.000; 1) = 1,3.
+        var claimed = token.Value / token.Multiplier;
+        return candidates.Any(c => Math.Round(c / token.Multiplier, token.Decimals, MidpointRounding.AwayFromZero) == claimed);
     }
 
     private static Extraction Extract(string text, bool turkish)
@@ -98,10 +113,16 @@ public static partial class NumberGuard
             var raw = m.Value;
             if (WbsRegex().IsMatch(raw))
                 continue;   // 1.2.1 gibi WBS numarası
-            if (TryParse(raw, turkish, out var value, out var decimals))
-                numbers.Add(new Token(raw, value, decimals, IsPercentContext(rest, m.Index, m.Length)));
-            else
-                unparsed.Add(raw);
+            var percent = IsPercentContext(rest, m.Index, m.Length);
+            var multiplierWord = MultiplierRegex().Match(rest, m.Index + m.Length);
+            var multiplier = multiplierWord.Success ? Multipliers[multiplierWord.Groups[1].Value] : 1m;
+            var shown = multiplierWord.Success ? $"{raw} {multiplierWord.Groups[1].Value}" : raw;
+
+            var values = turkish ? AnswerValues(raw) : EvidenceValues(raw, PrecededByBracket(rest, m.Index));
+            if (values.Count == 0)
+                unparsed.Add(shown);
+            foreach (var (value, decimals) in values)
+                numbers.Add(new Token(shown, value * multiplier, decimals, percent, multiplier));
         }
 
         // Geçersiz tarih (ör. 31.02.2026; Date ve Month boş) cevapta doğrulanamaz; kanıtta yok sayılır.
@@ -131,23 +152,57 @@ public static partial class NumberGuard
         return after.StartsWith('%');
     }
 
-    /// <summary>Türkçe (1.250.000,50) veya JSON (1250000.50) biçimini çözer.</summary>
-    private static bool TryParse(string raw, bool turkish, out decimal value, out int decimals)
-    {
-        string normalized;
-        if (!turkish)
-            normalized = raw.Replace(",", "");
-        else if (raw.Contains(','))
-            normalized = raw.Replace(".", "").Replace(',', '.');
-        else if (ThousandsRegex().IsMatch(raw) && !raw.StartsWith("0.", StringComparison.Ordinal))
-            normalized = raw.Replace(".", "");
-        else
-            normalized = raw;
+    /// <summary>Cevaptaki sayı Türkçe biçimdedir (1.250.000,50); tek değer.</summary>
+    private static List<(decimal Value, int Decimals)> AnswerValues(string raw) =>
+        TryParseTurkish(raw, out var value, out var decimals) ? [(value, decimals)] : [];
 
+    /// <summary>
+    /// Kanıttaki sayının olası değerleri: virgüllü sayı Türkçe ondalıktır ("0,87" → 0,87), "[" ile başlıyorsa JSON listesidir
+    /// ("[8,16]" → 8 ve 16). Virgülsüz sayı JSON (nokta ondalık) okunur; binlik gruplu yazımsa ("1.250.000", "250.000")
+    /// Türkçe değeri de eklenir.
+    /// </summary>
+    private static List<(decimal Value, int Decimals)> EvidenceValues(string raw, bool jsonList)
+    {
+        var values = new List<(decimal, int)>();
+        if (raw.Contains(','))
+        {
+            if (jsonList)
+            {
+                foreach (var part in raw.Split(','))
+                    if (TryParseInvariant(part, out var v, out var d))
+                        values.Add((v, d));
+            }
+            else if (TryParseTurkish(raw, out var v, out var d))
+                values.Add((v, d));
+            return values;
+        }
+
+        if (TryParseInvariant(raw, out var json, out var jsonDecimals))
+            values.Add((json, jsonDecimals));
+        if (IsTurkishThousands(raw) && TryParseTurkish(raw, out var tr, out var trDecimals))
+            values.Add((tr, trDecimals));
+        return values;
+    }
+
+    private static bool IsTurkishThousands(string raw) =>
+        ThousandsRegex().IsMatch(raw) && !raw.StartsWith("0.", StringComparison.Ordinal);
+
+    private static bool TryParseTurkish(string raw, out decimal value, out int decimals)
+    {
+        var normalized = raw.Contains(',') ? raw.Replace(".", "").Replace(',', '.')
+            : IsTurkishThousands(raw) ? raw.Replace(".", "")
+            : raw;
+        return TryParseInvariant(normalized, out value, out decimals);
+    }
+
+    private static bool TryParseInvariant(string normalized, out decimal value, out int decimals)
+    {
         var dot = normalized.IndexOf('.');
         decimals = dot < 0 ? 0 : normalized.Length - dot - 1;
-        return decimal.TryParse(normalized, NumberStyles.Number, Invariant, out value);
+        return decimal.TryParse(normalized, NumberStyles.AllowDecimalPoint, Invariant, out value);
     }
+
+    private static bool PrecededByBracket(string text, int index) => text[..index].TrimEnd().EndsWith('[');
 
     [GeneratedRegex(@"\b(\d{4})-(\d{2})-(\d{2})(?=\b|T)")]
     private static partial Regex IsoDateRegex();
@@ -164,6 +219,9 @@ public static partial class NumberGuard
 
     [GeneratedRegex(@"\d+(?:[.,]\d+)*")]
     private static partial Regex NumberRegex();
+
+    [GeneratedRegex(@"\G\s+(bin|milyon|milyar)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex MultiplierRegex();
 
     [GeneratedRegex(@"^\d{1,3}(?:\.\d{3})+$")]
     private static partial Regex ThousandsRegex();

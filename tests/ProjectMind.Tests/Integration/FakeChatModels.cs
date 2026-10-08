@@ -12,6 +12,8 @@ public abstract class ChatOnlyModel : IChatModel
 
     public bool IsConfigured => true;
 
+    public string ProviderKey => "fake-chat";
+
     public abstract Task<ChatTurnResult> CompleteTurnAsync(ChatTurnRequest request, IChatToolExecutor tools, CancellationToken ct);
 
     public Task<ChatJsonResult> CompleteJsonAsync(ChatJsonRequest request, CancellationToken ct) =>
@@ -19,11 +21,14 @@ public abstract class ChatOnlyModel : IChatModel
 }
 
 /// <summary>JSON çağrısında senaryolu cevap döner; cevap isteğe (analiz verisine) bakılarak üretilebilir.</summary>
-public sealed class ScriptedJsonModel(Func<ChatJsonRequest, string> respond, bool configured = true) : IChatModel
+public sealed class ScriptedJsonModel(
+    Func<ChatJsonRequest, string> respond, bool configured = true, string providerKey = "scripted-json") : IChatModel
 {
     public List<ChatJsonRequest> Requests { get; } = [];
 
     public bool IsConfigured => configured;
+
+    public string ProviderKey => providerKey;
 
     public Task<ChatTurnResult> CompleteTurnAsync(ChatTurnRequest request, IChatToolExecutor tools, CancellationToken ct) =>
         throw new NotSupportedException();

@@ -93,6 +93,81 @@ public class EarnedValueTests
     }
 
     [Fact]
+    public void Project_finished_on_plan_keeps_spi_t_one_after_planned_finish()
+    {
+        // Tur 4a H1: A 3 Kasım'da, B 6 Kasım'da (plan bitişi) bitti. Durum 13 Kasım (1 hafta sonra):
+        // EV = BAC → AT tamamlanma gününde (6 Kasım = 5. iş günü) donar: ES = 5, AT = 5 → SPI(t) = 1, tahmin = 6 Kasım.
+        var r = EarnedValue.Compute(Baseline,
+            [new(1, 100, 16, true, CompletedOn: new DateOnly(2026, 11, 3)), new(2, 100, 24, true, CompletedOn: new DateOnly(2026, 11, 6))],
+            new DateOnly(2026, 11, 13));
+
+        Assert.Equal(5, r.EarnedSchedule);
+        Assert.Equal(5, r.ActualTime);
+        Assert.Equal(1m, r.SpiTime);
+        Assert.Equal(new DateOnly(2026, 11, 6), r.ForecastFinish);
+    }
+
+    [Fact]
+    public void Project_finished_two_days_late_gives_pd_over_actual_duration_and_stops_falling()
+    {
+        // B 10 Kasım Salı'da bitti (plan 6 Kasım Cuma): gerçek süre 7 iş günü → SPI(t) = PD / (PD + 2) = 5 / 7 = 0,71.
+        // Durum günü ilerledikçe (11 ve 20 Kasım) değer değişmez.
+        EvmProgress[] done = [new(1, 100, 16, true, CompletedOn: new DateOnly(2026, 11, 3)),
+                              new(2, 100, 24, true, CompletedOn: new DateOnly(2026, 11, 10))];
+        var nextDay = EarnedValue.Compute(Baseline, done, new DateOnly(2026, 11, 11));
+        var later = EarnedValue.Compute(Baseline, done, new DateOnly(2026, 11, 20));
+
+        Assert.Equal(7, nextDay.ActualTime);
+        Assert.Equal(0.71m, nextDay.SpiTime);
+        Assert.Equal(0.71m, later.SpiTime);
+        Assert.Equal(new DateOnly(2026, 11, 10), later.ForecastFinish);
+    }
+
+    [Fact]
+    public void Finished_with_cancelled_work_uses_remaining_scope_completion()
+    {
+        // A 3 Kasım'da bitti, B iptal: kalan kapsam yalnız A (PD 2 gün). 10 iş günü sonra da SPI(t) = 2 / 2 = 1 (eskiden 0,45 gibi düşüyordu).
+        var r = EarnedValue.Compute(Baseline,
+            [new(1, 100, 16, true, CompletedOn: new DateOnly(2026, 11, 3)), new(2, 0, 0, false, IsCancelled: true)],
+            new DateOnly(2026, 11, 17));
+
+        Assert.Equal(2, r.ActualTime);
+        Assert.Equal(1m, r.SpiTime);
+        Assert.Equal(new DateOnly(2026, 11, 3), r.ForecastFinish);
+    }
+
+    [Fact]
+    public void Completion_day_is_start_of_last_complete_run()
+    {
+        var d3 = new DateOnly(2026, 11, 3);
+        var d4 = new DateOnly(2026, 11, 4);
+        var d5 = new DateOnly(2026, 11, 5);
+        var d6 = new DateOnly(2026, 11, 6);
+
+        Assert.Equal(d4, EarnedValue.CompletedOn([(d3, false), (d4, true), (d5, true)]));   // Bitti işe sonradan saat girildi
+        Assert.Null(EarnedValue.CompletedOn([(d4, true), (d5, false)]));                     // yeniden açıldı
+        Assert.Equal(d6, EarnedValue.CompletedOn([(d3, true), (d4, false), (d6, true)]));
+        Assert.Null(EarnedValue.CompletedOn([]));
+    }
+
+    [Fact]
+    public void All_work_cancelled_after_spending_has_no_cost_or_schedule_index()
+    {
+        // Tur 4a H6: BAC = 0, AC = 10 → CPI = 0 yerine "—" (null); SPI(t), EAC ve tahmin de anlamsız.
+        var r = EarnedValue.Compute(Baseline,
+            [new(1, 30, 10, false, IsCancelled: true), new(2, 0, 0, false, IsCancelled: true)], new DateOnly(2026, 11, 20));
+
+        Assert.Equal(0, r.BudgetAtCompletion);
+        Assert.Equal(10, r.ActualCost);
+        Assert.Null(r.Cpi);
+        Assert.Null(r.Spi);
+        Assert.Null(r.SpiTime);
+        Assert.Null(r.EstimateAtCompletion);
+        Assert.Null(r.EstimateAtCompletionCost);
+        Assert.Null(r.ForecastFinish);
+    }
+
+    [Fact]
     public void Work_not_in_baseline_is_ignored()
     {
         var r = EarnedValue.Compute(Baseline, [new(1, 100, 16, true), new(99, 100, 50, true)], new DateOnly(2026, 11, 3));

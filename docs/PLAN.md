@@ -100,6 +100,8 @@
 - [ ] (Opsiyonel) Ollama sağlayıcısı ile karşılaştırma
 
 ### FAZ 9 — Demo ve değerlendirme
+- [x] Tur 4a hata düzeltmeleri (demo öncesi): biten projede SPI(t), silme → iptal / eksik baseline işi kapsam dışı (D27),
+  NumberGuard Türkçe kanıt + bin/milyon, RQ4 kayıt bütünlüğü + toplu kabul ayrımı, hibrit tekrar eleme, önbellekte sağlayıcı (D28)
 - [ ] Demo projesi: "Mobile Banking Modernization"
 - [ ] RQ1–RQ4 ölçümleri, LLM sağlayıcı karşılaştırması
 - [ ] 5–10 kişilik kullanıcı testi (SUS anketi)
@@ -135,3 +137,10 @@ docs/                          Plan, kararlar, ilerleme
 - Yorum kartında "Açıklama anlaşılır mıydı? (Evet/Hayır)" geri bildirimi (RQ4 ölçümü)
 - What-if çalıştırmalarının ve seçilen senaryonun loglanması (RQ3 kanıtı)
 - Öneri kabul oranı raporu (kaynak × araç) Deneyler sayfasında, CSV ile
+- Deney raporunun DB'de kalıcı saklanması (bugün yalnız bellekte; deterministik, yeniden üretilebilir)
+- Demo senaryosunun JSON dosyasından içe aktarılması (farklı demo projeleri için)
+- Sağlayıcı karşılaştırmasında tahmini maliyet (token × birim fiyat, ayardan)
+- RQ1 için önyükleme (bootstrap) güven aralığı / eşleştirilmiş AUC testi
+- NumberGuard hızlandırma: bilinen değerleri ondalık basamağa göre yuvarlanmış HashSet'lerde tutmak (TEST_PAZAR Q9)
+- Kapsamın tamamı iptal edildiğinde "Kapsamın tamamı iptal edildi" bilgi uyarısı (TEST_PAZAR Q12)
+- Yorum yüklerinde yön ifadesini C#'ın hazır cümle olarak vermesi ("120,5 saat geride"), ardından NumberGuard'ın sadeleştirilmesi (TEST_PAZAR Q3)

@@ -73,13 +73,16 @@ public sealed class ProjectCommentService(IAppDbContext db, IChatModel model)
         return JsonSerializer.Serialize(AnalysisPayloads.Comparison(comparison, currency), AiJson.Options);
     }
 
-    /// <summary>Girdi + tür + prompt sürümünün SHA-256 özeti (önbellek anahtarı).</summary>
-    public static string InputHash(AiAnalysisKind kind, string input) =>
-        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{kind}|{ChatPrompts.CommentVersion}|{input}")));
+    /// <summary>
+    /// Girdi + tür + prompt sürümü + sağlayıcı/modelin SHA-256 özeti (önbellek anahtarı). Sağlayıcı değişince eski yorum
+    /// yeniden gösterilmez.
+    /// </summary>
+    public static string InputHash(AiAnalysisKind kind, string input, string providerKey) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{kind}|{ChatPrompts.CommentVersion}|{providerKey}|{input}")));
 
     private async Task<AnalysisCommentResult?> FindAsync(int projectId, AiAnalysisKind kind, string input, CancellationToken ct)
     {
-        var hash = InputHash(kind, input);
+        var hash = InputHash(kind, input, model.ProviderKey);
         var log = await db.AiAnalysisLogs.AsNoTracking()
             .Where(l => l.ProjectId == projectId && l.Kind == kind && l.InputHash == hash
                         && l.Outcome == AiAnalysisOutcome.Success && l.ResultJson != null)
@@ -109,7 +112,7 @@ public sealed class ProjectCommentService(IAppDbContext db, IChatModel model)
             ProjectId = projectId,
             PromptVersion = ChatPrompts.CommentVersion,
             ContextLength = input.Length,
-            InputHash = InputHash(kind, input)
+            InputHash = InputHash(kind, input, model.ProviderKey)
         };
         var request = new ChatJsonRequest(systemPrompt, $"<analiz_verisi>\n{input}\n</analiz_verisi>",
             AnalysisCommentSchema.Name, AnalysisCommentSchema.Schema);
