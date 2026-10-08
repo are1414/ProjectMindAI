@@ -192,3 +192,29 @@
 6. **Geçerlilik sınırı:** ML yalnız sentetik veriyle eğitiliyor (D21). Demo projesindeki ML sonucu doğrulama değil, gösterimdir;
    raporda böyle yazılmalı. RQ4 kabul oranı ancak katılımcıların kendi kararlarıyla anlamlıdır (geliştirici kullanımı ayrılmalı;
    madde 2 + `EvaluationRunId` / katılımcı kodu).
+
+---
+
+## Lider birleştirmesi ve kararları (Tur 4)
+
+Açık sorulara kararlar: SUS ve RQ3/RQ4 Likert soruları **uygulama içinde** (anonim katılımcı kodu, kişisel veri yok, onay
+metni gösterilir; CSV dışa aktarım). Demo tarihleri **bugüne göre** (saat 8–10 hafta geriye kaydırılarak gerçek servislerle
+üretilir). Madde 9 (what-if çalıştırma kaydı + "açıklama anlaşılır mı?" butonu) **Faz 9'a alındı**. Sağlayıcı karşılaştırması
+ayarlı anahtarlarla çalışır, varsayılan 3 tekrar; Ollama kapsam dışı.
+
+### Tur 4a — hatalar (önce bunlar; demo bunlara bağlı)
+| Sıra | Madde | Kaynak |
+|---|---|---|
+| H1 | Biten projede SPI(t) planlanan bitişten sonra düşmesin: EV ≥ BAC olunca AT tamamlanma tarihinde dondurulur | TEST_PAZAR Q1 |
+| H2 | Baseline'daki işin silinmesi EVM'yi bozmasın: ilerlemesi/harcaması olan iş silinmez → İptal'e çevrilir (kart ve servis); baseline'da olup artık olmayan iş kapsam dışı sayılır | TEST_PAZAR Q2 |
+| H3 | NumberGuard: kanıttaki Türkçe biçimli sayılar (1.250.000, 0,87) doğru okunur; "1,2 milyon", "120 bin" çarpanları; mevcut D23 testleri bozulmaz. Yön kelimeleri ve ≤10 tam sayılar bu turda yok (bilinen sorun olarak yaz) | ANALIZ 2, TEST_PAZAR Q5 |
+| H4 | RQ4 veri bütünlüğü: sohbet silme/temizleme AiAction kayıtlarını silmesin (yeni migration ile ilişki SetNull/korunur); "hepsini uygula" ile uygulanan kartlar ayrı işaretlensin, kabul oranında ayrı gösterilsin | ANALIZ 3 |
+| H5 | Hibrit tekrar eleme: tek kelimelik mevcut adlar sadece tam eşleşmede eler; elenen öneri sayısı/adları cevapta ve audit'te görünür; fazla madde (>Max) cevabı reddetmez, kesilir | TEST_PAZAR Q6, Q8 |
+| H6 | Yorum önbelleği anahtarına model/sağlayıcı dahil; tüm işler iptalse CPI "—" | TEST_PAZAR Q10, Q12 |
+
+### Tur 4b — demo (4a'dan sonra)
+Demo "Mobile Banking Modernization" tohumu (ANALIZ madde 4) + snapshot'a ML olasılığı/tahmini (madde 5, migration).
+
+### Sonraki turlar
+Değerlendirme sayfası ve RQ CSV'leri, SUS/Likert formu, sağlayıcı karşılaştırma koşucusu, what-if kaydı + "anlaşılır mı?"
+butonu; RQ1'e "erken uyarı süresi" ve çoklu tohum analizi (TEST_PAZAR öneri 10).
