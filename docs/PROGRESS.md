@@ -4,6 +4,57 @@ Her oturum sonunda en üste yeni kayıt eklenir. Format: yapılanlar · varsayı
 
 ---
 
+## 2026-10-08 (22) — Ekip turu 4b: demo projesi
+
+Kapsam: `docs/team/ANALIZ.md` → "Tur 4b — demo" (ANALIZ madde 3 demo + madde 4'ün snapshot kısmı). Çok tohumlu deney,
+değerlendirme sayfası ve CSV'ler sonraki turlara kaldı.
+
+- **Demo projesi** (`Application/Demo/DemoScenario.cs`, `DemoProjectSeeder.cs`; karar D29): "Mobile Banking Modernization",
+  gerçek servislerin (ProjectService, PersonService, WorkItemService, DependencyService, `ScheduleService.ApplyAsync`,
+  `ProjectStatusService.GetAsync`) geriye alınmış saatle (`DemoClock : TimeProvider`, yeni paket yok) yeniden oynatılmasıyla
+  üretilir. Proje bu haftanın pazartesisinden 9 hafta önce başlar; ilk gün plan uygulanır ve baseline alınır; her cuma
+  (bugünden önce) ve bugün ilerleme girilir (StatusUpdate) ve durum hesaplanır (günlük snapshot + ML tahmini).
+  - Ekip 6 kişi (Elif Kaya, Murat Demir, Zeynep Arslan, Can Yıldız, Selin Aydın, Burak Şahin; 950–1.400 TRY/saat).
+  - 35 iş (8 üst iş + 24 baseline yaprak işi + 3 sonradan eklenen), 30 bağımlılık; baseline 2.024 saat / 2.534.800 TRY,
+    planlanan bitiş 25.12.2026 (bugün 08.10.2026 için), hedef 08.01.2027, bütçe 2.900.000 TRY.
+  - Hikâye: hafta 4'te QR ile ödeme + sadakat ekranı eklenir (kapsam +%10,6, uyarı eşiği aşılır), hafta 5'ten itibaren
+    "Kart işlemleri ve çekirdek bankacılık bağlantısı" bloke, hafta 6'da "Akıllı saat (Apple Watch) eklentisi" iptal
+    (kapsam dışı). CI/CD, UAT ve dokümantasyon bilerek yok → kural katmanı tam bu 3 işi bulur.
+  - İlerleme: baseline penceresi × ekip hızı (0,9 ± %5, tohum 2026); öncülü bitmeyen iş ilerlemez; harcanan saat =
+    kazanılan × 1,05–1,20. 08.10.2026 için son durum: **SPI(t) 0,88**, SPI 0,81, CPI 0,90, **%41,4** tamamlandı,
+    sağlık **88,3 → "Dikkat"** (kritik uyarılar: hedef tarih riski — EVM tahmini 15.01.2027, planlanan bitişi geçmiş işler),
+    EAC maliyet ≈ 2,72 milyon TRY; 10 snapshot; işler: 7 bitti, 8 devam (3 eklenen iş %50), 1 bloke, 1 iptal, 18 başlamadı (8 üst iş dahil).
+  - LLM çağrılmaz; Mock modda çalışır. Aynı adlı proje varsa ikinci kopya açılmaz (Türkçe hata + "Demo projesini aç" bağlantısı).
+  - Sohbet başlığı "Demo · Mobile Banking Modernization" (projeye bağlı; sohbet mesajı yok).
+- **Ana sayfa** (`Home.razor`, `app.css`): "Demo projesini oluştur" butonu → `AppScope` ile seeder → sohbete gider.
+- **Snapshot'ta ML tahmini** (`ProjectSnapshot`, `Configurations`, `ProjectStatusService`): `DelayProbability` (decimal(5,4)) ve
+  `MlForecastFinish` (date). EVM tahmini bitiş zaten `ForecastFinish`. Tahmin artık snapshot yazımından **önce** hesaplanır;
+  hız penceresi bugünden önceki snapshot'ları kullanır (eskiden bugünün snapshot'ı da okunuyordu ama pencere ≤ bugün−14 gün
+  olduğu için sonuç değişmez). Rapor geçmişi yine bugünün noktasını içerir.
+- **DB**: yeni migration `20261008174258_AddSnapshotDelayPrediction` (iki nullable sütun). Eski migration'lar değişmedi;
+  `has-pending-model-changes` → "No changes".
+- **Testler 263/263** (249'dan +14): `DemoSeederTests` — hikâye entegrasyon testi (tek baseline, 10 snapshot aynı baseline ve
+  ML olasılığıyla, 1 bloke + 1 iptal, kapsam büyümesi > 0 ve descope > 0, SPI(t) 0,85–0,90, bloke ve kapsam uyarısı, kural
+  katmanı tam olarak `ci-cd, uat, documentation`), determinizm + ikinci oluşturmanın reddi, 3 farklı gün (pzt/cuma/cmt),
+  `DemoProgress.PercentAt` 7 elle hesaplanmış vaka, `ActualHours` 4 vaka; durum servisi testinde snapshot'ın EVM/ML tahmin
+  alanları; DI smoke testi. `FakeDelayPredictor`'a isteğe bağlı `Finish` eklendi (varsayılan null, eski davranış).
+  `dotnet build` 0 uyarı.
+
+**Varsayımlar**: `CreatedAt`/`UpdatedAt` gerçek saati kullanır (`AppDbContext`); baseline ve kayıtların oluşturulma zamanı
+"bugün" görünür (StatusUpdate ve snapshot tarihleri doğru, geçmiş). Durum girişleri cuma 18:00, proje kurulumu pazartesi 09:00
+(yerel saat). Hafta sonu açılırsa bu haftanın cuması da girilir (11 snapshot). Demo senaryosu kod içinde sabit (şablon kataloğu
+gibi sürümlü veri). Üst işlerin tahmini eforu alt işlerinin toplamıdır. Baseline sonrası eklenen işler haftada %10 ilerler.
+
+**Bilinen sorunlar**: Arayüz SQL Server olmadan tarayıcıda çalıştırılmadı (yalnız derleme + DI smoke testi). Uygulamada model
+dosyası yoksa ilk demo oluşturma ML modelini eğitir (birkaç saniye). Demo sohbeti projeyle silinmeden tekrar oluşturulamaz.
+ML olasılığı demo için gösterimdir, doğrulama değildir (model sentetik veriyle eğitildi, D21). Haftalık ilerleme girişi
+StatusUpdate'leri `WorkItemService` üzerinden yazar; AiAction kaydı oluşmaz (öneri kartı kullanılmadı, RQ4 verisini kirletmez).
+
+**Sıradaki adım**: Değerlendirme sayfası ve RQ CSV'leri (snapshot zaman çizelgesi `date,spi,spi_t,evm_forecast,ml_probability,
+ml_forecast`), çok tohumlu deney, SUS/Likert formu, what-if kaydı + "anlaşılır mı?", sağlayıcı karşılaştırma koşucusu.
+
+---
+
 ## 2026-10-08 (21) — Ekip turu 4a: hata düzeltmeleri
 
 Kapsam: `docs/team/ANALIZ.md` → "Tur 4a — hatalar" (H1–H6), kanıtlar TEST_PAZAR Q1, Q2, Q5, Q6, Q8, Q10, Q12 ve ANALIZ madde 1–2.

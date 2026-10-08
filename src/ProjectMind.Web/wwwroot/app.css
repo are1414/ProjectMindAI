@@ -52,6 +52,9 @@ a { color: var(--primary); text-decoration: none; }
 .welcome { max-width: 680px; margin: 10vh auto; padding: 0 1.5rem; }
 .welcome h1 { font-size: 1.8rem; margin-bottom: .75rem; }
 .welcome p { color: var(--muted); line-height: 1.6; }
+.welcome-actions { display: flex; flex-wrap: wrap; gap: .6rem; }
+.welcome .demo-note { font-size: .85rem; margin-top: .6rem; }
+.inline-error a { margin-left: .4rem; }
 .examples { margin-top: 2rem; display: grid; gap: .6rem; }
 .example { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: .7rem .9rem; color: var(--muted); font-style: italic; }
 

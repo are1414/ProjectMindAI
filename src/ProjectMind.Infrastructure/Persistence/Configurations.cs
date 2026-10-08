@@ -175,6 +175,7 @@ internal sealed class ProjectSnapshotConfiguration : IEntityTypeConfiguration<Pr
             b.Property(p).HasPrecision(6, 3);
         b.Property(x => x.PercentComplete).HasPrecision(5, 1);
         b.Property(x => x.HealthScore).HasPrecision(5, 1);
+        b.Property(x => x.DelayProbability).HasPrecision(5, 4);
         b.HasOne<Project>().WithMany()
             .HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Cascade);
     }

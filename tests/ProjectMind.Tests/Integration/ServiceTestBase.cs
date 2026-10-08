@@ -49,6 +49,9 @@ public abstract class ServiceTestBase : IDisposable
             new("FastTree", "FastTreeRegression", "test", 1, 1, 1, 0.9, 0.8, 0.1, DateTimeOffset.UnixEpoch);
 
         public ProjectMind.Application.Ml.DelayFeatures? LastFeatures { get; private set; }
+
+        /// <summary>Döndürülecek ML bitiş tarihi (varsayılan yok).</summary>
+        public DateOnly? Finish { get; set; }
         public ProjectMind.Application.Ml.DelayModelInfo? CurrentModel => Info;
         public ProjectMind.Application.Ml.DelayExperimentReport? LastReport => null;
 
@@ -56,7 +59,7 @@ public abstract class ServiceTestBase : IDisposable
             ProjectMind.Application.Analytics.EvmResult evm, CancellationToken ct)
         {
             LastFeatures = features;
-            return Task.FromResult<ProjectMind.Application.Ml.DelayPrediction?>(new(0.7f, 1.2f, null, false, Info));
+            return Task.FromResult<ProjectMind.Application.Ml.DelayPrediction?>(new(0.7f, 1.2f, Finish, false, Info));
         }
 
         public Task<ProjectMind.Application.Ml.DelayExperimentReport> RunExperimentAsync(CancellationToken ct) =>

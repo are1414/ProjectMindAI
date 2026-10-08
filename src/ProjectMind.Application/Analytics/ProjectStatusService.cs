@@ -34,6 +34,7 @@ public sealed class ProjectStatusService(
     IDelayPredictor predictor)
 {
     private const int FullPercent = 100;
+    private const int ProbabilityDecimals = 4;
 
     public async Task<ProjectStatusReport> GetAsync(int projectId, CancellationToken ct)
     {
@@ -90,31 +91,39 @@ public sealed class ProjectStatusService(
         if (health.Level == HealthLevel.Good && alerts.Any(a => a.Severity == AlertSeverity.Critical))
             health = health with { Level = HealthLevel.Warning };
 
-        await UpsertSnapshotAsync(projectId, today, baseline, evm, health, leaves.Sum(w => w.EstimatedHours), blocked.Count,
-            overview.People.Count, ct);
-
-        var history = await db.ProjectSnapshots.AsNoTracking()
-            .Where(s => s.ProjectId == projectId && s.BaselineId == (baseline == null ? null : baseline.Id))
-            .OrderBy(s => s.Date)
-            .Select(s => new SnapshotPoint(s.Date, s.PlannedValue, s.EarnedValue, s.ActualCost, s.HealthScore))
-            .ToListAsync(ct);
-
         // ML gecikme tahmini (baseline ve başlamış proje gerekir). Özellik tanımları sentetik veriyle aynıdır.
+        // Tahmin snapshot'tan önce hesaplanır ki günün snapshot'ına da yazılsın (RQ1: EVM ↔ ML zaman çizelgesi).
+        // Hız penceresi yalnız önceki günleri kullanır; bugünün snapshot'ı özelliklere girmez.
+        var baselineId = baseline?.Id;
         DelayFeatures? features = null;
         DelayPrediction? delay = null;
         if (evm is not null)
         {
+            var earlier = await HistoryAsync(projectId, baselineId, today, ct);
             var remainingEffort = leaves.Sum(w => w.EstimatedHours * (100 - w.PercentComplete) / 100m);
             var blockedRemaining = blocked.Sum(w => w.EstimatedHours * (100 - w.PercentComplete) / 100m);
-            features = DelayFeatureBuilder.FromStatus(evm, history, scopeGrowth,
+            features = DelayFeatureBuilder.FromStatus(evm, earlier, scopeGrowth,
                 remainingEffort > 0 ? blockedRemaining / remainingEffort : 0, overview.People.Count);
             if (features is not null && evm.EarnedValue < evm.BudgetAtCompletion)
                 delay = await predictor.PredictAsync(features, evm, ct);
         }
 
+        await UpsertSnapshotAsync(projectId, today, baseline, evm, health, leaves.Sum(w => w.EstimatedHours), blocked.Count,
+            overview.People.Count, delay, ct);
+
+        var history = await HistoryAsync(projectId, baselineId, null, ct);
+
         return new ProjectStatusReport(overview, today, preview.LatestBaseline, evm, health, alerts, scopeGrowth, preview.Plan, history,
             features, delay);
     }
+
+    /// <summary>Aynı baseline'a ait snapshot'lar (tarih sırasıyla); before verilirse yalnız o günden öncekiler.</summary>
+    private async Task<List<SnapshotPoint>> HistoryAsync(int projectId, int? baselineId, DateOnly? before, CancellationToken ct) =>
+        await db.ProjectSnapshots.AsNoTracking()
+            .Where(s => s.ProjectId == projectId && s.BaselineId == baselineId && (before == null || s.Date < before))
+            .OrderBy(s => s.Date)
+            .Select(s => new SnapshotPoint(s.Date, s.PlannedValue, s.EarnedValue, s.ActualCost, s.HealthScore))
+            .ToListAsync(ct);
 
     /// <summary>Her işin son tamamlanma günü (ilerleme geçmişinden; bkz. <see cref="EarnedValue.CompletedOn"/>).</summary>
     private async Task<Dictionary<int, DateOnly?>> CompletionDatesAsync(int projectId, CancellationToken ct)
@@ -130,7 +139,7 @@ public sealed class ProjectStatusService(
     }
 
     private async Task UpsertSnapshotAsync(int projectId, DateOnly today, Baseline? baseline, EvmResult? evm, HealthResult health,
-        decimal scopeHours, int blocked, int teamSize, CancellationToken ct)
+        decimal scopeHours, int blocked, int teamSize, DelayPrediction? delay, CancellationToken ct)
     {
         var snapshot = await db.ProjectSnapshots.FirstOrDefaultAsync(s => s.ProjectId == projectId && s.Date == today, ct);
         if (snapshot is null)
@@ -154,6 +163,8 @@ public sealed class ProjectStatusService(
         snapshot.ScopeHours = scopeHours;
         snapshot.BlockedItems = blocked;
         snapshot.TeamSize = teamSize;
+        snapshot.DelayProbability = delay is null ? null : Math.Round((decimal)delay.Probability, ProbabilityDecimals);
+        snapshot.MlForecastFinish = delay?.ForecastFinish;
         await db.SaveChangesAsync(ct);
     }
 }

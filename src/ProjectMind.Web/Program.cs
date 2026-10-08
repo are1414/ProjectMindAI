@@ -23,6 +23,7 @@ builder.Services.Configure<ProjectMind.Application.Analytics.HealthOptions>(
 builder.Services.Configure<ProjectMind.Application.WhatIf.WhatIfOptions>(builder.Configuration.GetSection(ProjectMind.Application.WhatIf.WhatIfOptions.Section));
 builder.Services.Configure<ProjectMind.Application.MissingWork.MissingWorkOptions>(
     builder.Configuration.GetSection(ProjectMind.Application.MissingWork.MissingWorkOptions.Section));
+builder.Services.Configure<ProjectMind.Application.Demo.DemoOptions>(builder.Configuration.GetSection(ProjectMind.Application.Demo.DemoOptions.Section));
 builder.Services.Configure<ProjectMind.Application.Ml.MlOptions>(builder.Configuration.GetSection(ProjectMind.Application.Ml.MlOptions.Section));
 // Model klasörü göreli verilirse uygulama klasörüne göre çözülür (App_Data/models, git'e girmez).
 builder.Services.PostConfigure<ProjectMind.Application.Ml.MlOptions>(o =>

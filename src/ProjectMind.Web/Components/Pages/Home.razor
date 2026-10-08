@@ -1,4 +1,8 @@
 @page "/"
+@using ProjectMind.Application.Demo
+@inject AppScope Scope
+@inject AppEvents Events
+@inject NavigationManager Nav
 
 <PageTitle>ProjectMind AI</PageTitle>
 
@@ -8,10 +12,57 @@
         ProjectMind AI ile projeyi sohbet ederek oluşturursunuz: proje bilgilerini, işleri, ekibi ve bağımlılıkları
         yazın; AI öneri kartları hazırlar, siz <strong>Uygula</strong> dediğinizde kaydedilir.
     </p>
-    <a class="btn btn-primary" href="/chat/new">Yeni proje sohbeti başlat</a>
+    <div class="welcome-actions">
+        <a class="btn btn-primary" href="/chat/new">Yeni proje sohbeti başlat</a>
+        <button class="btn" disabled="@_busy" @onclick="CreateDemoAsync">
+            @(_busy ? "Demo hazırlanıyor…" : "Demo projesini oluştur")
+        </button>
+    </div>
+    <p class="demo-note">
+        Demo: haftalardır süren, hafif gecikmiş bir mobil bankacılık projesi (ekip, iş kırılımı, baseline, haftalık
+        ilerleme). Durum, What-if ve "Eksik iş var mı?" hemen denenebilir. İlk seferde ML modeli eğitildiği için biraz sürebilir.
+    </p>
+    @if (_error is not null)
+    {
+        <div class="inline-error">
+            @_error
+            @if (_existingProjectId is { } id)
+            {
+                <a href="/projects/@id">Demo projesini aç</a>
+            }
+        </div>
+    }
     <div class="examples">
         <div class="example">"Mobil bankacılık projesi açalım, Kasım'da başlasın, 6 ay sürsün, bütçe 8 milyon TL."</div>
         <div class="example">"Ayşe backend ve veritabanı biliyor, haftada 40 saat çalışıyor. Ekibe ekle."</div>
         <div class="example">"Analiz, backend, frontend ve test işlerini ekle. Eksik iş var mı?"</div>
     </div>
 </div>
+
+@code {
+    private bool _busy;
+    private string? _error;
+    private int? _existingProjectId;
+
+    private async Task CreateDemoAsync()
+    {
+        _busy = true;
+        _error = null;
+        _existingProjectId = null;
+        try
+        {
+            var result = await Scope.RunAsync<DemoProjectSeeder, DemoSeedResult>(s => s.CreateAsync(CancellationToken.None));
+            await Events.NotifySessionsChangedAsync();
+            Nav.NavigateTo($"/chat/{result.ChatSessionId}");
+        }
+        catch (BusinessRuleException ex)
+        {
+            _error = ex.Message;
+            _existingProjectId = await Scope.RunAsync<DemoProjectSeeder, int?>(s => s.FindExistingAsync(CancellationToken.None));
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

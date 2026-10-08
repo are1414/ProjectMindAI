@@ -18,6 +18,8 @@ public class ProjectSnapshot : Entity
     public decimal? Cpi { get; set; }
     public decimal? SpiTime { get; set; }
     public decimal? EstimateAtCompletion { get; set; }
+
+    /// <summary>EVM (Earned Schedule) tahmini bitiş.</summary>
     public DateOnly? ForecastFinish { get; set; }
     public decimal PercentComplete { get; set; }
     public decimal? HealthScore { get; set; }
@@ -25,4 +27,10 @@ public class ProjectSnapshot : Entity
     public decimal ScopeHours { get; set; }
     public int BlockedItems { get; set; }
     public int TeamSize { get; set; }
+
+    /// <summary>ML gecikme olasılığı (0–1); o günkü tahmin yapılamadıysa (baseline yok, proje bitti, model yok) boş. RQ1 zaman çizelgesi.</summary>
+    public decimal? DelayProbability { get; set; }
+
+    /// <summary>ML süre regresyonunun tahmini bitişi.</summary>
+    public DateOnly? MlForecastFinish { get; set; }
 }

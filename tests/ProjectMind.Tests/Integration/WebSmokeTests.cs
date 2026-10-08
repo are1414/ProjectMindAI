@@ -35,4 +35,15 @@ public class WebSmokeTests(WebFactory factory) : IClassFixture<WebFactory>
             .GetRequiredService<Microsoft.Extensions.Options.IOptions<ProjectMind.Application.MissingWork.MissingWorkOptions>>().Value;
         Assert.Equal(80m, options.HoursFor(ProjectMind.Application.MissingWork.WorkSize.L));   // appsettings.json "MissingWork:SizeHours"
     }
+
+    [Fact]
+    public async Task Demo_seeder_resolves_from_di()
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var seeder = scope.ServiceProvider.GetRequiredService<ProjectMind.Application.Demo.DemoProjectSeeder>();
+        Assert.Null(await seeder.FindExistingAsync(CancellationToken.None));
+        var options = scope.ServiceProvider
+            .GetRequiredService<Microsoft.Extensions.Options.IOptions<ProjectMind.Application.Demo.DemoOptions>>().Value;
+        Assert.Equal(9, options.WeeksBack);
+    }
 }

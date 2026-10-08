@@ -45,3 +45,16 @@ Anahtar yoksa uygulama Mock modda çalışır (AI cevap vermez). Model ve diğer
 ```bash
 dotnet test                                # testler
 ```
+
+## Demo projesi
+
+Ana sayfada **Demo projesini oluştur** butonu, "Mobile Banking Modernization" projesini ve ona bağlı "Demo · Mobile Banking
+Modernization" sohbetini oluşturup açar. Proje bugünden yaklaşık 9 hafta önce başlamış gibi üretilir: 6 kişilik ekip, WBS'li
+35 iş ve bağımlılıklar, ilk gün alınmış baseline, her hafta girilmiş ilerleme ve günlük snapshot'lar (S-eğrisi, EVM, ML tahmini).
+Hikâye: hafif gecikme (SPI(t) ≈ 0,88), bir bloke iş, baseline sonrası eklenen kapsam (≈ %10), bir iptal edilen iş ve bilerek
+eksik bırakılan CI/CD, kullanıcı kabul testi ve dokümantasyon işleri ("Eksik iş var mı?" ile bulunur).
+
+- Veriler gerçek uygulama servisleriyle (geriye alınmış saatle) üretilir; LLM çağrılmaz, Mock modda da çalışır.
+- Tarihler bugüne göredir; aynı gün aynı sonuç (sabit tohum; isteğe bağlı ayar bölümü `Demo`: `WeeksBack`, `Seed`, `Velocity`).
+- Demo zaten varsa ikinci kopya açılmaz; yeniden oluşturmak için sol menüden sohbeti **projeyle birlikte** silin.
+- İlk kullanımda ML modeli henüz eğitilmemişse eğitim birkaç saniye sürebilir.

@@ -42,6 +42,7 @@ public class ProjectStatusServiceTests : ServiceTestBase
         Db.ChangeTracker.Clear();
 
         var nov4 = new DateTimeOffset(2026, 11, 4, 18, 0, 0, TimeSpan.Zero);
+        Predictor.Finish = new DateOnly(2026, 11, 11);
         var status = await NewStatusService(nov4).GetAsync(project.Id, _ct);
 
         Assert.Equal(2, await Db.StatusUpdates.CountAsync(_ct));
@@ -63,6 +64,10 @@ public class ProjectStatusServiceTests : ServiceTestBase
         var snapshot = await Db.ProjectSnapshots.SingleAsync(_ct);
         Assert.Equal(22, snapshot.EarnedValue);
         Assert.Equal(new DateOnly(2026, 11, 4), snapshot.Date);
+        // RQ1 zaman çizelgesi: günün snapshot'ında EVM ve ML tahmini birlikte saklanır.
+        Assert.Equal(new DateOnly(2026, 11, 9), snapshot.ForecastFinish);
+        Assert.Equal(0.7m, snapshot.DelayProbability);
+        Assert.Equal(new DateOnly(2026, 11, 11), snapshot.MlForecastFinish);
     }
 
     /// <summary>Proje 2 Kasım Pzt; tek backendci (8 s/gün, 100/saat); A (16 s) → B (40 s). İlk plan: A 2–3, B 4–10 Kasım.</summary>
