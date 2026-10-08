@@ -4,6 +4,58 @@ Her oturum sonunda en üste yeni kayıt eklenir. Format: yapılanlar · varsayı
 
 ---
 
+## 2026-10-08 (20) — Ekip turu 3: hibrit eksik iş önerisi
+
+Kapsam: `docs/team/ANALIZ.md` → "Lider kararları ve Tur 3 kapsamı": madde 6 (lider kararları 1–5 aynen). Ollama bu turda yok.
+
+- **LLM katmanı** (`Application/MissingWork`): `MissingWorkService.CheckHybridAsync` önce kural katmanını (şablonlar) çalıştırır,
+  AI bağlıysa `IChatModel.CompleteJsonAsync` ile şablonların kapsamadığı ek işleri ister. Girdi yalnız özet JSON: proje adı/tipi/
+  açıklaması, mevcut iş adları (+faz, en fazla `MaxContextWorkItems`), kural önerileri, kapsanan şablon adları. Prompt
+  `ChatPrompts.MissingWorkSystem`, sürüm `missing-work-v1`. Şema + C# doğrulayıcı `LlmMissingWorkSchema` (ad, faz, tek beceri,
+  gerekçe, büyüklük S/M/L; enum'lar ve `additionalProperties=false`); üst yapı bozuksa LLM önerisi yok, tek madde bozuksa
+  (saat gibi ek alan, bilinmeyen faz/beceri/büyüklük, boş ad) yalnız o düşer.
+- **Sayı yok**: saat `MissingWork:SizeHours` ayarından (S 8 / M 24 / L 80, `MissingWorkOptions.HoursFor`). Ad/gerekçedeki sayılar
+  NumberGuard ile girdiye karşı kontrol edilir; doğrulanamayan varsa cevapta işaretlenir ve kayda yazılır.
+- **Tekrar eleme** (`HybridMissingWork.Filter` / `IsSameWork`): `MissingWorkDetector.Normalize` ile sadeleştirilmiş ad eşitliği veya
+  kısa adın tüm anlamlı kelimelerinin uzun adda (aynen ya da ≥4 harfli ortak kökle, "test" ~ "testi"; "ve/ile/için" yok sayılır)
+  geçmesi. Mevcut işler, kural önerileri ve LLM'in kendi tekrarları elenir; en fazla `MaxLlmSuggestions` (5).
+- **Kaynak etiketi C#'ta**: "Eksik iş var mı?" kısayolu artık sohbet modeline gitmez; `ChatService.CheckMissingWorkAsync` kartları
+  doğrudan oluşturur — önce şablon işleri + bağımlılıkları (`Source = Rule`), sonra LLM ek işleri (`Source = Llm`); cevap metni
+  veriden üretilir (şablon listesi, LLM ad/gerekçe, plana etkisi). Sohbet modelinin kartlarında (`check_missing_work` aracı
+  artık hibrit: `missing` [source rule] + `aiSuggestions` [source llm] + `aiLayer`) `AiActionService.ProposeAsync` kaynağı
+  `HybridMissingWork.ResolveSource` ile belirler: ad kural önerisine eşit → Rule, projenin son başarılı LLM katmanı kaydındaki
+  öneriye eşit → Llm, şablonun önerdiği bağımlılık → Rule, diğer tüm sohbet kartları → User. Kartta "Şablon"/"AI" rozeti.
+- **Mock modu**: yalnız kural katmanı; cevapta "AI ek önerileri için ⚙ Ayarlar'dan API anahtarı ekleyin…" notu. LLM hatası /
+  zaman aşımı / şema dışı cevapta kural sonucu yine döner (Türkçe not).
+- **Denetim**: her LLM çağrısı `AiAnalysisLog` (`Kind = MissingWork`; model, prompt sürümü, bağlam uzunluğu, şema geçerli mi,
+  sonuç, süre, doğrulanamayan sayılar, `ResultJson` = kalan + elenen öneriler).
+- **Ölçüm**: `AiActionService.GetAcceptanceBySourceAsync` + `SourceAcceptance.Compute`; Deneyler sayfasında kaynağa göre tablo
+  (toplam, uygulandı, reddedildi, hata, bekliyor, kabul oranı = Uygulandı / (Uygulandı + Reddedildi)).
+- **Sohbet prompt'u** `chat-v9`: "kendi tahminine göre eksik iş uydurma" kuralı hibrit araca göre güncellendi (adı değiştirmeden
+  öner, kaynak iddiasında bulunma, aiLayer.note'u ilet).
+- **DB**: migration yok. `AiAnalysisKind.MissingWork` metin olarak saklanıyor (nvarchar(30)); `dotnet ef migrations
+  has-pending-model-changes` → "No changes have been made to the model since the last migration". Karar: D26.
+- Testler **213/213** (+38; 175'ten): birim 30 (ad benzerliği 8, büyüklük → saat, eleme + üst sınır, kaynak belirleme, şema geçerli/
+  üst yapı geçersiz 6/çok madde/madde düşürme 9/sağlayıcı şeması, kabul oranı elle örnek 3/(3+1)=0,75 ve 1/(1+1)=0,5), entegrasyon 7
+  (kısayol: kural + LLM kartları, KVKK M → 24 s, Ödeme S → 8 s, tekrarlar düşer, kayıt; Mock; model hatası; şema dışı; etkiye LLM
+  saatleri dahil; sohbet aracı kaynak etiketleri [model "llm" iddia etse de User]; kabul oranı), DI/ayar çözümleme 1.
+  `ChatOnlyModel.CompleteJsonAsync` artık `ChatModelException` atıyor (hibrit katman kural sonucuna düşsün). `dotnet build` 0 uyarı.
+
+**Varsayımlar**: Kural adıyla eşleşen kart, kullanıcı aynı işi kendisi istese de `Rule` sayılır (lider kararı 3: ad eşleşmesi).
+Sohbet kartlarında eşleşme yalnız sadeleştirilmiş ad eşitliğidir (model adı değiştirirse `User`). LLM ekleri plana etkide ardılsız
+eklenir. LLM önerisinin gerekçesi, kart uygulanırsa işin açıklaması olur. Kabul oranında "Hata" (uygulanmak istenip başarısız) ve
+bekleyen kartlar paydaya girmez. Kısayol LLM sohbet turu açmaz; yalnız JSON çağrısı yapar (daha ucuz).
+
+**Bilinen sorunlar**: Arayüz (kısayol, rozet, Deneyler tablosu) SQL Server olmadan bu ortamda tarayıcıda görülemedi; bileşenler
+derleniyor, servis katmanı testli. Gemini/Claude'un bu şemadaki `enum` alanlarını kabul ettiği gerçek API ile denenmedi; reddederse
+kullanıcı kural önerilerini ve Türkçe notu görür, kayıt `ModelError` olur. Ad benzerliği temkinlidir: tek kelimelik mevcut iş
+("Test") benzer LLM önerilerini ("Güvenlik testi") de eler. NumberGuard yuvarlama sınırı (Tur 1) aynen geçerli.
+
+**Sıradaki adım**: Faz 9 — demo projesi ("Mobile Banking Modernization"), RQ1–RQ4 ölçümleri (kaynağa göre kabul oranı dahil),
+sağlayıcı karşılaştırması (gerekirse opsiyonel Ollama); gerçek anahtarla hibrit eksik işin elle denenmesi.
+
+---
+
 ## 2026-10-08 (19) — Ekip turu 2: AI analiz yorumları
 
 Kapsam: `docs/team/ANALIZ.md` → "Lider kararları ve Tur 2 kapsamı": madde 3, 4, 5, 7 (lider kararları 1, 2, 4, 5 aynen).

@@ -93,7 +93,10 @@ public enum AiAnalysisKind
 {
     Chat,
     ProjectComment,
-    ScenarioComment
+    ScenarioComment,
+
+    /// <summary>Hibrit eksik iş önerisinin LLM katmanı (şablonların kapsamadığı ek işler).</summary>
+    MissingWork
 }
 
 /// <summary>AI analiz çağrısının sonucu.</summary>

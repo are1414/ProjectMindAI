@@ -1,6 +1,7 @@
 @page "/experiments"
 @inject IDelayPredictor Predictor
 @inject IJSRuntime JS
+@inject AppScope Scope
 @inject Microsoft.Extensions.Options.IOptions<MlOptions> MlSettings
 
 <PageTitle>Deneyler · ProjectMind AI</PageTitle>
@@ -101,6 +102,48 @@
             }
         </ul>
     }
+
+    <h2>AI öneri kabul oranı (kaynağa göre)</h2>
+    <p class="muted small">
+        RQ4: öneri kartlarının kaynağı C#'ta belirlenir — Kural / şablon, LLM (AI ek önerisi), Kullanıcı (sohbetteki istek),
+        Bilinmiyor (bu kayıttan önceki öneriler). Kabul oranı = Uygulandı / (Uygulandı + Reddedildi); bekleyen ve hata veren
+        öneriler orana girmez.
+    </p>
+    @if (_acceptance is null)
+    {
+        <p class="muted">Yükleniyor…</p>
+    }
+    else if (_acceptance.Count == 0)
+    {
+        <p class="muted">Henüz AI önerisi yok.</p>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="table table-compact">
+                <thead>
+                    <tr>
+                        <th>Kaynak</th><th class="num">Toplam</th><th class="num">Uygulandı</th><th class="num">Reddedildi</th>
+                        <th class="num">Hata</th><th class="num">Bekliyor</th><th class="num">Kabul oranı</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var a in _acceptance)
+                    {
+                        <tr>
+                            <td>@Format.Name(a.Source)</td>
+                            <td class="num">@a.Total</td>
+                            <td class="num">@a.Applied</td>
+                            <td class="num">@a.Rejected</td>
+                            <td class="num">@a.Failed</td>
+                            <td class="num">@a.Pending</td>
+                            <td class="num">@(a.AcceptanceRate is { } rate ? "%" + Format.Number((decimal)Math.Round(rate * 100, 1)) : "—")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
 </div>
 
 @code {
@@ -109,7 +152,14 @@
     private bool _running;
     private string? _error;
 
-    protected override void OnInitialized() => _report = Predictor.LastReport;
+    private IReadOnlyList<SourceAcceptance>? _acceptance;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _report = Predictor.LastReport;
+        _acceptance = await Scope.RunAsync<AiActionService, IReadOnlyList<SourceAcceptance>>(
+            s => s.GetAcceptanceBySourceAsync(CancellationToken.None));
+    }
 
     private async Task RunAsync()
     {

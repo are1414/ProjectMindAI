@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using ProjectMind.Application.Abstractions;
 using ProjectMind.Application.Common;
 using ProjectMind.Application.Dependencies;
+using ProjectMind.Application.MissingWork;
 using ProjectMind.Application.People;
 using ProjectMind.Application.Planning;
 using ProjectMind.Application.Projects;
@@ -14,10 +15,36 @@ namespace ProjectMind.Application.Ai;
 
 public sealed record AiActionResponse(
     int Id, int ChatSessionId, int? ChatMessageId, string ToolName, string Summary,
-    AiActionStatus Status, string? ResultMessage)
+    AiActionStatus Status, string? ResultMessage, AiActionSource Source = AiActionSource.Unknown)
 {
     public static AiActionResponse From(AiAction a) =>
-        new(a.Id, a.ChatSessionId, a.ChatMessageId, a.ToolName, a.Summary, a.Status, a.ResultMessage);
+        new(a.Id, a.ChatSessionId, a.ChatMessageId, a.ToolName, a.Summary, a.Status, a.ResultMessage, a.Source);
+}
+
+/// <summary>
+/// Bir öneri kaynağının kabul/red sayıları (RQ4). Kabul oranı = Uygulandı / (Uygulandı + Reddedildi); bekleyen ve
+/// uygulanırken hata veren öneriler orana girmez (karar verilmemiş / kullanıcı reddetmemiş). Karar yoksa oran null.
+/// </summary>
+public sealed record SourceAcceptance(AiActionSource Source, int Total, int Applied, int Rejected, int Failed, int Pending)
+{
+    public double? AcceptanceRate => Applied + Rejected == 0 ? null : (double)Applied / (Applied + Rejected);
+
+    /// <summary>Kaynak sırasına göre (Rule, Llm, User, Unknown) yalnız kaydı olan kaynaklar.</summary>
+    public static IReadOnlyList<SourceAcceptance> Compute(IEnumerable<(AiActionSource Source, AiActionStatus Status)> actions) =>
+        actions.GroupBy(a => a.Source)
+            .Select(g => new SourceAcceptance(g.Key, g.Count(),
+                g.Count(a => a.Status == AiActionStatus.Applied), g.Count(a => a.Status == AiActionStatus.Rejected),
+                g.Count(a => a.Status == AiActionStatus.Failed), g.Count(a => a.Status == AiActionStatus.Pending)))
+            .OrderBy(r => SourceOrder(r.Source))
+            .ToList();
+
+    private static int SourceOrder(AiActionSource s) => s switch
+    {
+        AiActionSource.Rule => 0,
+        AiActionSource.Llm => 1,
+        AiActionSource.User => 2,
+        _ => 3
+    };
 }
 
 /// <summary>
@@ -42,8 +69,12 @@ public sealed class AiActionService(
         return actions.Select(AiActionResponse.From).ToList();
     }
 
-    /// <summary>Modelin araç çağrısını doğrular ve onay bekleyen öneri olarak kaydeder.</summary>
-    public async Task<AiActionResponse> ProposeAsync(int sessionId, string toolName, JsonElement input, CancellationToken ct)
+    /// <summary>
+    /// Araç çağrısını doğrular ve onay bekleyen öneri olarak kaydeder. Kaynak verilmezse (sohbetteki model kartı) C#'ta
+    /// belirlenir (D26): adı kural önerisiyle eşleşen iş → Rule, son LLM katmanı önerisiyle eşleşen → Llm, diğerleri → User.
+    /// </summary>
+    public async Task<AiActionResponse> ProposeAsync(
+        int sessionId, string toolName, JsonElement input, CancellationToken ct, AiActionSource? source = null)
     {
         var session = await FindSessionAsync(sessionId, ct);
         var summary = await DescribeAsync(session, toolName, input, ct);
@@ -53,11 +84,44 @@ public sealed class AiActionService(
             ChatSessionId = sessionId,
             ToolName = toolName,
             PayloadJson = input.GetRawText(),
-            Summary = summary
+            Summary = summary,
+            Source = source ?? await ResolveSourceAsync(session, toolName, input, ct)
         };
         db.AiActions.Add(action);
         await db.SaveChangesAsync(ct);
         return AiActionResponse.From(action);
+    }
+
+    /// <summary>Tüm öneriler için kaynağa göre kabul/red sayıları ve kabul oranı (Deneyler sayfası, RQ4).</summary>
+    public async Task<IReadOnlyList<SourceAcceptance>> GetAcceptanceBySourceAsync(CancellationToken ct)
+    {
+        var rows = await db.AiActions.AsNoTracking().Select(a => new { a.Source, a.Status }).ToListAsync(ct);
+        return SourceAcceptance.Compute(rows.Select(r => (r.Source, r.Status)));
+    }
+
+    private async Task<AiActionSource> ResolveSourceAsync(ChatSession session, string toolName, JsonElement input, CancellationToken ct)
+    {
+        if (session.ProjectId is not { } projectId || toolName is not (AiTools.AddWorkItem or AiTools.AddDependency))
+            return AiActionSource.User;
+
+        var type = await db.Projects.AsNoTracking().Where(p => p.Id == projectId).Select(p => p.Type).FirstAsync(ct);
+        var rule = MissingWorkDetector.Detect(type, await workItems.ListAsync(projectId, ct));
+
+        if (toolName == AiTools.AddDependency)
+        {
+            // Şablonun önerdiği bağımlılık: eksik iş → mustFinishBefore listesindeki mevcut iş.
+            var p = Parse<AddDependencyPayload>(input);
+            var predecessor = MissingWorkDetector.Normalize(p.PredecessorName);
+            var successor = MissingWorkDetector.Normalize(p.SuccessorName);
+            return rule.Missing.Any(m => MissingWorkDetector.Normalize(m.Name) == predecessor
+                                         && m.SuggestedSuccessors.Any(s => MissingWorkDetector.Normalize(s) == successor))
+                ? AiActionSource.Rule
+                : AiActionSource.User;
+        }
+
+        var name = Parse<AddWorkItemPayload>(input).Name;
+        var llmNames = await MissingWorkService.LatestLlmSuggestionNamesAsync(db, projectId, ct);
+        return HybridMissingWork.ResolveSource(name, rule.Missing.Select(m => m.Name), llmNames);
     }
 
     public async Task AttachToMessageAsync(IEnumerable<int> actionIds, int messageId, CancellationToken ct)

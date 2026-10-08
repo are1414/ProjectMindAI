@@ -45,7 +45,13 @@
                 @foreach (var a in _actions.Where(a => a.ChatMessageId == m.Id))
                 {
                     <div class="action-card action-@a.Status.ToString().ToLowerInvariant()">
-                        <div class="action-summary">@a.Summary</div>
+                        <div class="action-summary">
+                            @if (a.Source is AiActionSource.Rule or AiActionSource.Llm)
+                            {
+                                <span class="badge source-badge" title="Önerinin kaynağı">@SourceLabel(a.Source)</span>
+                            }
+                            @a.Summary
+                        </div>
                         @if (a.Status == AiActionStatus.Pending)
                         {
                             <div class="action-buttons">
@@ -109,12 +115,41 @@
     private bool _loading = true;
     private ElementReference _scroller;
 
-    private static readonly string[] Shortcuts = ["Eksik iş var mı?"];
+    private static readonly string[] Shortcuts = [ChatService.MissingWorkShortcut];
+
+    private static string SourceLabel(AiActionSource source) => source == AiActionSource.Rule ? "Şablon" : "AI";
 
     private Task SendShortcutAsync(string text)
     {
+        // Eksik iş kısayolu hibrit kontrolü doğrudan çalıştırır (D26): şablon kartları her modda, AI kartları anahtar varsa.
+        if (text == ChatService.MissingWorkShortcut)
+            return RunShortcutAsync(text, s => s.CheckMissingWorkAsync(SessionId, CancellationToken.None));
         _input = text;
         return SendAsync();
+    }
+
+    private async Task RunShortcutAsync(string text, Func<ChatService, Task> run)
+    {
+        if (_sending)
+            return;
+        _error = null;
+        _sending = true;
+        _messages.Add(new ChatMessageResponse(0, ChatRole.User, text, DateTime.UtcNow));
+        _scrollPending = true;
+        StateHasChanged();
+        try
+        {
+            await Scope.RunAsync(run);
+        }
+        catch (BusinessRuleException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _sending = false;
+            await LoadAsync();
+        }
     }
 
     private int PendingCount => _actions.Count(a => a.Status == AiActionStatus.Pending);

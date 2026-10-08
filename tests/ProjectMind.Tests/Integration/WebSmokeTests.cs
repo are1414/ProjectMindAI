@@ -24,4 +24,15 @@ public class WebSmokeTests(WebFactory factory) : IClassFixture<WebFactory>
         if (model is ProjectMind.Infrastructure.Ai.NotConfiguredChatModel)
             Assert.False(model.IsConfigured);   // anahtar yoksa yorum kartı yalnız uyarı gösterir
     }
+
+    [Fact]
+    public async Task Hybrid_missing_work_services_resolve_with_configured_size_hours()
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<ProjectMind.Application.Chat.ChatService>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<ProjectMind.Application.MissingWork.MissingWorkService>());
+        var options = scope.ServiceProvider
+            .GetRequiredService<Microsoft.Extensions.Options.IOptions<ProjectMind.Application.MissingWork.MissingWorkOptions>>().Value;
+        Assert.Equal(80m, options.HoursFor(ProjectMind.Application.MissingWork.WorkSize.L));   // appsettings.json "MissingWork:SizeHours"
+    }
 }

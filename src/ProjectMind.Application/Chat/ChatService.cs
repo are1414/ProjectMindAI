@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using ProjectMind.Application.Abstractions;
 using ProjectMind.Application.Ai;
 using ProjectMind.Application.Common;
+using ProjectMind.Application.MissingWork;
 using ProjectMind.Application.Projects;
 using ProjectMind.Domain.Entities;
 using ProjectMind.Domain.Enums;
@@ -21,8 +22,12 @@ public sealed class ChatService(
     ReadOnlyToolHandler readOnlyTools,
     ProjectService projects,
     ProjectContextBuilder contextBuilder,
-    AiOptions options)
+    AiOptions options,
+    MissingWorkService missingWork)
 {
+    /// <summary>"Eksik iş var mı?" kısayolunun sohbete yazılan metni.</summary>
+    public const string MissingWorkShortcut = "Eksik iş var mı?";
+
     private const string NewSessionTitle = "Yeni proje sohbeti";
     private const int MaxToolsLength = 1000, MaxUnverifiedLength = 2000, MaxErrorLength = 1000;
 
@@ -214,6 +219,97 @@ public sealed class ChatService(
         await db.SaveChangesAsync(ct);
 
         return new ChatMessageResponse(assistant.Id, assistant.Role, assistant.Content, assistant.CreatedAt);
+    }
+
+    /// <summary>
+    /// "Eksik iş var mı?" kısayolu (D26): hibrit eksik iş kontrolünü sohbet modeli olmadan çalıştırır ve her öneriyi kaynağı
+    /// C#'ta belirlenmiş bir kart olarak ekler — önce şablon (Rule) işleri ve bağımlılıkları, ardından AI bağlıysa LLM (Llm)
+    /// ek işleri. Mock modda yalnız kural katmanı çalışır ve AI önerileri için anahtar gerektiği notu yazılır.
+    /// Cevap metni modelden değil veriden üretilir; kartlar onaylanmadan veri değişmez.
+    /// </summary>
+    public async Task<ChatMessageResponse> CheckMissingWorkAsync(int sessionId, CancellationToken ct)
+    {
+        var session = await db.ChatSessions.FirstOrDefaultAsync(s => s.Id == sessionId, ct)
+            ?? throw new NotFoundException("Sohbet", sessionId);
+        if (session.ProjectId is not { } projectId)
+            throw new BusinessRuleException("Eksik iş kontrolü için sohbetin bir projeye bağlı olması gerekir.");
+
+        db.ChatMessages.Add(new ChatMessage { ChatSessionId = sessionId, Role = ChatRole.User, Content = MissingWorkShortcut });
+        session.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+
+        var hybrid = await missingWork.CheckHybridAsync(projectId, sessionId, ct);
+        var currency = await db.Projects.AsNoTracking().Where(p => p.Id == projectId).Select(p => p.Currency).FirstAsync(ct);
+
+        var created = new List<int>();
+        async Task ProposeAsync(string tool, object payload, AiActionSource source)
+        {
+            try
+            {
+                var card = await actions.ProposeAsync(sessionId, tool, JsonSerializer.SerializeToElement(payload, AiJson.Options), ct, source);
+                created.Add(card.Id);
+            }
+            catch (BusinessRuleException)
+            {
+                // Geçersiz öneri kart olmaz (ör. aynı adlı iş); diğer öneriler etkilenmez.
+            }
+        }
+
+        foreach (var m in hybrid.Rule.Missing)
+            await ProposeAsync(AiTools.AddWorkItem,
+                new AddWorkItemPayload(m.Name, m.Phase, m.Skill, m.DefaultHours, m.Reason), AiActionSource.Rule);
+        foreach (var m in hybrid.Rule.Missing)
+            foreach (var successor in m.SuggestedSuccessors)
+                await ProposeAsync(AiTools.AddDependency, new AddDependencyPayload(m.Name, successor), AiActionSource.Rule);
+        foreach (var l in hybrid.Llm)
+            await ProposeAsync(AiTools.AddWorkItem,
+                new AddWorkItemPayload(l.Name, l.Phase, l.Skill, l.Hours, l.Reason), AiActionSource.Llm);
+
+        var assistant = new ChatMessage
+        {
+            ChatSessionId = sessionId,
+            Role = ChatRole.Assistant,
+            Content = MissingWorkReply(hybrid, currency),
+            Model = hybrid.LlmModel,
+            PromptVersion = hybrid.LlmStatus == LlmLayerStatus.NotConfigured ? WorkTemplateCatalog.Version : ChatPrompts.MissingWorkVersion
+        };
+        db.ChatMessages.Add(assistant);
+        await db.SaveChangesAsync(ct);
+        if (created.Count > 0)
+            await actions.AttachToMessageAsync(created, assistant.Id, ct);
+
+        return new ChatMessageResponse(assistant.Id, assistant.Role, assistant.Content, assistant.CreatedAt);
+    }
+
+    /// <summary>Kısayol cevabı: yalnız hesaplanmış veriden (şablon gerekçeleri, C# etkisi, LLM ad/gerekçeleri).</summary>
+    public static string MissingWorkReply(HybridMissingWorkResult hybrid, string currency)
+    {
+        var lines = new List<string>();
+        var rule = hybrid.Rule.Missing;
+        lines.Add(rule.Count == 0
+            ? $"Şablon kontrolü ({WorkTemplateCatalog.Version}): proje tipine göre beklenen işlerin hepsi listede görünüyor."
+            : $"Şablon kontrolü ({WorkTemplateCatalog.Version}): {rule.Count} eksik iş bulundu — {string.Join(", ", rule.Select(m => m.Name))}. " +
+              "Saatler şablonun varsayılan tahminidir.");
+
+        if (hybrid.Llm.Count > 0)
+        {
+            lines.Add($"AI ek önerileri ({hybrid.Llm.Count}, şablonların kapsamadığı işler; saat büyüklük sınıfından):");
+            lines.AddRange(hybrid.Llm.Select(l => $"• {l.Name} ({l.Size}): {l.Reason}"));
+        }
+        else if (hybrid.LlmStatus == LlmLayerStatus.Success)
+            lines.Add("AI katmanı şablonlar dışında ek eksik iş önermedi.");
+
+        if (hybrid.LlmMessage is not null)
+            lines.Add(hybrid.LlmMessage);
+        if (hybrid.UnverifiedNumbers.Count > 0)
+            lines.Add($"⚠ Doğrulanamayan sayılar: {string.Join(", ", hybrid.UnverifiedNumbers)} — bu değerler sistem verisinde yok, kontrol edin.");
+
+        if (hybrid.Impact is { } i)
+            lines.Add($"Önerilerin hepsi eklenirse planlanan bitiş {Format.Date(i.CurrentFinish)} → {Format.Date(i.FinishWithMissing)} " +
+                      $"(+{i.ExtraWorkdays} iş günü), +{Format.Number(i.ExtraHours)} saat, +{Format.Money(i.ExtraCost, currency)}.");
+        if (rule.Count > 0 || hybrid.Llm.Count > 0)
+            lines.Add("Öneriler aşağıda kart olarak; istemediklerinizi reddedebilirsiniz.");
+        return string.Join("\n", lines);
     }
 
     /// <summary>Modelin araç çağrılarını öneri olarak kaydeder; hataları modele geri bildirir ki düzeltsin.</summary>

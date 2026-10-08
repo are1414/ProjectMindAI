@@ -77,13 +77,18 @@ public abstract class ServiceTestBase : IDisposable
     }
 
 
+    protected ProjectMind.Application.MissingWork.MissingWorkService NewMissingWorkService(
+        IChatModel model, ProjectMind.Application.MissingWork.MissingWorkOptions? options = null) =>
+        new(NewOverviewService(), NewScheduleService(), Db, model,
+            Microsoft.Extensions.Options.Options.Create(options ?? new ProjectMind.Application.MissingWork.MissingWorkOptions()));
+
     protected ChatService NewChatService(IChatModel model)
     {
         var overview = NewOverviewService();
+        var missingWork = NewMissingWorkService(model);
         return new ChatService(Db, model, NewActionService(),
-            new ReadOnlyToolHandler(Db, new ProjectMind.Application.MissingWork.MissingWorkService(overview, NewScheduleService()),
-                NewScheduleService(), NewStatusService(), NewWhatIfService()), new ProjectService(Db),
-            new ProjectContextBuilder(Db, overview, TimeProvider.System), new AiOptions());
+            new ReadOnlyToolHandler(Db, missingWork, NewScheduleService(), NewStatusService(), NewWhatIfService()), new ProjectService(Db),
+            new ProjectContextBuilder(Db, overview, TimeProvider.System), new AiOptions(), missingWork);
     }
 
     protected static ProjectRequest NewProject() => new()

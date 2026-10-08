@@ -2,7 +2,7 @@
 
 **Akademik başlık:** Yapay Zekâ Destekli Yazılım Proje Planlama ve Karar Destek Sistemi: Zamanlama, Kaynak ve Kapsam Yönetimi Üzerine Bir Uygulama
 
-**Aktif faz: FAZ 8 — AI katmanı (analiz yorumları)**
+**Aktif faz: FAZ 9 — Demo ve değerlendirme**
 
 ## Ürün akışı (tek kullanıcı: proje yöneticisi)
 
@@ -89,12 +89,12 @@
 - [x] Brooks etkisi (yeni kişide ısınma süresi + mevcut ekipte mentorluk yükü; katılım tarihi)
 - [x] Senaryo karşılaştırma ekranı (What-if sekmesi: tablo + bitiş olasılığı eğrisi) ve AI aracı `simulate_what_if`
 
-### FAZ 8 — AI katmanı (analiz yorumları)
+### FAZ 8 — AI katmanı (analiz yorumları) ✅ (opsiyonel Ollama açık)
 - [x] `IChatModel`: Mock + Gemini + Claude (Faz 2.5'te)
 - [x] ContextBuilder, sürümlü prompt (Faz 2.5'te)
 - [x] JSON şemalı model çağrısı (`IChatModel.CompleteJsonAsync`: Gemini `responseJsonSchema`, Claude structured output) + C# şema doğrulaması (D25)
 - [x] Analiz cevapları için sayı doğrulayıcı (cevaptaki her sayı bağlamda olmalı) — sohbet (D23) ve yorum kartları (D25)
-- [ ] Eksik iş önerisinin LLM katmanı (hibrit) — `AiAction.Source` alanı eklendi (Tur 3)
+- [x] Eksik iş önerisinin LLM katmanı (hibrit): kural önce, LLM ek önerileri (JSON şema, S/M/L → saat C#'ta), tekrar eleme, kart kaynağı `Rule/Llm/User` C#'ta, kaynağa göre kabul oranı Deneyler sayfasında (D26)
 - [x] Proje yorumu, senaryo yorumu (EVM/ML/Monte Carlo sonuçlarını açıklama) — Durum ve What-if sekmelerinde "AI yorumu" kartı
 - [x] AI öneri kaydı (AiAction) — [x] analiz cevapları için ayrıntılı audit (`AiAnalysisLog`)
 - [ ] (Opsiyonel) Ollama sağlayıcısı ile karşılaştırma

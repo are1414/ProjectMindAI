@@ -25,12 +25,15 @@ public sealed class ReadOnlyToolHandler(
                 if (projectId is not { } id)
                     return new ToolExecutionResult("Henüz proje yok; önce proje oluşturulmalı.", true);
 
-                var (result, impact) = await missingWork.CheckAsync(id, ct);
+                // Hibrit (D26): önce şablon (kural), sonra AI bağlıysa LLM ek önerileri. Kaynak C#'ta etiketlenir.
+                var hybrid = await missingWork.CheckHybridAsync(id, sessionId, ct);
+                var (result, impact) = (hybrid.Rule, hybrid.Impact);
                 var payload = new
                 {
                     templateVersion = WorkTemplateCatalog.Version,
                     missing = result.Missing.Select(m => new
                     {
+                        source = "rule",
                         name = m.Name,
                         phase = m.Phase.ToString(),
                         requiredSkill = m.Skill.ToString(),
@@ -38,8 +41,24 @@ public sealed class ReadOnlyToolHandler(
                         reason = m.Reason,
                         mustFinishBefore = m.SuggestedSuccessors
                     }),
+                    aiSuggestions = hybrid.Llm.Select(l => new
+                    {
+                        source = "llm",
+                        name = l.Name,
+                        phase = l.Phase.ToString(),
+                        requiredSkill = l.Skill.ToString(),
+                        size = l.Size.ToString(),
+                        suggestedHours = l.Hours,
+                        reason = l.Reason
+                    }),
+                    aiLayer = new
+                    {
+                        status = hybrid.LlmStatus.ToString(),
+                        promptVersion = ChatPrompts.MissingWorkVersion,
+                        note = hybrid.LlmMessage
+                    },
                     alreadyCovered = result.Covered.ToDictionary(c => c.Key, c => c.Value),
-                    totalSuggestedHours = result.TotalDefaultHours,
+                    totalSuggestedHours = result.TotalDefaultHours + hybrid.Llm.Sum(l => l.Hours),
                     impactIfAdded = impact is null ? null : new
                     {
                         currentPlannedFinish = impact.CurrentFinish,

@@ -32,6 +32,7 @@ public static class DependencyInjection
         services.AddOptions<HealthOptions>();
         services.AddOptions<MlOptions>();
         services.AddOptions<WhatIfOptions>();
+        services.AddOptions<MissingWorkOptions>();
         services.AddScoped<WhatIfService>();
         services.AddSingleton<IDelayPredictor, DelayPredictionService>();
         services.AddScoped<ReadOnlyToolHandler>();

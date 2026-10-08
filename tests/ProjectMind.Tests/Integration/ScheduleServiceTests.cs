@@ -93,8 +93,8 @@ public class ScheduleServiceTests : ServiceTestBase
     {
         var (projectId, _) = await SeedAsync();
 
-        var (result, impact) = await new ProjectMind.Application.MissingWork.MissingWorkService(
-            NewOverviewService(), NewScheduleService()).CheckAsync(projectId, _ct);
+        var (result, impact) = await NewMissingWorkService(new ScriptedJsonModel(_ => "{}", configured: false))
+            .CheckAsync(projectId, _ct);
 
         Assert.NotEmpty(result.Missing);
         Assert.NotNull(impact);
