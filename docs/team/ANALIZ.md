@@ -1,170 +1,194 @@
-# Analiz Raporu — Faz 8 (AI analiz yorumları)
+# Analiz Raporu — Faz 9 (Demo ve değerlendirme)
 
-**Tarih:** 2026-10-08 · **Analist:** pm-analyst · **Tur:** 1 (TEST_PAZAR.md henüz yok)
+**Tarih:** 2026-10-08 · **Analist:** pm-analyst · **Aktif faz:** FAZ 9 (`docs/PLAN.md:102-105`)
+
+> **Önceki turlar:** Tur 1 (hata düzeltmeleri, 25b5ce7), Tur 2 (AI yorum kartları + audit, 1f8da6f), Tur 3 (hibrit eksik iş, dc0f63e).
+> Eski iş listeleri ve lider kararları git geçmişinde (`git log -- docs/team/ANALIZ.md`).
+> `docs/team/TEST_PAZAR.md` hâlâ Tur 1'e ait (115 test, Faz 8); P1–P6, P8, P9 Tur 1'de kapatıldı, P7 ve P10 Fikir Havuzu'nda.
 
 ## Durum
 
-- `dotnet build`: **başarılı, 0 uyarı / 0 hata** (ilk denemede paralel derlemeden kaynaklı geçici dosya kilidi hatası
-  alındı; tekrar derlemede temiz — kod sorunu değil).
-- `dotnet test`: **115/115 geçti** (≈4 sn).
-- Aktif faz: **FAZ 8**. Açık maddeler (`docs/PLAN.md:95-99`): sayı doğrulayıcı, hibrit eksik iş LLM katmanı,
-  proje/senaryo yorumu, analiz cevapları için ayrıntılı audit, (ops.) Ollama.
-- Not: `NumberGuard` Faz 5'te sohbet için zaten yazıldı (`Application/Ai/NumberGuard.cs`, `Chat/ChatService.cs:148-151`,
-  D18). Faz 8 maddesi bu yüzden "sıfırdan yazma" değil, **açıklarını kapatma + yorum kartına bağlama** işidir.
+- `dotnet build`: **0 uyarı / 0 hata.** İlk denemede `Microsoft.AspNetCore.Mvc.Testing.targets(38,5)` içinde geçici MSB4018 hatası
+  çıktı; tekrar ve `--no-incremental` derlemelerde temiz. Paralel derlemede dosya kilidi, kod sorunu değil.
+- `dotnet test`: **213/213 geçti** (≈9 sn). Çalışma ağacı temiz.
+- Faz 9'un açık maddeleri: demo projesi, RQ1–RQ4 ölçümleri + LLM sağlayıcı karşılaştırması, 5–10 kişilik SUS testi.
+  **Kodda bunların hiçbiri yok:** demo/seed kodu yok (`grep -i "demo|seed|Mobile Banking"` yalnız ML/Monte Carlo tohumlarını buluyor).
+  Değerlendirme sayfası, anket ve dışa aktarma da yok (tek CSV: Deneyler sayfasındaki sentetik ML raporu, `Experiments.razor:185`).
+
+## Ölçüm açıkları (RQ bazında)
+
+| RQ | Bugün ne var | Eksik |
+|---|---|---|
+| RQ1 | Sentetik test setinde ML ve EVM, %25/%50/%75 kontrol noktalarında karşılaştırılıyor; CSV var (`DelayExperiment.cs:20-40`) | Deney tek tohumla çalışıyor (`MlOptions.Seed`, `DelayModels.cs:56`), ortalama ± sapma yok. Demo projede ML olasılığı snapshot'a yazılmıyor (`ProjectSnapshot.cs` alanları; `ProjectStatusService.cs:112-137`). Bu yüzden "hangisi daha erken uyardı" zaman çizelgesi üretilemiyor. Rapor yalnız bellekte tutuluyor (`IDelayPredictor.LastReport`). |
+| RQ2 | Permütasyon özellik önemi (sentetik) | Tek tohum (yukarıdaki gibi). |
+| RQ3 | What-if ekranı, Monte Carlo deterministik (`WhatIfOptions.Seed = 7`) | Hiçbir what-if çalıştırması kaydedilmiyor (`WhatIfService.cs:12`). Karar desteği için anket maddesi yok. |
+| RQ4 | Kaynağa göre kabul oranı (`AiActionService.cs:96-100`), `AiAnalysisLog` | Kayıtlar silinebiliyor ve toplu uygulama oranı şişiriyor (madde 2). Kural katmanına karşı hibrit katmanın recall'u ölçülmüyor. "Açıklama anlaşılır mı?" sorusu yok. |
+| Sağlayıcı | `AiAnalysisLog`: model, süre, şema geçerliliği, doğrulanamayan sayılar | Sabit görev seti ve koşucu yok. Token/maliyet kaydı yok (`ChatModelContracts.cs:16,27` yalnız metin ve model döndürüyor). Kayıtlar bir değerlendirme koşusuna etiketlenemiyor. |
 
 ## Geliştirme iş listesi (öncelik sırasıyla)
 
-### 1. NumberGuard kanıtına eski asistan cevapları giriyor `[hata]` — S
-- **Neden:** `ChatService.cs:148` kanıta `history.Select(h => h.Content)` ekliyor; geçmiş, asistan mesajlarını da
-  içeriyor (`ChatService.cs:120-126`). Bir turda "Doğrulanamayan" diye işaretlenen sayı (uyarı satırı da mesaja
-  yazılıyor, `:151`) sonraki turda kanıt sayılıp **doğrulanmış** görünür. Halüsinasyon kendini aklar.
-- **Dosyalar:** `src/ProjectMind.Application/Chat/ChatService.cs`, `tests/.../Integration/ChatServiceTests.cs`.
-- **Kabul:** Kanıt yalnız bağlam + kullanıcı mesajları + bu turun araç sonuçlarıdır (asistan geçmişi hariç). Test:
-  1. turda ScriptedModel bağlamda olmayan "137" der → işaretlenir; 2. turda yine "137" der → yine işaretlenir.
+### 1. NumberGuard, Türkçe binlik ayraçlı kanıtı tanımıyor `[hata]` — S
+- **Neden:** Kanıt her zaman JSON biçiminde ayrıştırılıyor (`NumberGuard.cs:35`, `:138-139`). Ama kanıtın bir kısmı Türkçe
+  biçimli metin: kullanıcı mesajı (`ChatService.cs:146,164-165`) ve `Format.Money/Number` ile üretilen kart özetleri
+  (`ChatService.cs:342`, `AiActionService.cs:203,218`). "1.250.000" gibi çok gruplu sayılar ayrıştırılamıyor ve kanıttan düşüyor.
+  Scratchpad'da çalıştırarak doğruladım:
+  - Kullanıcı "Bütçe 1.250.000 TL olsun" yazdı, cevap "Bütçe 1.250.000 TL." → **`1.250.000` doğrulanamadı** olarak işaretlendi.
+  - Kart özeti "… 1.250.000 TRY", cevap "1.250.000,00 ₺" → işaretlendi.
+  Demo projenin bütçesi milyonluk olacağı için kullanıcı testinde her turda yanlış uyarı çıkar. Bu SUS puanını düşürür ve
+  "Doğrulanamayan sayılar" uyarısına güveni zayıflatır.
+- **Dosyalar:** `Application/Ai/NumberGuard.cs`, `tests/.../Unit/NumberGuardTests.cs`.
+- **Kabul:** Yukarıdaki iki örnek temiz dönmeli. `{"totalHours":1500}` kanıtı ile "1.500 saat" cevabı temiz kalmalı.
+  JSON `0.87` kanıtıyla "SPI 0,87" eşleşmeye devam etmeli. Kanıtta olmayan "137" hâlâ işaretlenmeli. Mevcut NumberGuard testleri yeşil kalmalı.
+  Önerilen çözüm: kanıtı hem JSON hem Türkçe biçimde ayrıştırıp bilinen sayıları birleştirmek.
 
-### 2. NumberGuard tarih açıkları `[hata]` / `[aktif faz]` — S
-- **Neden:** (a) `TurkishDateRegex` iki haneli gün/ay istiyor (`NumberGuard.cs:92`); "5.12.2026" tarih olarak
-  yakalanmıyor, `NumberRegex` ile tek token olur, `decimal.TryParse` başarısız olur ve **sessizce atlanır**
-  (`NumberGuard.cs:66`) → doğrulanmamış tarih geçer. (b) LLM'lerin sık kullandığı "5 Aralık 2026" biçimi hiç
-  tanınmıyor: gün ≤10 diye serbest, "2026" ise kanıttaki tarihler sayı çıkarımından önce silindiği için
-  (`NumberGuard.cs:60`) bulunamaz → **yanlış pozitif**, gün ise hiç kontrol edilmez. (c) Ayrıştırılamayan token'lar
-  hiçbir koşulda raporlanmıyor.
-- **Dosyalar:** `src/ProjectMind.Application/Ai/NumberGuard.cs`, `tests/.../Unit/NumberGuardTests.cs`.
-- **Kabul:** "5.12.2026", "05.12.2026", "5 Aralık 2026", "2026-12-05" kanıtta 2026-12-05 varken geçer, yokken
-  işaretlenir; ayrıştırılamayan sayı-benzeri token işaretlenir. Mevcut 5 InlineData yeşil kalır.
+### 2. RQ4 kabul verisi silinebiliyor ve toplu uygulama oranı şişiriyor `[hata]` — M
+- **Neden:**
+  - "Geçmişi temizle" ve sohbet silme öneri kayıtlarını da siliyor (`ChatService.cs:104-109`; ayrıca cascade:
+    `Configurations.cs:105-106`). Kullanıcı testinden sonra temizlik yapılırsa Deneyler sayfasındaki kabul oranı geri getirilemez.
+    `AiAnalysisLog` ise kalıcı (D25), yani iki kaynak tutarsızlaşıyor.
+  - "Bekleyen N öneriyi uygula" butonu (`ChatPanel.razor:25,238`, `AiActionService.cs:159-174`) her kartı tek tek
+    "Uygulandı" sayıyor. Kartlara bakmadan toplu kabul, RQ4 kabul oranını yapay olarak yükseltir.
+- **Dosyalar:** `Chat/ChatService.cs` (RemoveHistoryAsync), `Ai/AiActionService.cs`, `Domain/Entities/AiAction.cs`
+  (yeni `bool DecidedInBulk`), yeni migration, `Pages/Experiments.razor` (tabloya "tek tek / toplu" ayrımı).
+- **Kabul:**
+  - Geçmiş temizlenince karara bağlanmış kartlar kalmalı (`ChatMessageId = null`), bekleyenler silinmeli.
+    Test: temizlik öncesi ve sonrası `GetAcceptanceBySourceAsync` sayıları aynı olmalı.
+  - `ApplyAllPendingAsync` ile uygulanan kartlar `DecidedInBulk = true` olmalı.
+  - `SourceAcceptance` iki oran vermeli: tümü ve yalnız tek tek kararlar. Elle doğrulanan örnek: 2 tek tek uygulandı +
+    1 reddedildi + 3 toplu → 5/6 ve 2/3.
 
-### 3. Yorum kartı için JSON şemalı model çağrısı (`IChatModel` genişletmesi) `[aktif faz]` — M
-- **Neden:** CLAUDE.md §3 "LLM cevabı her zaman JSON şema ile istenir ve doğrulanır" diyor; şu an sohbet cevabı serbest
-  metin (`ChatModelContracts.cs:10-16` — `ChatTurnRequest`'te şema alanı yok; Gemini/Claude sağlayıcılarında
-  `responseSchema`/`responseMimeType` kullanımı yok). Madde 4 ve 5 bunun üstüne kurulur.
-- **Dosyalar:** `Application/Ai/ChatModelContracts.cs`, `Infrastructure/Ai/GeminiChatModel.cs`,
-  `Infrastructure/Ai/ClaudeChatModel.cs`, `Infrastructure/Ai/NotConfiguredChatModel.cs`, yeni
-  `Application/Ai/AnalysisCommentSchema.cs` (ör. `{ summary, keyFindings[], recommendedActions[], caveats[] }`).
-- **Kabul:** Şemaya uymayan cevap (eksik alan / JSON değil) `ChatModelException` ya da "geçersiz" sonucu üretir ve
-  kullanıcıya gösterilmez — sahte modelle test. Gemini için istek gövdesinde şema alanının gönderildiği
-  `GeminiChatModelTests` ile doğrulanır. Gerçek API çağrılmaz.
+### 3. Demo projesi "Mobile Banking Modernization" (geçmişiyle birlikte) `[aktif faz]` — L
+- **Neden:** EVM, S-eğrisi, ML ("son 2 hafta hızı" en az 2 haftalık snapshot ister, `DelayPredictionService.cs:21-25`) ve
+  what-if ancak geçmişi olan bir projede anlamlı değer üretir. Bugün plan "bugünden" başlıyor (`ScheduleService.cs:184-185`)
+  ve geçmiş üretmenin bir yolu yok.
+- **Önerilen yaklaşım:** Gerçek servisleri, geriye kaydırılmış bir saatle (`TimeProvider`'dan türeyen küçük bir sınıf; yeni paket
+  gerekmez) yeniden oynatmak:
+  1. Proje (Mobile, bütçe, hedef tarih), ~6 kişi, ~30 iş (WBS + bağımlılık).
+  2. Bugünden 8–10 hafta önce `ScheduleService.ApplyAsync` (baseline).
+  3. Her hafta `WorkItemService` ile ilerleme ve harcanan saat girilir, ardından `ProjectStatusService.GetAsync` çalışır (o günün
+     snapshot'ı). Sabit tohumla gerçekçi sapma: bir bloke iş, baseline sonrası eklenen kapsam, bir iptal edilen iş.
+  4. Bilerek bırakılan birkaç eksik şablon işi ("Eksik iş var mı?" demosu için).
+  Sonuç kodla üretilmeli; LLM sayı üretmemeli.
+- **Dosyalar:** yeni `Application/Demo/DemoProjectSeeder.cs` (+ `DemoOptions`: hafta sayısı, tohum), DI kaydı. Tetikleyici olarak
+  `Home.razor`'da "Demo projesini yükle" butonu (bileşen yalnız `AppScope` ile servisi çağırır). Testler `tests/.../Integration/DemoSeederTests.cs`.
+- **Kabul (SQLite testi):**
+  - En az 8 snapshot oluşmalı, hepsi aynı `BaselineId` ile.
+  - Son durumda SPI(t) < 1 olmalı ve `Delay` null olmamalı.
+  - Uyarılar en az bir bloke ve en az bir kapsam büyümesi içermeli.
+  - Aynı tohumla iki çalıştırmada EVM değerleri aynı olmalı.
+  - İsim zaten varsa ikinci proje açılmamalı; ya Türkçe hata vermeli ya da açıkça "yeniden oluştur" seçeneği sunmalı.
+  - Mock modda tamamen çalışmalı.
+- **Not:** `AppDbContext.cs:27` `CreatedAt` için gerçek saati kullanıyor. Baseline ve kartların oluşturulma zamanı "bugün"
+  görünür; bu kabul edilebilir ama PROGRESS'e varsayım olarak yazılmalı.
 
-### 4. Proje yorumu (EVM + sağlık + ML) — `ProjectCommentService` + Durum sekmesinde kart `[aktif faz]` — M
-- **Neden:** PLAN:97. Yorum şu an yalnız sohbette, serbest metin ve doğrulanmamış biçimde mümkün. `get_project_status`
-  yükü (`ReadOnlyToolHandler.cs:92-134`) zaten bağlam olarak hazır; aynısı yorum servisinin bağlamı olmalı (tek kaynak).
-- **Dosyalar:** yeni `Application/Ai/ProjectCommentService.cs` (bağlam = status JSON'u, prompt sürümü ayrı ör.
-  `comment-v1` `ChatPrompts.cs` içinde), `ReadOnlyToolHandler.cs` (yükü paylaşılan bir builder'a çıkar),
-  `Web/Components/Shared/StatusPanel.razor` (“AI yorumu” butonu + kart; iş mantığı yok, `AppScope` ile çağrı).
-- **Kabul:** Sahte model şemaya uygun yorum döner → kart alanları dolu; yorumdaki her sayı NumberGuard'dan geçer,
-  geçmeyenler kartta "Doğrulanamayan sayılar" olarak listelenir (test). Mock modda kart "AI bağlı değil" der, sayı
-  üretmez. Yorum veri değiştirmez.
+### 4. RQ1/RQ2 için tekrarlanabilir kanıt: snapshot'ta ML tahmini + çok tohumlu deney `[aktif faz]` — M
+- **Neden:** RQ1 "daha erken" sorusu demo projede ancak her snapshot'ta ML olasılığı ve bitiş tarihi saklanırsa gösterilebilir.
+  Şu an yalnız EVM alanları saklanıyor (`ProjectSnapshot.cs`). Sentetik deney tek tohumla çalışıyor; akademik iddia için en az
+  5 tohumda ortalama ± standart sapma gerekir.
+- **Dosyalar:**
+  - `Domain/Entities/ProjectSnapshot.cs` (+`DelayProbability`, `MlForecastFinish`) ve migration.
+  - `Analytics/ProjectStatusService.cs`: tahmini snapshot yazımından önce hesaplayıp yazmalı. Şu an sıra ters:
+    snapshot `:86`, tahmin `:98-106`.
+  - `Ml/DelayExperiment.cs` (+`RunSeeds`), `Pages/Experiments.razor` (çok tohumlu tablo + CSV).
+- **Kabul:**
+  - Demo seed sonrası her snapshot'ta `DelayProbability` dolu olmalı.
+  - Proje zaman çizelgesi CSV'si (`date,spi,spi_t,evm_forecast,ml_probability,ml_forecast`) satır sayısı snapshot sayısına eşit olmalı.
+  - Çok tohumlu koşu her yöntem ve kontrol noktası için `mean,sd,n` vermeli. 3 sahte değerle elle doğrulanan ortalama/sapma testi yazılmalı.
 
-### 5. Senaryo yorumu (What-if / Monte Carlo) — What-if sekmesinde kart `[aktif faz]` — M
-- **Neden:** PLAN:97. `WhatIfPanel.razor` karşılaştırmayı gösteriyor ama açıklama yok; `simulate_what_if` yükü
-  (`ReadOnlyToolHandler.cs:144-172`) tek senaryo içindir, panel ise en fazla 4 senaryo karşılaştırır.
-- **Dosyalar:** `ProjectCommentService` (senaryo yorumu metodu; bağlam = `WhatIfService.CompareAsync` sonucunun özet
-  JSON'u), `Web/Components/Shared/WhatIfPanel.razor`.
-- **Kabul:** 2 senaryolu karşılaştırma için sahte model yorumu: P80 farkı ve hedefe yetişme olasılığı bağlamdaki
-  değerlerle aynı (NumberGuard temiz); bağlamda olmayan bir sayı eklenirse işaretlenir. Brooks varsayımı caveats'ta.
+### 5. Değerlendirme sayfası ve RQ dışa aktarımları `[aktif faz]` — M
+- **Neden:** Rapor (Faz 10) için her RQ'nun tablosu tek tıkla ve aynı biçimde üretilebilmeli. Bugün kabul oranı yalnız ekranda;
+  `AiAnalysisLog` ve snapshot için dışa aktarma yok.
+- **Dosyalar:**
+  - Yeni `Application/Evaluation/EvaluationReportService.cs` (CSV üretimi; sayılar C#'ta, InvariantCulture).
+  - Yeni `Pages/Evaluation.razor` (`/evaluation`): RQ1 → madde 4, RQ3 → madde 8, RQ4 → kaynak × araç × durum ve yorum
+    geri bildirimi, sağlayıcı → madde 6, SUS → madde 7.
+  - İndirme için mevcut `pmDownload` JS fonksiyonu yeniden kullanılır.
+- **Kabul:** Seed'li SQLite'ta her CSV'nin başlığı sabit olmalı ve satır sayısı DB'deki kayıtlarla eşleşmeli (test).
+  CSV'de API anahtarı veya tam bağlam olmamalı (test: kolon listesi). Bileşende EF sorgusu olmamalı.
 
-### 6. Hibrit eksik iş: LLM katmanı + öneri kaynağı etiketi `[aktif faz]` — L
-- **Neden:** PLAN:96, D15, RQ4. Şu an yalnız kural/şablon (`MissingWorkDetector.cs:23-46`) var ve prompt LLM'in kendi
-  önerisini açıkça yasaklıyor (`ChatPrompts.cs:42` "kendi tahminine göre eksik iş uydurma"). RQ4'te "hibrit plan
-  bütünlüğünü artırıyor mu" ölçülecekse her önerinin **kaynağı** (kural / LLM) kaydedilmeli; `AiAction`'da böyle bir
-  alan yok (`Domain/Entities/AiAction.cs:9-21`) → kabul oranı kaynağa göre ayrılamaz.
-- **Dosyalar:** `MissingWork/MissingWorkService.cs` (kural sonucu + LLM'e şemalı "ek eksik iş" isteği; bağlam: proje
-  tipi, iş adları, kuralın bulduğu/kapsanan şablonlar), `Ai/ChatPrompts.cs` (kural metni güncellenir, sürüm artar),
-  `Domain/Entities/AiAction.cs` + **yeni migration** (`Source` alanı: Rule/Llm/User), `Ai/AiActionService.cs`,
-  `Ai/ReadOnlyToolHandler.cs:23-53` (çıktıda `source`).
-- **Kabul:** LLM önerileri mevcut işler ve kural önerileriyle (Normalize + `MissingWorkDetector.Matches`) çakışıyorsa
-  elenir (test); LLM önerisinin saat tahmini yoksa veya şema dışıysa öneri düşer; kartlar `Source=Llm` ile kaydedilir;
-  LLM hatasında kural sonucu yine döner (test). Hiçbir öneri onaysız eklenmez.
+### 6. LLM sağlayıcı karşılaştırma koşucusu (denetim kaydını kullanan) `[aktif faz]` — L
+- **Neden:** Faz 9 maddesi. Sağlayıcı bugün kapsam başına tek (`Infrastructure/DependencyInjection.cs:27-37`) ve kayıtlar bir
+  koşuya bağlanamıyor.
+- **Önerilen yaklaşım:** Demo projesi üzerinde sabit, sürümlü bir görev seti (`eval-v1`):
+  - proje yorumu,
+  - 2 senaryolu senaryo yorumu,
+  - hibrit eksik iş: demo kopyasından bilinen k işi çıkarıp kural recall'u ile hibrit recall'u ölçmek
+    (`HybridMissingWork.IsSameWork` ile eşleşme; RQ4 "plan bütünlüğü"),
+  - 5 sabit sohbet sorusu.
+  Her görev, yapılandırılmış her sağlayıcıda (`GeminiChatModel`, `ClaudeChatModel` somut tiplerle) n kez (ayar, varsayılan 3)
+  çalıştırılmalı.
+- **Dosyalar:**
+  - Yeni `Application/Evaluation/ProviderComparisonService.cs` ve `EvaluationTasks.cs`.
+  - `Domain/Entities/AiAnalysisLog.cs`: +`EvaluationRunId` (string?), +`InputTokens`/`OutputTokens` (int?). Migration.
+  - `Ai/ChatModelContracts.cs:16,27`: sonuçlara isteğe bağlı kullanım (usage) bilgisi.
+  - `Infrastructure/Ai/GeminiChatModel.cs` (`usageMetadata`), `ClaudeChatModel.cs` (`Usage`).
+  - `/evaluation` sayfasında "Karşılaştırmayı çalıştır" butonu (yalnız butonla; maliyet uyarısı).
+- **Kabul:**
+  - Senaryolu iki sahte modelle test: her sağlayıcı için şema geçerlilik oranı, doğrulanamayan sayı oranı (sayı/cevap),
+    medyan süre, hata oranı, hibrit recall.
+  - Bir sahte modelin şema dışı cevabı oranı elle hesaplanan değere düşürmeli (ör. 2/3).
+  - Tüm kayıtlar aynı `EvaluationRunId`'yi taşımalı. Testler gerçek API çağırmamalı.
+  - Anahtarsız sağlayıcı atlanmalı ve raporda "yapılandırılmamış" yazmalı.
 
-### 7. Analiz cevapları için ayrıntılı audit `[aktif faz]` — M
-- **Neden:** PLAN:98. `ChatMessage` yalnız `Model` ve `PromptVersion` saklıyor (`ChatMessage.cs:13-14`); hangi araçların
-  çağrıldığı, doğrulanamayan sayılar (sadece metne ekleniyor, `ChatService.cs:151`) ve yorumların şema geçerliliği
-  ayrı kaydedilmiyor. RQ4 / Faz 9 sağlayıcı karşılaştırması için ölçülebilir veri gerekli.
-- **Dosyalar:** yeni entity (ör. `AiAnalysisLog`: tür [chat/projectComment/scenarioComment/missingWork], prompt sürümü,
-  model, çağrılan araçlar, bağlam karakter uzunluğu, doğrulanamayan sayı listesi/sayısı, şema geçerli mi, süre ms) +
-  migration; `ChatService.cs`, `ProjectCommentService`.
-- **Kabul:** Her sohbet turu ve yorum için bir kayıt oluşur (entegrasyon testi); doğrulanamayan sayı sayısı kayıtta
-  NumberGuard sonucu ile aynı. API anahtarı / tam bağlam metni loglanmaz.
+### 7. SUS anketi (+ RQ3/RQ4 Likert maddeleri) ve puan hesabı `[aktif faz]` — M
+- **Neden:** Faz 9 maddesi. Puan hesabı test edilmiş C# kodu olmalı (CLAUDE.md §2).
+- **Dosyalar:**
+  - Yeni `Domain/Entities/SurveyResponse.cs`: katılımcı kodu (P01…; ad/e-posta yok), 10 SUS maddesi (1–5), RQ3 için 2 madde
+    (what-if karar güveni / yararlılık), RQ4 için 2 madde (AI açıklaması anlaşılır / eksik iş önerisi yararlı), görev
+    tamamlama süreleri (opsiyonel). Migration gerekir.
+  - `Application/Evaluation/SusScore.cs` ve `SurveyService.cs`.
+  - `Pages/Survey.razor` (`/evaluation/survey`): standart Türkçe SUS metinleri, ayarlanabilir sabitler. Hesap bileşende değil.
+- **Kabul:** Birim testleri:
+  - Hepsi 3 → 50.
+  - Tek maddeler 5, çift maddeler 1 → 100.
+  - Tersi → 0.
+  - Örnek karışık cevap elle hesaplanmış değere eşit olmalı (Brooke formülü: (Σ(tek−1)+Σ(5−çift))×2,5).
+  - Eksik madde varsa kayıt reddedilmeli (Türkçe hata).
+  - Değerlendirme sayfasında n, ortalama, standart sapma, min/maks ve CSV olmalı.
 
-### 8. (Opsiyonel) Ollama sağlayıcısı `[aktif faz — opsiyonel]` — M
-- **Neden:** PLAN:99, Faz 9 sağlayıcı karşılaştırması. Madde 3-7 bitmeden başlanmamalı.
-- **Dosyalar:** `Infrastructure/Ai/OllamaChatModel.cs`, `Infrastructure/DependencyInjection.cs`, `AiOptions.cs`.
-- **Kabul:** Ollama adresi yoksa/erişilemezse Mock'a düşer; HTTP sahte handler ile istek/cevap testi; yeni paket yok
-  (HttpClient yeter).
+### 8. RQ3/RQ4 kullanım kanıtı: what-if çalıştırma kaydı + yorum kartında "Anlaşılır mıydı?" `[aktif faz]` — M
+- **Neden:** Bu iki satır şu an PLAN Fikir Havuzu'nda (`docs/PLAN.md:135-136`). Ama Faz 9 RQ3/RQ4 ölçümü için gereken veri
+  bunlar. **Lider veya kullanıcı onayı gerekli** (faz kapsamına alınmaları).
+- **Dosyalar:**
+  - Yeni `WhatIfRunLog` (proje, senaryo değişiklikleri JSON, senaryo başına P80 ve hedefe yetişme olasılığı, süre ms) ve migration.
+  - `WhatIf/WhatIfService.cs:12` sonunda kayıt yazılmalı.
+  - `AiAnalysisLog.Helpful` (bool?).
+  - `ProjectCommentService` (+`RateAsync`), `Shared/AiCommentCard.razor` (Evet/Hayır butonları, yalnız callback).
+- **Kabul:**
+  - `CompareAsync` her çağrıda tam bir kayıt yazmalı; kayıttaki P80 değerleri dönen karşılaştırmayla aynı olmalı (test).
+  - Puanlama yalnız `Success` kayıtta kabul edilmeli, ikinci puan öncekinin üzerine yazmalı (test).
+  - Mock modda puanlama butonu görünmemeli.
 
-## Küçük teknik borç (iş listesine girmedi)
-- `WhatIfPanel.razor:200` — `ChanceGood = 0.8, ChanceWarning = 0.5` eşikleri bileşende; `WhatIf` ayar bölümüne
-  taşınabilir (CLAUDE.md §4 "eşikler configuration'dan").
-- `StatusPanel.razor:280-320` — S-eğrisi ölçek hesabı bileşende (sunum mantığı; kabul edilebilir, dokunulmamalı).
-- `ChatService.cs:188` — modelin **kendi araç girdisi** kanıta ekleniyor; model `add_work_item`'da uydurduğu saati
-  cevapta tekrarlarsa doğrulanmış sayılır. Kart kullanıcıya gösterildiği için kabul edilebilir; yorum kartlarında
-  (madde 4-5) araç girdisi kanıt sayılmamalı.
-- `ReadOnlyToolHandler.cs:209` — ad karşılaştırması `CurrentCultureIgnoreCase`; sunucu kültürüne bağlı (Türkçe I/İ).
+## Küçük teknik borç (listeye girmedi; uygun bir maddeyle birlikte ele alınabilir)
+
+- `HybridMissingWork.cs:73-74`: üst sınırı (`MaxLlmSuggestions`) aşan öneri ne `Dropped`'a ne de kayda giriyor. RQ4 için
+  "LLM kaç öneri verdi" sayısı eksik kalıyor; `DroppedSuggestion` nedeni olarak "üst sınır" eklenmeli.
+- `ChatService.cs:258-263`: kural iş kartı reddedilirse bağımlılık kartları "Bekliyor" kalıyor. Sonra "hepsini uygula" bunları
+  `Failed` yapıyor.
+- `ChatService.cs:237-241`: kısayolda `CheckHybridAsync` içindeki etki hesabı `BusinessRuleException` atarsa (döngü,
+  `CriticalPath.cs:76`), kullanıcı mesajı cevapsız kalıyor. Panel hatayı gösteriyor (`ChatPanel.razor`, RunShortcutAsync),
+  ama mesaj geçmişte yetim kalıyor.
+- `NumberGuard.cs:71`: yuvarlama toleransı ("0,9" ↔ 0,87) bilerek gevşek (Tur 1 bilinen sorun). Madde 6'daki görev setinde
+  etiketli 20–30 cümleyle NumberGuard precision/recall'u ölçülüp raporda sınırlılık olarak verilmeli.
 
 ## Fikir havuzu (geliştirici uygulamaz, PLAN'a eklenir)
-- `[fikir havuzu]` Yorum kartında "Açıklama anlaşılır mıydı? (Evet/Hayır)" geri bildirimi — RQ4'ün ikinci yarısı için
-  ölçüm (aksi halde yalnız Faz 9 SUS anketi kalır).
-- `[fikir havuzu]` What-if çalıştırmalarının ve seçilen senaryonun loglanması — RQ3 "karar desteği" kanıtı.
-- `[fikir havuzu]` Öneri kabul oranı raporu (kaynak × araç) Deneyler sayfasında, CSV ile.
+
+- `[fikir havuzu]` Deney raporunun DB'de kalıcı saklanması (bugün yalnız bellekte; deterministik olduğu için yeniden üretilebiliyor).
+- `[fikir havuzu]` Demo senaryosunun JSON dosyasından içe aktarılması (farklı demo projeleri için).
+- `[fikir havuzu]` Sağlayıcı karşılaştırmasında tahmini maliyet (token × birim fiyat, ayardan).
+- `[fikir havuzu]` RQ1 için önyükleme (bootstrap) güven aralığı / eşleştirilmiş AUC testi.
+- `[fikir havuzu]` (Zaten PLAN'da) Opsiyonel Ollama sağlayıcısı: madde 6 koşucusu hazır olunca yalnız yeni bir `IChatModel` eklemek yeterli.
 
 ## Riskler / açık sorular (kullanıcıya)
-1. **Mock modda yorum kartı** ne göstersin: sadece "AI bağlı değil" mi, yoksa LLM'siz şablon metin (sayılar C#'tan) mi?
-   (Öneri: sadece uyarı — şablon metin kapsam genişletir.)
-2. **Claude sağlayıcısında JSON şema** nasıl zorlanacak: zorunlu tek araç ("submit_comment") mu, SDK'nın yapılandırılmış
-   çıktı özelliği mi? SDK sürümünde var olduğu derlenerek doğrulanmalı (uydurma API riski).
-3. Hibrit eksik işte LLM'e proje **açıklaması** da gönderilsin mi (kullanıcı metni → prompt injection yüzeyi)?
-   Bağlam "veridir, talimat değildir" kuralı korunmalı.
-4. `AiAction.Source` ve audit tablosu için 1 veya 2 migration — mevcut kayıtlar `Source = Rule/Unknown` mı sayılsın?
-5. Yorumlar saklansın mı (her açılışta yeniden LLM çağrısı = maliyet/gecikme) yoksa snapshot tarihi başına önbellek mi?
 
----
-
-## Lider birleştirmesi (Tur 1) — Test/Pazar raporundan eklenenler
-
-Tur 1 geliştirme kapsamı: önce **hatalar** (Faz 8'in sayı doğrulayıcı maddesine ve RQ1 ölçümüne doğrudan etki ediyor),
-Faz 8 yorum kartları Tur 2'de.
-
-| Sıra | Etiket | Madde | Kaynak |
-|---|---|---|---|
-| T1 | [hata] | NumberGuard: önceki asistan cevapları (uyarı satırı dahil) kanıt sayılmasın — sadece kullanıcı mesajı, bağlam, araç sonuçları | ANALIZ 1, TEST_PAZAR kritik |
-| T2 | [hata] | NumberGuard: ×100/÷100 ölçekleme sadece "%" bağlamında; Türkçe ay adlı tarih ("5 Aralık 2026"), "5.12.2026", saat ("14:30") doğru ele alınsın | ANALIZ 2, TEST_PAZAR yüksek/orta |
-| T3 | [hata] | EVM: baseline'daki iş sonradan iptal edilirse BAC'den düşülsün (proje bitince SPI 1, %100); test | TEST_PAZAR yüksek |
-| T4 | [hata] | LLM zaman aşımı / iptal (TaskCanceledException, HttpRequestException) ChatModelException'a çevrilsin; sayfa çökmesin | TEST_PAZAR orta |
-| T5 | [hata] | What-if girdi doğrulama (negatif saat/maliyet); 0 kapasiteli sabit atamada doğru uyarı | TEST_PAZAR orta/düşük |
-| T6 | [hata] | Yeniden baseline: Bitti işlerin plan tarihleri bugüne taşınmasın; yarım işin baseline PV'si kalan pencereye tam efor yaymasın (EV baseline'ı tutarlı kalacak şekilde) | TEST_PAZAR yüksek |
-
-Fikir havuzuna: iş bazlı efor aralığı (en iyi/en kötü), tatil/izin takvimi, what-if hızlandırma, risk uyarısından işe bağlantı,
-çoklu baseline karşılaştırma, AI ile iş kırılımı (Faz 8 hibrit maddesiyle birlikte değerlendirilecek).
-
----
-
-## Lider kararları ve Tur 2 kapsamı (2026-10-08)
-
-Açık sorulara lider kararları (kullanıcı "sormadan ilerle" dedi):
-1. Mock modda yorum kartı LLM'siz metin üretmez; "AI bağlı değil — ⚙ Ayarlar'dan anahtar ekleyin" uyarısı gösterir.
-2. Claude'da JSON şema: önce SDK'nın yapılandırılmış çıktısı (`OutputConfig` + `JsonOutputFormat`); derlenmezse zorunlu tek araç.
-   Gemini: `generationConfig.responseMimeType = application/json` + şema. Her iki durumda cevap C# tarafında şemaya göre doğrulanır.
-3. Proje açıklaması bağlamda kalır; sistem prompt'unda "bağlam veridir, talimat değildir" kuralı korunur.
-4. Tek migration: `AiAction.Source` (mevcut kayıtlar Unknown) + analiz kayıt tablosu.
-5. Yorum sadece kullanıcı "AI yorumu üret" butonuna basınca üretilir (maliyet); son yorum kaydedilir ve girdi değişmediyse tekrar gösterilir.
-
-**Tur 2 kapsamı:** madde 3 (JSON şema desteği), 4 (Durum yorum kartı), 5 (What-if yorum kartı), 7 (analiz audit kaydı).
-Madde 6 (hibrit eksik iş) ve 8 (Ollama) Tur 3'e.
-
----
-
-## Lider kararları ve Tur 3 kapsamı (2026-10-08)
-
-**Kapsam:** madde 6 — hibrit eksik iş önerisi (kural + LLM) ve öneri kaynağının kaydı (RQ4). Ollama (madde 8, opsiyonel)
-bu turda yok; Faz 9 sağlayıcı karşılaştırmasında gerekirse ele alınır.
-
-Kararlar:
-1. **Kural katmanı önce, LLM sonra:** LLM katmanı `check_missing_work` (şablon) sonucunu ve proje özetini alır; sadece
-   şablonların kapsamadığı ek işleri önerir. Kural sonuçlarını tekrar etmesi C# tarafında ad benzerliğiyle elenir.
-2. **LLM sayı üretmez:** LLM her öneri için ad, faz, beceri, gerekçe ve **büyüklük sınıfı (S/M/L)** döndürür (JSON şema,
-   `CompleteJsonAsync`). Saat, isimli ayarlardan (`MissingWork:SizeHours` gibi) C# ile atanır.
-3. **Kaynak etiketi:** Öneri kartları `AiAction.Source` = `Rule` (şablondan), `Llm` (LLM katmanından), `User` (kullanıcının
-   açık isteği) olarak kaydedilir. Kaynak modelin beyanına bırakılmaz; C# belirler (kural sonucunda adı eşleşen → Rule,
-   LLM katmanı servisinden gelen → Llm, diğer sohbet kartları → User/Unknown).
-4. **Kullanıcı akışı:** "Eksik iş var mı?" kısayolu / araç → önce kural önerileri, ardından (AI bağlıysa) LLM önerileri,
-   hepsi kart olarak; Mock modda yalnızca kural katmanı çalışır.
-5. **Ölçüm:** Kabul/red oranı kaynağa göre okunabilsin (servis metodu + Deneyler sayfasında küçük bir tablo yeterli).
+1. **SUS nerede toplanacak?** Uygulama içi form (madde 7, migration gerekir) mi, kâğıt/Google Forms + yalnız puan hesaplayıcı mı?
+   Uygulama içi form tek kullanıcı kuralını (D2) bozmaz (hesap yok, katılımcı kodu var), ama onay gerekli.
+2. **Katılımcı verisi / KVKK:** Yalnız anonim kod saklanacak; bilgilendirilmiş onam metni ve etik kurul gereği var mı?
+3. **Sağlayıcı karşılaştırması bütçesi:** Hem Gemini hem Claude anahtarı olacak mı? Görev başına tekrar sayısı (öneri: 3)
+   ve ücretsiz katman kota sınırları? Ollama dahil mi?
+4. **Demo tarihleri:** Demo "bugüne göre 8–10 hafta önce" mi başlasın (her gün geçerli, önerilen), yoksa sabit tarihli mi
+   (rapordaki ekran görüntüleri aynı kalır ama "bugün" sonrası EVM değişir)?
+5. **Madde 8:** Fikir Havuzu'ndaki iki satır Faz 9 kapsamına alınsın mı (RQ3/RQ4 için önerilir)?
+6. **Geçerlilik sınırı:** ML yalnız sentetik veriyle eğitiliyor (D21). Demo projesindeki ML sonucu doğrulama değil, gösterimdir;
+   raporda böyle yazılmalı. RQ4 kabul oranı ancak katılımcıların kendi kararlarıyla anlamlıdır (geliştirici kullanımı ayrılmalı;
+   madde 2 + `EvaluationRunId` / katılımcı kodu).
