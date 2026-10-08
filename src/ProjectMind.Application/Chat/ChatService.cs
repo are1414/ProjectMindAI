@@ -145,7 +145,12 @@ public sealed class ChatService(
             reply = string.IsNullOrWhiteSpace(result.Text) ? "Önerilerimi aşağıda görebilirsiniz." : result.Text.Trim();
             modelName = result.Model;
 
-            var evidence = string.Join("\n", [request.UserMessage, .. history.Select(h => h.Content), .. executor.Evidence]);
+            // Kanıt: bu turun mesajı (bağlam dahil), önceki kullanıcı mesajları ve bu turun araç sonuçları.
+            // Önceki asistan cevapları kanıt değildir; aksi halde işaretlenen bir sayı sonraki turda "doğrulanmış" olur.
+            var evidence = string.Join("\n", [
+                request.UserMessage,
+                .. history.Where(h => h.Role == ChatRole.User).Select(h => h.Content),
+                .. executor.Evidence]);
             var unverified = NumberGuard.FindUnverified(reply, evidence);
             if (unverified.Count > 0)
                 reply += $"\n\n⚠ Doğrulanamayan sayılar: {string.Join(", ", unverified)} — bu değerler sistem verisinde yok, kontrol edin.";
@@ -153,6 +158,15 @@ public sealed class ChatService(
         catch (ChatModelException ex)
         {
             reply = ex.Message;
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            // Sağlayıcının çevirmediği zaman aşımı: sayfa çökmesin, kullanıcı mesajı cevapsız kalmasın.
+            reply = ChatModelMessages.Timeout;
+        }
+        catch (HttpRequestException)
+        {
+            reply = ChatModelMessages.Unreachable;
         }
 
         var assistant = new ChatMessage

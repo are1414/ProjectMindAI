@@ -4,7 +4,7 @@ namespace ProjectMind.Application.Analytics;
 
 public sealed record EvmBaselineItem(int WorkItemId, DateOnly Start, DateOnly End, decimal Hours, decimal HourlyCost);
 
-public sealed record EvmProgress(int WorkItemId, int PercentComplete, decimal ActualHours, bool IsDone);
+public sealed record EvmProgress(int WorkItemId, int PercentComplete, decimal ActualHours, bool IsDone, bool IsCancelled = false);
 
 public sealed record EvmResult(
     DateOnly StatusDate,
@@ -24,7 +24,8 @@ public sealed record EvmResult(
     DateOnly? ForecastFinish,
     decimal BudgetAtCompletionCost,
     decimal? EstimateAtCompletionCost,
-    IReadOnlyList<decimal> PlannedCurve)
+    IReadOnlyList<decimal> PlannedCurve,
+    decimal DescopedHours = 0)
 {
     public decimal ScheduleVariance => EarnedValue - PlannedValue;
     public decimal CostVariance => EarnedValue - ActualCost;
@@ -38,6 +39,8 @@ public sealed record EvmResult(
 ///   SPI = EV/PV, CPI = EV/AC, EAC = BAC/CPI,
 ///   ES = PV eğrisinin EV'ye ulaştığı zaman (iş günü), SPI(t) = ES/AT, tahmini süre = PD/SPI(t).
 /// Para birimi değerleri saat × saatlik maliyetten türetilir. Baseline'da olmayan (sonradan eklenen) işler EV/AC'ye girmez.
+/// Baseline'daki bir iş sonradan iptal edilirse kapsamdan çıkarılır (descope): BAC'den ve PV eğrisinden düşülür,
+/// <see cref="EvmResult.DescopedHours"/> olarak raporlanır; o işe harcanmış saat ise gerçekleşen maliyet olarak AC'de kalır.
 /// </summary>
 public static class EarnedValue
 {
@@ -46,13 +49,19 @@ public static class EarnedValue
     public static EvmResult Compute(
         IReadOnlyList<EvmBaselineItem> baseline, IReadOnlyList<EvmProgress> progress, DateOnly statusDate)
     {
-        var calendar = new WorkCalendar(baseline.Min(b => b.Start));
-        var plannedFinish = baseline.Max(b => b.End);
+        var cancelled = progress.Where(p => p.IsCancelled).Select(p => p.WorkItemId).ToHashSet();
+        var active = baseline.Where(b => !cancelled.Contains(b.WorkItemId)).ToList();
+        var descoped = baseline.Where(b => cancelled.Contains(b.WorkItemId)).Sum(b => b.Hours);
+
+        // Takvim kalan kapsamdan kurulur; her şey iptal edildiyse (BAC = 0) baseline'ın tarihleri kullanılır.
+        var scope = active.Count > 0 ? active : baseline;
+        var calendar = new WorkCalendar(scope.Min(b => b.Start));
+        var plannedFinish = scope.Max(b => b.End);
         var days = WorkCalendar.WorkdaysBetween(calendar.FirstDay, plannedFinish) + 1;
 
         // Kümülatif planlanan saat: curve[k] = k. iş gününün sonuna kadar planlanan toplam.
         var daily = new decimal[days];
-        foreach (var item in baseline)
+        foreach (var item in active)
         {
             var first = WorkCalendar.WorkdaysBetween(calendar.FirstDay, WorkCalendar.NextWorkday(item.Start));
             var last = WorkCalendar.WorkdaysBetween(calendar.FirstDay, item.End);
@@ -65,21 +74,25 @@ public static class EarnedValue
         for (var d = 0; d < days; d++)
             curve[d] = running += daily[d];
 
-        var bac = baseline.Sum(b => b.Hours);
+        var bac = active.Sum(b => b.Hours);
         var statusIndex = statusDate < calendar.FirstDay ? -1 : WorkCalendar.WorkdaysBetween(calendar.FirstDay, statusDate);
         var pv = statusIndex < 0 ? 0 : statusIndex >= days ? bac : curve[statusIndex];
 
         var progressById = progress.ToDictionary(p => p.WorkItemId);
         decimal ev = 0, ac = 0, evCost = 0, acCost = 0;
-        foreach (var item in baseline)
+        // Bir iş baseline'da birden çok satırla (kazanılmış + kalan kısım) bulunabilir: EV satır bazında, AC iş başına bir kez.
+        foreach (var work in baseline.GroupBy(b => b.WorkItemId))
         {
-            if (!progressById.TryGetValue(item.WorkItemId, out var p))
+            if (!progressById.TryGetValue(work.Key, out var p))
                 continue;
-            var earned = item.Hours * (p.IsDone ? FullPercent : p.PercentComplete) / FullPercent;
+            var percent = p.IsCancelled ? 0 : p.IsDone ? FullPercent : p.PercentComplete;
+            var hours = work.Sum(i => i.Hours);
+            var earned = hours * percent / FullPercent;
+            var rate = hours > 0 ? work.Sum(i => i.Hours * i.HourlyCost) / hours : work.First().HourlyCost;
             ev += earned;
             ac += p.ActualHours;
-            evCost += earned * item.HourlyCost;
-            acCost += p.ActualHours * item.HourlyCost;
+            evCost += earned * rate;
+            acCost += p.ActualHours * rate;
         }
 
         decimal? spi = pv > 0 ? Round(ev / pv) : null;
@@ -99,12 +112,12 @@ public static class EarnedValue
                 forecast = calendar.ToDate(Math.Max((int)Math.Ceiling(days / spiT.Value) - 1, 0));
         }
 
-        var bacCost = baseline.Sum(b => b.Hours * b.HourlyCost);
+        var bacCost = active.Sum(b => b.Hours * b.HourlyCost);
         decimal? costCpi = acCost > 0 ? evCost / acCost : null;
         decimal? eacCost = costCpi is > 0 ? Math.Round(bacCost / costCpi.Value, 0) : null;
 
         return new EvmResult(statusDate, bac, Round(pv), Round(ev), Round(ac), spi, cpi, es is null ? null : Round(es.Value),
-            at, spiT, eac, days, calendar.FirstDay, plannedFinish, forecast, bacCost, eacCost, curve);
+            at, spiT, eac, days, calendar.FirstDay, plannedFinish, forecast, bacCost, eacCost, curve, descoped);
     }
 
     /// <summary>PV eğrisinde EV'ye ulaşılan zaman: tam gün sayısı + kesirli kısım (doğrusal ara değer).</summary>

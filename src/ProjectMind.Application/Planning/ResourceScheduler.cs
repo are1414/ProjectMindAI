@@ -82,10 +82,11 @@ public static class ResourceScheduler
 
             var earliest = next.Predecessors.Select(p => ReadyDay(scheduled[p], activities[p].Hours)).DefaultIfEmpty(0).Max();
 
-            var candidates = Candidates(next, input.People, warnings);
+            var (candidates, fixedUnavailable) = Candidates(next, input.People, warnings);
             if (candidates.Count == 0)
             {
-                missingSkills.Add(next.Skill);
+                if (!fixedUnavailable)
+                    missingSkills.Add(next.Skill);
                 var days = next.Hours <= Epsilon ? 1 : (int)Math.Ceiling(next.Hours / input.HoursPerDay);
                 scheduled[next.Id] = (earliest, earliest + days - 1, null);
                 continue;
@@ -138,16 +139,25 @@ public static class ResourceScheduler
     private static int ReadyDay((int Start, int Finish, int? Person) slot, decimal hours) =>
         hours <= Epsilon ? slot.Finish : slot.Finish + 1;
 
-    private static List<PlanResource> Candidates(PlanActivity activity, IReadOnlyList<PlanResource> people, List<string> warnings)
+    /// <summary>
+    /// Aday kişiler. Sabit atamada yalnız atanan kişi; kapasitesi 0 ise iş kişisiz planlanır ve bunun nedeni ayrı
+    /// uyarıyla bildirilir (FixedUnavailable = true; "beceriye sahip kişi yok" uyarısı verilmez).
+    /// </summary>
+    private static (List<PlanResource> People, bool FixedUnavailable) Candidates(
+        PlanActivity activity, IReadOnlyList<PlanResource> people, List<string> warnings)
     {
         if (activity.FixedAssigneeId is { } fixedId && people.FirstOrDefault(p => p.Id == fixedId) is { } fixedPerson)
         {
             if (!fixedPerson.Skills.HasFlag(activity.Skill))
                 warnings.Add($"'{activity.Name}' işine atanan {fixedPerson.Name}, '{Format(activity.Skill)}' becerisine sahip değil.");
-            return fixedPerson.DailyCapacity > 0 ? [fixedPerson] : [];
+            if (fixedPerson.DailyCapacity > 0)
+                return ([fixedPerson], false);
+            warnings.Add($"'{activity.Name}' işine atanan {fixedPerson.Name} kişisinin kapasitesi 0; iş kişisiz planlandı " +
+                         "(kapasite verin veya atamayı kaldırın).");
+            return ([], true);
         }
 
-        return people.Where(p => p.Skills.HasFlag(activity.Skill) && p.DailyCapacity > 0).ToList();
+        return (people.Where(p => p.Skills.HasFlag(activity.Skill) && p.DailyCapacity > 0).ToList(), false);
     }
 
     private static (int Start, int Finish) Simulate(decimal hours, int earliest, PlanResource person, Dictionary<int, decimal> used)

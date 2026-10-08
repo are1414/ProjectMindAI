@@ -76,6 +76,32 @@ public class WhatIfTests
         Assert.Equal([1], result.Single(a => a.Id == 3).Predecessors);
     }
 
+    [Theory]
+    [InlineData(-40, null)]       // negatif haftalık saat
+    [InlineData(0, null)]         // sıfır kapasiteyle "kişi ekle" anlamsız
+    [InlineData(200, null)]       // haftada 168 saatten fazla
+    [InlineData(40, -100)]        // negatif saatlik maliyet
+    public void Add_person_rejects_invalid_hours_and_cost(int weeklyHours, int? hourlyCost) =>
+        Assert.Throws<BusinessRuleException>(() => ScenarioApplier.Apply(TwoTasksOnePerson(), NoParents, Monday,
+            [new ScenarioChange(ScenarioChangeKind.AddPerson, Skills: [Skill.Backend], WeeklyHours: weeklyHours, HourlyCost: hourlyCost)],
+            new WhatIfOptions()));
+
+    [Theory]
+    [InlineData(-10)]
+    [InlineData(169)]
+    public void Change_capacity_rejects_out_of_range_hours(int weeklyHours) =>
+        Assert.Throws<BusinessRuleException>(() => ScenarioApplier.Apply(TwoTasksOnePerson(), NoParents, Monday,
+            [new ScenarioChange(ScenarioChangeKind.ChangeCapacity, PersonId: 1, WeeklyHours: weeklyHours)], new WhatIfOptions()));
+
+    [Fact]
+    public void Add_person_accepts_zero_cost_and_full_week()
+    {
+        var applied = ScenarioApplier.Apply(TwoTasksOnePerson(), NoParents, Monday,
+            [new ScenarioChange(ScenarioChangeKind.AddPerson, Skills: [Skill.Backend], WeeklyHours: 168, HourlyCost: 0)],
+            new WhatIfOptions());
+        Assert.Equal(2, applied.Input.People.Count);
+    }
+
     [Fact]
     public void Remove_person_and_capacity_change_and_deadline()
     {

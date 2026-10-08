@@ -149,6 +149,55 @@ public class ChatServiceTests : ServiceTestBase
         Assert.All(await NewActionService().ListAsync(session.Id, _ct), a => Assert.NotEqual(AiActionStatus.Pending, a.Status));
     }
 
+    [Fact]
+    public async Task Number_flagged_in_previous_answer_is_still_flagged_when_repeated()
+    {
+        var chat = NewChatService(new TextModel("Kalan efor 137 saat."));
+        var session = await chat.CreateSessionAsync(_ct);
+
+        var first = await chat.SendAsync(session.Id, "Kalan efor ne kadar?", _ct);
+        var second = await chat.SendAsync(session.Id, "Emin misin?", _ct);
+
+        Assert.Contains("Doğrulanamayan sayılar: 137", first.Content);
+        Assert.Contains("Doğrulanamayan sayılar: 137", second.Content);   // önceki asistan cevabı kanıt değil
+    }
+
+    [Fact]
+    public async Task Number_given_by_user_in_previous_message_is_accepted()
+    {
+        var chat = NewChatService(new TextModel("Hedef 137 saat olarak not edildi."));
+        var session = await chat.CreateSessionAsync(_ct);
+
+        await chat.SendAsync(session.Id, "Hedef efor 137 saat olsun.", _ct);
+        var second = await chat.SendAsync(session.Id, "Tekrar eder misin?", _ct);
+
+        Assert.DoesNotContain("Doğrulanamayan", second.Content);
+    }
+
+    [Fact]
+    public async Task Unconverted_timeout_is_saved_as_friendly_assistant_message()
+    {
+        var chat = NewChatService(new TimingOutModel());
+        var session = await chat.CreateSessionAsync(_ct);
+
+        var reply = await chat.SendAsync(session.Id, "Merhaba", _ct);
+
+        Assert.Equal(ChatModelMessages.Timeout, reply.Content);
+        Assert.Equal([ChatRole.User, ChatRole.Assistant], (await chat.ListMessagesAsync(session.Id, _ct)).Select(m => m.Role));
+    }
+
+    private sealed class TimingOutModel : IChatModel
+    {
+        public Task<ChatTurnResult> CompleteTurnAsync(ChatTurnRequest request, IChatToolExecutor tools, CancellationToken ct) =>
+            throw new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout");
+    }
+
+    private sealed class TextModel(string text) : IChatModel
+    {
+        public Task<ChatTurnResult> CompleteTurnAsync(ChatTurnRequest request, IChatToolExecutor tools, CancellationToken ct) =>
+            Task.FromResult(new ChatTurnResult(text, "text"));
+    }
+
     private sealed class FailingModel : IChatModel
     {
         public Task<ChatTurnResult> CompleteTurnAsync(ChatTurnRequest request, IChatToolExecutor tools, CancellationToken ct) =>

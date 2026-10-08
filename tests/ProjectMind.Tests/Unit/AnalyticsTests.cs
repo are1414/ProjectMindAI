@@ -61,6 +61,38 @@ public class EarnedValueTests
     }
 
     [Fact]
+    public void Cancelled_baseline_work_is_removed_from_scope()
+    {
+        // B (24 s) iptal edildi, A bitti → kalan kapsam yalnız A: BAC 16, plan bitişi 3 Kasım, PV eğrisi 8, 16.
+        // 10 Kasım: PV = BAC = 16, EV = 16 → SPI 1, %100; harcanan 20 + 3 s (iptal edilen işe harcanan da) AC'de kalır.
+        var r = EarnedValue.Compute(Baseline,
+            [new(1, 100, 20, true), new(2, 10, 3, false, IsCancelled: true)], new DateOnly(2026, 11, 10));
+
+        Assert.Equal(16, r.BudgetAtCompletion);
+        Assert.Equal(24, r.DescopedHours);
+        Assert.Equal(16, r.PlannedValue);
+        Assert.Equal(16, r.EarnedValue);
+        Assert.Equal(23, r.ActualCost);
+        Assert.Equal(1m, r.Spi);
+        Assert.Equal(100, r.PercentComplete);
+        Assert.Equal(new DateOnly(2026, 11, 3), r.PlannedFinish);
+        Assert.Equal([8m, 16m], r.PlannedCurve);
+        Assert.Equal(new DateOnly(2026, 11, 10), r.ForecastFinish);
+        Assert.Equal(1600, r.BudgetAtCompletionCost);
+    }
+
+    [Fact]
+    public void All_baseline_work_cancelled_gives_zero_budget_without_error()
+    {
+        var r = EarnedValue.Compute(Baseline,
+            [new(1, 0, 0, false, IsCancelled: true), new(2, 0, 0, false, IsCancelled: true)], new DateOnly(2026, 11, 4));
+        Assert.Equal(0, r.BudgetAtCompletion);
+        Assert.Equal(40, r.DescopedHours);
+        Assert.Null(r.Spi);
+        Assert.Equal(0, r.PercentComplete);
+    }
+
+    [Fact]
     public void Work_not_in_baseline_is_ignored()
     {
         var r = EarnedValue.Compute(Baseline, [new(1, 100, 16, true), new(99, 100, 50, true)], new DateOnly(2026, 11, 3));

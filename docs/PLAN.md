@@ -92,7 +92,7 @@
 ### FAZ 8 — AI katmanı (analiz yorumları)
 - [x] `IChatModel`: Mock + Gemini + Claude (Faz 2.5'te)
 - [x] ContextBuilder, sürümlü prompt (Faz 2.5'te)
-- [ ] Analiz cevapları için sayı doğrulayıcı (cevaptaki her sayı bağlamda olmalı)
+- [ ] Analiz cevapları için sayı doğrulayıcı (cevaptaki her sayı bağlamda olmalı) — sohbet tarafı sertleştirildi (D23); yorum kartlarına bağlanınca kapanır
 - [ ] Eksik iş önerisinin LLM katmanı (hibrit)
 - [ ] Proje yorumu, senaryo yorumu (EVM/ML/Monte Carlo sonuçlarını açıklama)
 - [x] AI öneri kaydı (AiAction) — [ ] analiz cevapları için ayrıntılı audit
@@ -125,3 +125,12 @@ docs/                          Plan, kararlar, ilerleme
 - Monte Carlo efor belirsizliğini projenin gerçekleşen CPI dağılımından kalibre etmek
 - Senaryoyu tek tıkla öneri kartlarına dönüştürmek (kişi ekle / iş çıkar kartları)
 - Gerçek proje snapshot'larıyla (Faz 9 demo) modelin ince ayarı / doğrulanması
+- İş bazında belirsizlik aralığı (en iyi / en kötü efor) ile Monte Carlo (LiquidPlanner tarzı)
+- Resmî tatil / kişi izni takvimi (WorkCalendar'a)
+- What-if hızlandırma: hazır kuyruğu için öncelik kuyruğu, Monte Carlo turlarını paralel çalıştırma, iptal desteği
+- Risk uyarısından ilgili işe / Gantt satırına bağlantı
+- Çoklu baseline karşılaştırması (ve VAC gösterimi)
+- AI ile iş kırılımı ("bu işi alt işlere böl" — add_work_item + parentName kartları; Faz 8 hibrit eksik iş maddesiyle birlikte değerlendirilecek)
+- Yorum kartında "Açıklama anlaşılır mıydı? (Evet/Hayır)" geri bildirimi (RQ4 ölçümü)
+- What-if çalıştırmalarının ve seçilen senaryonun loglanması (RQ3 kanıtı)
+- Öneri kabul oranı raporu (kaynak × araç) Deneyler sayfasında, CSV ile

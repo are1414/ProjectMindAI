@@ -99,6 +99,7 @@ public sealed class ReadOnlyToolHandler(
                     {
                         unit = "saat (efor)",
                         budgetAtCompletion = e.BudgetAtCompletion,
+                        descopedHours = e.DescopedHours,
                         plannedValue = e.PlannedValue,
                         earnedValue = e.EarnedValue,
                         actualCost = e.ActualCost,

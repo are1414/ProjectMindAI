@@ -55,7 +55,10 @@ public sealed class ScheduleService(IAppDbContext db, ProjectOverviewService ove
         return (overview, BuildInput(overview, []));
     }
 
-    /// <summary>Planı işlere yazar (tarih + boş atamalar) ve baseline olarak dondurur.</summary>
+    /// <summary>
+    /// Planı işlere yazar (tarih + boş atamalar) ve baseline olarak dondurur. Bitti işlerin mevcut plan tarihleri
+    /// korunur (geçmiş Gantt kaybolmaz); başlamış bir işin plan başlangıcı yeni plandan önceyse korunur.
+    /// </summary>
     public async Task<SchedulePreview> ApplyAsync(int projectId, CancellationToken ct)
     {
         var preview = await PreviewAsync(projectId, ct);
@@ -65,12 +68,18 @@ public sealed class ScheduleService(IAppDbContext db, ProjectOverviewService ove
 
         var items = await db.WorkItems.Where(w => w.ProjectId == projectId).ToListAsync(ct);
         var byId = items.ToDictionary(w => w.Id);
+        var original = items.ToDictionary(w => w.Id, w => (Start: w.PlannedStart, End: w.PlannedEnd));
+        var fullHours = preview.Overview.WorkItems.ToDictionary(w => w.Id, w => w.EstimatedHours);
+
         foreach (var a in plan.Activities)
         {
             var item = byId[a.Id];
-            item.PlannedStart = a.Start;
-            item.PlannedEnd = a.Finish;
             item.AssigneeId ??= a.AssigneeId;
+            if (item.Status == WorkItemStatus.Done && item.PlannedStart is not null && item.PlannedEnd is not null)
+                continue;
+            var started = fullHours[a.Id] > a.Hours;
+            item.PlannedStart = started && item.PlannedStart is { } s && s < a.Start ? s : a.Start;
+            item.PlannedEnd = a.Finish;
         }
 
         // Üst işlerin tarihleri alt işlerinden türetilir.
@@ -83,30 +92,56 @@ public sealed class ScheduleService(IAppDbContext db, ProjectOverviewService ove
             parent.PlannedEnd = leaves.Max(w => w.PlannedEnd);
         }
 
-        // Baseline'da işin TAM eforu saklanır: EVM'de EV = baseline eforu × %tamamlanma.
         var cost = preview.Overview.People.ToDictionary(p => p.Id, p => p.HourlyCost);
-        var fullHours = preview.Overview.WorkItems.ToDictionary(w => w.Id, w => w.EstimatedHours);
+        var baselineItems = plan.Activities
+            .SelectMany(a => BaselineItemsFor(a, fullHours[a.Id], original[a.Id], plan.Start,
+                a.AssigneeId is { } p ? cost.GetValueOrDefault(p) : 0))
+            .ToList();
         db.Baselines.Add(new Baseline
         {
             ProjectId = projectId,
-            PlannedStart = plan.Start,
+            PlannedStart = baselineItems.Min(i => i.PlannedStart),
             PlannedFinish = plan.Finish,
             TotalHours = plan.Activities.Sum(a => fullHours[a.Id]),
             PlannedCost = plan.PlannedCost,
-            Items = plan.Activities.Select(a => new BaselineItem
-            {
-                WorkItemId = a.Id,
-                Name = a.Name,
-                PlannedStart = a.Start,
-                PlannedEnd = a.Finish,
-                Hours = fullHours[a.Id],
-                AssigneeId = a.AssigneeId,
-                HourlyCost = a.AssigneeId is { } p ? cost.GetValueOrDefault(p) : 0
-            }).ToList()
+            Items = baselineItems
         });
         await db.SaveChangesAsync(ct);
         return preview with { LatestBaseline = await LatestBaselineAsync(projectId, ct) };
     }
+
+    /// <summary>
+    /// Baseline'da işin TAM eforu saklanır (D19: EV = baseline eforu × %tamamlanma). Kısmen/tamamen bitmiş işte tam efor
+    /// ikiye ayrılır: kazanılmış kısım plan başlangıcından önce "planlanmış ve yapılmış" sayılır (iş daha önce
+    /// planlanmışsa eski tarihleri, en geç plan başlangıcından önceki iş günü); kalan efor yeni plandaki pencereye yayılır. Böylece baseline anında
+    /// PV, kazanılmış değeri içerir ve SPI yapay olarak 1'in üstüne çıkmaz.
+    /// </summary>
+    private static IEnumerable<BaselineItem> BaselineItemsFor(
+        ScheduledActivity a, decimal fullHours, (DateOnly? Start, DateOnly? End) original, DateOnly planStart, decimal hourlyCost)
+    {
+        var earned = fullHours - a.Hours;
+        if (earned > 0)
+        {
+            var lastDay = WorkCalendar.PreviousWorkday(planStart);
+            var start = original.Start is { } s && s <= lastDay ? s : lastDay;
+            var end = original.End is { } e && e >= start && e <= lastDay ? e : lastDay;
+            yield return NewBaselineItem(a, start, end, earned, hourlyCost);
+        }
+        if (a.Hours > 0 || earned <= 0)
+            yield return NewBaselineItem(a, a.Start, a.Finish, a.Hours, hourlyCost);
+    }
+
+    private static BaselineItem NewBaselineItem(ScheduledActivity a, DateOnly start, DateOnly end, decimal hours, decimal hourlyCost) =>
+        new()
+        {
+            WorkItemId = a.Id,
+            Name = a.Name,
+            PlannedStart = start,
+            PlannedEnd = end,
+            Hours = hours,
+            AssigneeId = a.AssigneeId,
+            HourlyCost = hourlyCost
+        };
 
     public async Task<BaselineSummary?> LatestBaselineAsync(int projectId, CancellationToken ct) =>
         await db.Baselines.AsNoTracking()

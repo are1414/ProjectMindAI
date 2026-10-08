@@ -165,7 +165,12 @@ public sealed class GeminiChatModel(HttpClient http, AiOptions options, ILogger<
         }
         catch (HttpRequestException ex)
         {
-            throw Fail(ex, "AI servisine bağlanılamadı. İnternet bağlantısını kontrol edin.");
+            throw Fail(ex, ChatModelMessages.Unreachable);
+        }
+        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
+        {
+            // HttpClient zaman aşımı TaskCanceledException olarak gelir; kullanıcı iptali (ct) olduğu gibi yayılır.
+            throw Fail(ex, ChatModelMessages.Timeout);
         }
 
         using (response)
@@ -210,7 +215,17 @@ public sealed class GeminiChatModel(HttpClient http, AiOptions options, ILogger<
     {
         using var message = new HttpRequestMessage(HttpMethod.Get, $"{BaseUrl}models?pageSize=1000");
         message.Headers.Add("x-goog-api-key", apiKey);
-        using var response = await http.SendAsync(message, ct);
+        HttpResponseMessage listResponse;
+        try
+        {
+            listResponse = await http.SendAsync(message, ct);
+        }
+        catch (Exception ex) when (ex is HttpRequestException || (ex is OperationCanceledException && !ct.IsCancellationRequested))
+        {
+            logger.LogWarning(ex, "Gemini model listesi alınamadı");
+            return null;   // yedek model aranamıyor; çağıran kendi hata mesajını verir
+        }
+        using var response = listResponse;
         if (!response.IsSuccessStatusCode)
             return null;
 

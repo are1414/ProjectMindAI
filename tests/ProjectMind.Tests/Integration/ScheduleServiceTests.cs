@@ -83,7 +83,7 @@ public class ScheduleServiceTests : ServiceTestBase
 
         var baseline = await Db.Baselines.Include(b => b.Items).SingleAsync(_ct);
         Assert.Equal(new DateOnly(2026, 11, 5), baseline.PlannedFinish);
-        Assert.Equal(3, baseline.Items.Count);
+        Assert.Equal(4, baseline.Items.Count);   // DB %50: kazanılmış 4 s (plan öncesi) + kalan 4 s ayrı satır
         Assert.Equal(32, baseline.TotalHours);   // tam efor: API 16 + DB 8 + Test 8 (plan kalan 28 saatle yapıldı)
         _ = ids;
     }

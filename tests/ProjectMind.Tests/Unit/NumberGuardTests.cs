@@ -28,4 +28,44 @@ public class NumberGuardTests
     [Fact]
     public void Percent_written_as_ratio_is_accepted() =>
         Assert.Empty(NumberGuard.FindUnverified("Maliyet performansı %87,5 düzeyinde.", Evidence));
+
+    [Theory]
+    [InlineData("SPI 1,2 iken 120 saat kaldı.", "120")]           // spi 1.2 ×100 → yüzde bağlamı yok
+    [InlineData("CPI 0,87; ek maliyet 87 bin TL.", "87")]           // cpi 0.87 ×100 → yüzde bağlamı yok
+    public void Ratio_scaling_is_not_applied_without_percent_sign(string answer, string expected) =>
+        Assert.Equal([expected], NumberGuard.FindUnverified(answer, """{"spi":1.2,"cpi":0.87}"""));
+
+    [Theory]
+    [InlineData("Tamamlanma %120 değil, SPI yüzde 120 düzeyinde.")]
+    [InlineData("Maliyet verimliliği 87% civarında.")]
+    public void Ratio_scaling_is_applied_with_percent_sign(string answer) =>
+        Assert.Empty(NumberGuard.FindUnverified(answer, """{"spi":1.2,"cpi":0.87}"""));
+
+    [Theory]
+    [InlineData("Bitiş 5.12.2026 görünüyor.")]
+    [InlineData("Bitiş 05.12.2026 görünüyor.")]
+    [InlineData("Bitiş 5 Aralık 2026'da bekleniyor.")]
+    [InlineData("Bitiş 2026-12-05 görünüyor.")]
+    [InlineData("Bitiş 5 aralık civarı, yani 2026 sonu.")]
+    [InlineData("Toplantı 14:30'da; bitiş 5 Aralık 2026.")]
+    public void Date_formats_are_accepted_when_date_is_in_evidence(string answer) =>
+        Assert.Empty(NumberGuard.FindUnverified(answer, """{"forecastFinish":"2026-12-05"}"""));
+
+    [Theory]
+    [InlineData("Bitiş 5.12.2026 görünüyor.", "5.12.2026")]
+    [InlineData("Bitiş 05.12.2026 görünüyor.", "05.12.2026")]
+    [InlineData("Bitiş 5 Aralık 2026'da bekleniyor.", "5 Aralık 2026")]
+    [InlineData("Bitiş 2026-12-05 görünüyor.", "2026-12-05")]
+    [InlineData("Bitiş 15 Aralık civarı.", "15 Aralık")]
+    [InlineData("Bitiş 31.02.2027 görünüyor.", "31.02.2027")]           // geçersiz tarih
+    public void Date_formats_are_reported_when_date_is_not_in_evidence(string answer, string expected) =>
+        Assert.Equal([expected], NumberGuard.FindUnverified(answer, """{"forecastFinish":"2026-12-12"}"""));
+
+    [Fact]
+    public void Time_of_day_is_not_treated_as_numbers() =>
+        Assert.Empty(NumberGuard.FindUnverified("Rapor 14:30'da hazır olur.", "{}"));
+
+    [Fact]
+    public void Unparseable_number_like_token_is_reported() =>
+        Assert.Equal(["12,5,75"], NumberGuard.FindUnverified("Değerler 12,5,75 şeklinde.", """{"a":12.5,"b":75}"""));
 }

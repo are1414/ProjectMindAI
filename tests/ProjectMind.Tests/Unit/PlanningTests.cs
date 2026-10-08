@@ -111,6 +111,19 @@ public class ResourceSchedulerTests
     }
 
     [Fact]
+    public void Fixed_assignee_with_zero_capacity_gets_its_own_warning()
+    {
+        // İş, kapasitesi 0 olan Kişi 2'ye sabit atanmış; Kişi 1 aynı beceriye sahip ama sabit atama korunur.
+        var tasks = new[] { new PlanActivity(1, "Ödeme", 16, Skill.Backend, Priority.Medium, 2, []) };
+        var r = Run(tasks, Person(1, Skill.Backend), Person(2, Skill.Backend, weekly: 0));
+
+        Assert.Null(r.Activities.Single().AssigneeId);
+        Assert.Equal((0, 1), Slot(r, 1));
+        Assert.Contains(r.Warnings, w => w.Contains("'Ödeme' işine atanan Kişi 2") && w.Contains("kapasitesi 0"));
+        Assert.DoesNotContain(r.Warnings, w => w.Contains("becerisine sahip kişi yok"));
+    }
+
+    [Fact]
     public void Cost_and_utilization_are_computed()
     {
         var r = Run([Task(1, 16)], Person(1, Skill.Backend, weekly: 40, cost: 100));

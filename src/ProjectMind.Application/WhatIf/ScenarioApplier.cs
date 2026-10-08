@@ -14,6 +14,9 @@ public static class ScenarioApplier
 {
     public sealed record Applied(PlanInput Input, DateOnly TargetDate, IReadOnlyList<string> Notes);
 
+    /// <summary>Bir haftadaki saat sayısı: haftalık kapasitenin üst sınırı (kişi formundaki sınırla aynı).</summary>
+    public const decimal MaxWeeklyHours = 7 * 24;
+
     public static Applied Apply(PlanInput input, IReadOnlyDictionary<int, int?> parentOf, DateOnly targetDate,
         IReadOnlyList<ScenarioChange> changes, WhatIfOptions o)
     {
@@ -36,6 +39,9 @@ public static class ScenarioApplier
                     if (skills == Skill.None)
                         throw new BusinessRuleException("Eklenecek kişinin en az bir becerisi olmalı.");
                     var weekly = c.WeeklyHours ?? o.DefaultWeeklyHours;
+                    ValidateWeeklyHours(weekly);
+                    if (c.HourlyCost is < 0)
+                        throw new BusinessRuleException("Saatlik maliyet negatif olamaz.");
                     var cost = c.HourlyCost ?? (people.Count > 0 ? Math.Round(people.Average(p => p.HourlyCost), 2) : 0);
                     var joinDay = c.Date is { } d && d > calendar.FirstDay ? WorkCalendar.WorkdaysBetween(calendar.FirstDay, d) : 0;
                     for (var i = 0; i < c.Count; i++)
@@ -60,8 +66,9 @@ public static class ScenarioApplier
                 case ScenarioChangeKind.ChangeCapacity:
                 {
                     var person = FindPerson(people, c.PersonId);
-                    if (c.WeeklyHours is not { } hours || hours <= 0)
+                    if (c.WeeklyHours is not { } hours)
                         throw new BusinessRuleException("Haftalık kapasite 0'dan büyük olmalı.");
+                    ValidateWeeklyHours(hours);
                     people[people.IndexOf(person)] = person with { WeeklyCapacityHours = hours };
                     notes.Add($"{person.Name}: haftalık {Format.Number(person.WeeklyCapacityHours)} → {Format.Number(hours)} saat");
                     break;
@@ -142,6 +149,12 @@ public static class ScenarioApplier
             .Where(a => !removed.Contains(a.Id))
             .Select(a => a with { Predecessors = a.Predecessors.SelectMany(p => Expand(p, [])).Distinct().ToList() })
             .ToList();
+    }
+
+    private static void ValidateWeeklyHours(decimal hours)
+    {
+        if (hours <= 0 || hours > MaxWeeklyHours)
+            throw new BusinessRuleException($"Haftalık kapasite 0'dan büyük ve en fazla {MaxWeeklyHours} saat olmalı.");
     }
 
     private static PlanResource FindPerson(List<PlanResource> people, int? id) =>

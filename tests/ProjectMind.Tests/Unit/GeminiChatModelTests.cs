@@ -125,6 +125,41 @@ public class GeminiChatModelTests
         Assert.EndsWith("models/gemini-4.0-flash:generateContent", handler.Requests[2].Url);
     }
 
+    /// <summary>Hiç cevap vermeyen sunucu: istek ancak iptal/zaman aşımı ile biter.</summary>
+    private sealed class HangingHandler : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            await Task.Delay(Timeout.Infinite, ct);
+            throw new InvalidOperationException("ulaşılmaz");
+        }
+    }
+
+    private static GeminiChatModel HangingModel() => new(
+        new HttpClient(new HangingHandler()) { Timeout = TimeSpan.FromMilliseconds(50) },
+        new AiOptions { Gemini = new() { Model = "gemini-test", ApiKey = "KEY" }, RetryDelayMs = 0 },
+        NullLogger<GeminiChatModel>.Instance);
+
+    [Fact]
+    public async Task Http_timeout_becomes_friendly_chat_model_exception()
+    {
+        var ex = await Assert.ThrowsAsync<ChatModelException>(() =>
+            HangingModel().CompleteTurnAsync(Request(), new RecordingExecutor(), CancellationToken.None));
+
+        Assert.Equal(ChatModelMessages.Timeout, ex.Message);
+    }
+
+    [Fact]
+    public async Task User_cancellation_is_not_reported_as_timeout()
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(10));
+        var model = new GeminiChatModel(new HttpClient(new HangingHandler()),
+            new AiOptions { Gemini = new() { Model = "gemini-test", ApiKey = "KEY" } }, NullLogger<GeminiChatModel>.Instance);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            model.CompleteTurnAsync(Request(), new RecordingExecutor(), cts.Token));
+    }
+
     private const string Overloaded = """{"error":{"code":503,"message":"high demand","status":"UNAVAILABLE"}}""";
 
     [Fact]

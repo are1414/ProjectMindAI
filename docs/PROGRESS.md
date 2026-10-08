@@ -4,6 +4,57 @@ Her oturum sonunda en üste yeni kayıt eklenir. Format: yapılanlar · varsayı
 
 ---
 
+## 2026-10-08 (18) — Ekip turu 1: hata düzeltmeleri
+
+Kapsam: `docs/team/ANALIZ.md` → "Lider birleştirmesi (Tur 1)" T1–T6 ([hata]). Faz 8 yorum kartları Tur 2'de.
+
+- **T1 NumberGuard sayı aklama**: `ChatService` kanıtına artık yalnız bu turun mesajı (+ bağlam), önceki **kullanıcı**
+  mesajları ve bu turun araç sonuçları giriyor; önceki asistan cevapları (uyarı satırı dahil) girmiyor. Test: 1. turda
+  işaretlenen "137" 2. turda da işaretleniyor; kullanıcının önceki mesajındaki sayı kabul ediliyor.
+- **T2 NumberGuard kuralları** (`Ai/NumberGuard.cs` yeniden düzenlendi): ×100/÷100 yalnız "%"/"yüzde" bitişikken;
+  "5.12.2026", "05.12.2026", "5 Aralık 2026", "5 Aralık" (yılsız: gün+ay), ISO tarihler gün bazında; kanıttaki tarihlerin
+  yılı bilinen sayı; saat ("14:30") atlanır; geçersiz tarih (31.02.2027) ve ayrıştırılamayan sayı benzeri ifade ("12,5,75")
+  işaretlenir. Mevcut 5 InlineData + 2 test değişmeden yeşil.
+- **T3 EVM iptal**: `EvmProgress.IsCancelled`; iptal edilen baseline işi BAC ve PV eğrisinden düşülür, `EvmResult.DescopedHours`
+  olarak raporlanır (`get_project_status` → `evm.descopedHours`), harcanan saati AC'de kalır. Kapsam büyümesi de iptal düşülmüş
+  baseline'a göre. Elle doğrulanan testler: B (24 s) iptal + A bitti → BAC 16, SPI 1, %100; hepsi iptal → BAC 0, hata yok;
+  servis testi: hedef tarih riski uyarısı çıkmıyor.
+- **T4 LLM zaman aşımı**: Gemini'de `HttpClient.Timeout` (TaskCanceledException, `ct` iptal değilken) →
+  `ChatModelException("AI servisi zamanında cevap vermedi…")`; model listesi alınamazsa yedek arama `null` döner. Claude'da
+  `HttpRequestException` ve zaman aşımı da çevriliyor. `ChatService` ek güvenlik ağı: çevrilmemiş zaman aşımı/bağlantı
+  hatası da kullanıcıya dostça asistan mesajı olarak kaydedilir (sayfa çökmez). Ortak metinler `ChatModelMessages`.
+  Testler: 50 ms zaman aşımlı gerçek `HttpClient` + cevap vermeyen handler; kullanıcı iptali zaman aşımı sayılmıyor;
+  sohbet servisi seviyesinde TaskCanceledException.
+- **T5 What-if doğrulama**: kişi ekle → haftalık saat 0 < h ≤ 168 (`ScenarioApplier.MaxWeeklyHours`), saatlik maliyet ≥ 0;
+  kapasite değiştir → aynı üst sınır. `ResourceScheduler`: kapasitesi 0 olan sabit atanmış kişide ayrı uyarı
+  ("'X' işine atanan Y kişisinin kapasitesi 0; iş kişisiz planlandı"), yanlış "becerisine sahip kişi yok" uyarısı verilmiyor.
+- **T6 Yeniden baseline** (şema değişmedi): `ScheduleService.ApplyAsync` Bitti işlerin mevcut plan tarihlerini değiştirmiyor;
+  başlamış işin daha erken plan başlangıcı korunuyor. Baseline'da başlamış/bitmiş işin tam eforu iki satıra ayrılıyor:
+  kazanılmış kısım plan başlangıcından önce (eski tarihleriyle, en geç önceki iş günü), kalan kısım yeni pencerede.
+  `EarnedValue` AC'yi iş başına bir kez sayıyor (satırlar gruplanıyor). Elle doğrulanan test: A 16 s bitti, B 40 s %50,
+  9 Kasım'da yeniden plan → PV 42,67 / EV 36 / AC 36 / SPI 0,84 (eski hesap PV 29,33 → SPI 1,23); plan aynen uygulanınca
+  11 Kasım'da SPI = SPI(t) = 1. Mevcut "Apply…baseline" testi 3 → 4 satır olarak güncellendi (DB %50 işi ikiye ayrıldı).
+- Kararlar: D23 (NumberGuard kanıt/eşleşme), D24 (iptal = descope, yeniden baseline'da kazanılmış/kalan ayrımı).
+- PLAN Fikir Havuzu'na 9 satır eklendi (lider listesi + analist fikir havuzu).
+- Testler **150/150** (+35 vaka; 115'ten). `dotnet build` 0 uyarı / 0 hata. DB şeması / migration değişikliği yok.
+
+**Varsayımlar**: İptal edilen işe harcanan saat gerçekleşmiş maliyettir (AC'de kalır, CPI'ı düşürür). Yeniden baseline
+gününde (gün 0) SPI'ın 1'in biraz altında görünmesi doğaldır: durum günü o günün planlanan işini de içerir (ilk baseline'daki
+davranışla aynı). Yılsız "15 Aralık" kanıttaki herhangi bir yılın aynı gün/ayıyla eşleşir. Ay adı eşleşmesi küçük/büyük harf
+duyarsızdır ama "ARALIK" gibi büyük Türkçe "I" içeren yazımlar tanınmaz (nadir).
+
+**Bilinen sorunlar**: NumberGuard yuvarlamayı hâlâ sınırsız kabul ediyor (0,8723 → "0,9"); "en fazla 1 basamak kayıp"
+önerisi (TEST_PAZAR P2) meşru 2 basamaklı yuvarlamaları da reddedeceği için uygulanmadı — Faz 9'da etiketli cevap setiyle
+ölçülüp karar verilmeli. Modelin kendi araç girdisi hâlâ kanıt sayılıyor (ANALIZ teknik borç; yorum kartlarında kanıt
+sayılmamalı). Eski (bu düzeltmeden önce kaydedilmiş) baseline'lar yeniden hesaplanmaz; yarım iş içeren eski baseline'da
+SPI yine yüksek görünür — yeniden baseline alınmalı. What-if performansı (P7) ve Brooks mentorluk yükünün beceriden bağımsız
+olması (P9 ikinci yarı) bu turda ele alınmadı.
+
+**Sıradaki adım**: Ekip turu 2 — Faz 8: JSON şemalı model çağrısı (`IChatModel` genişletmesi), proje yorumu ve senaryo
+yorumu kartları (NumberGuard ile), ardından hibrit eksik iş ve analiz audit'i.
+
+---
+
 ## 2026-10-07 (17) — Faz 7: What-if (senaryo, Monte Carlo, Brooks etkisi)
 
 - `Planning/ResourceScheduler`: `PlanResource`'a gün bazlı kapasite pencereleri (`CapacityWindow`, çarpımsal). Pencere

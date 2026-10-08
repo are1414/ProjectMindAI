@@ -50,10 +50,13 @@ public sealed class ProjectStatusService(
         {
             evm = EarnedValue.Compute(
                 baseline.Items.Select(i => new EvmBaselineItem(i.WorkItemId, i.PlannedStart, i.PlannedEnd, i.Hours, i.HourlyCost)).ToList(),
-                overview.WorkItems.Select(w => new EvmProgress(w.Id, w.PercentComplete, w.ActualHours, w.Status == WorkItemStatus.Done)).ToList(),
+                overview.WorkItems.Select(w => new EvmProgress(w.Id, w.PercentComplete, w.ActualHours,
+                    w.Status == WorkItemStatus.Done, w.Status == WorkItemStatus.Cancelled)).ToList(),
                 today);
+            // Kapsam büyümesi, iptal edilen (kapsamdan çıkarılan) baseline işleri düşüldükten sonraki baseline'a göre ölçülür.
             var current = leaves.Sum(w => w.EstimatedHours);
-            scopeGrowth = baseline.TotalHours > 0 ? Math.Max(0, Math.Round((current - baseline.TotalHours) / baseline.TotalHours * 100, 1)) : 0;
+            var baselineScope = baseline.TotalHours - evm.DescopedHours;
+            scopeGrowth = baselineScope > 0 ? Math.Max(0, Math.Round((current - baselineScope) / baselineScope * 100, 1)) : 0;
         }
 
         var remaining = preview.Plan.TotalHours;

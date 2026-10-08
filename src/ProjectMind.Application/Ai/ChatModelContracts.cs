@@ -31,3 +31,10 @@ public interface IChatModel
 
 /// <summary>Sağlayıcıya ulaşılamadı vb. — kullanıcıya gösterilebilir mesaj taşır.</summary>
 public sealed class ChatModelException(string message, Exception? inner = null) : Exception(message, inner);
+
+/// <summary>Sağlayıcılardan bağımsız, kullanıcıya gösterilen ortak hata metinleri.</summary>
+public static class ChatModelMessages
+{
+    public const string Timeout = "AI servisi zamanında cevap vermedi. Biraz sonra mesajınızı tekrar gönderin.";
+    public const string Unreachable = "AI servisine bağlanılamadı. İnternet bağlantısını kontrol edin.";
+}

@@ -18,6 +18,15 @@ public sealed class WorkCalendar
         return date;
     }
 
+    /// <summary>Verilen tarihten önceki son iş günü (tarihin kendisi hariç).</summary>
+    public static DateOnly PreviousWorkday(DateOnly date)
+    {
+        date = date.AddDays(-1);
+        while (!IsWorkday(date))
+            date = date.AddDays(-1);
+        return date;
+    }
+
     public DateOnly ToDate(int dayIndex)
     {
         var date = FirstDay;

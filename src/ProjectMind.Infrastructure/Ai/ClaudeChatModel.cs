@@ -57,11 +57,19 @@ public sealed class ClaudeChatModel(AiOptions options, ILogger<ClaudeChatModel> 
             }
             catch (AnthropicIOException ex)
             {
-                throw Fail(ex, "AI servisine bağlanılamadı. İnternet bağlantısını kontrol edin.");
+                throw Fail(ex, ChatModelMessages.Unreachable);
             }
             catch (AnthropicException ex)
             {
                 throw Fail(ex, "AI servisinden beklenmeyen bir hata döndü. Ayrıntı loglarda.");
+            }
+            catch (HttpRequestException ex)
+            {
+                throw Fail(ex, ChatModelMessages.Unreachable);
+            }
+            catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
+            {
+                throw Fail(ex, ChatModelMessages.Timeout);
             }
 
             logger.LogInformation("Claude turu: model {Model}, giriş {In} / çıkış {Out} token",
