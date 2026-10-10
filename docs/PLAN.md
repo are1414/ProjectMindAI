@@ -104,8 +104,13 @@
   NumberGuard Türkçe kanıt + bin/milyon, RQ4 kayıt bütünlüğü + toplu kabul ayrımı, hibrit tekrar eleme, önbellekte sağlayıcı (D28)
 - [x] Demo projesi: "Mobile Banking Modernization" (gerçek servisler geriye alınmış saatle yeniden oynatılır; ana sayfada
   "Demo projesini oluştur"; snapshot'ta ML gecikme olasılığı + ML/EVM tahmini bitiş, D29)
-- [ ] RQ1–RQ4 ölçümleri, LLM sağlayıcı karşılaştırması
-- [ ] 5–10 kişilik kullanıcı testi (SUS anketi)
+- [x] Değerlendirme altyapısı (Tur 5a, D30): `/evaluation` sayfası (RQ1–RQ4 özeti + CSV'ler: snapshot EVM/ML zaman serisi,
+  özellik önemi, what-if çalıştırmaları, öneri kabulü kaynak × araç, AI denetim kaydı, anket)
+- [x] Uygulama içi anket (`/evaluation/survey`): onam, anonim katılımcı kodu, 10 SUS + RQ3/RQ4 için 2'şer Likert maddesi;
+  SUS puanı, ortalama ± SS, min/maks, Bangor sıfatı
+- [x] What-if çalıştırma kaydı (panel + `simulate_what_if`; RQ3) ve yorum kartında "Bu açıklama anlaşılır mıydı?" (Evet/Hayır + 1–5; RQ4)
+- [ ] RQ1–RQ4 ölçümleri (Tur 5b: erken uyarı süresi + çok tohumlu deney, tohumlanmış eksik iş deneyi), LLM sağlayıcı karşılaştırması
+- [ ] 5–10 kişilik kullanıcı testi (SUS anketi) — form hazır, test oturumları yapılacak
 
 ### FAZ 10 — Rapor ve sunum
 - [ ] Rapor bölümleri, sunum, demo videosu
@@ -135,9 +140,7 @@ docs/                          Plan, kararlar, ilerleme
 - Risk uyarısından ilgili işe / Gantt satırına bağlantı
 - Çoklu baseline karşılaştırması (ve VAC gösterimi)
 - AI ile iş kırılımı ("bu işi alt işlere böl" — add_work_item + parentName kartları; Faz 8 hibrit eksik iş maddesiyle birlikte değerlendirilecek)
-- Yorum kartında "Açıklama anlaşılır mıydı? (Evet/Hayır)" geri bildirimi (RQ4 ölçümü)
-- What-if çalıştırmalarının ve seçilen senaryonun loglanması (RQ3 kanıtı)
-- Öneri kabul oranı raporu (kaynak × araç) Deneyler sayfasında, CSV ile
+- What-if'te yöneticinin "seçtiği" senaryonun kaydı (çalıştırmalar Tur 5a'da kaydediliyor; seçim bilgisi yok)
 - Deney raporunun DB'de kalıcı saklanması (bugün yalnız bellekte; deterministik, yeniden üretilebilir)
 - Demo senaryosunun JSON dosyasından içe aktarılması (farklı demo projeleri için)
 - Sağlayıcı karşılaştırmasında tahmini maliyet (token × birim fiyat, ayardan)
@@ -146,3 +149,5 @@ docs/                          Plan, kararlar, ilerleme
 - Kapsamın tamamı iptal edildiğinde "Kapsamın tamamı iptal edildi" bilgi uyarısı (TEST_PAZAR Q12)
 - Demo kayıtlarında `CreatedAt`/`UpdatedAt`'in demo saatine göre yazılması (bugün gerçek saat; baseline tarihi "bugün" görünür)
 - Yorum yüklerinde yön ifadesini C#'ın hazır cümle olarak vermesi ("120,5 saat geride"), ardından NumberGuard'ın sadeleştirilmesi (TEST_PAZAR Q3)
+- Hoffman vd. 8 maddelik açıklama memnuniyeti ölçeğinin ankete eklenmesi (TEST_PAZAR Faz 9 önerisi; bugün RQ4 için 2 Likert maddesi + kart geri bildirimi)
+- Anket formunda görev tamamlama süresi / görev başarı alanları (ANALIZ madde 7, opsiyonel)

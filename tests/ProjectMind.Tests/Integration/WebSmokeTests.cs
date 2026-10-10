@@ -46,4 +46,18 @@ public class WebSmokeTests(WebFactory factory) : IClassFixture<WebFactory>
             .GetRequiredService<Microsoft.Extensions.Options.IOptions<ProjectMind.Application.Demo.DemoOptions>>().Value;
         Assert.Equal(9, options.WeeksBack);
     }
+
+    [Fact]
+    public async Task Evaluation_services_resolve_and_pages_are_served()
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var evaluation = scope.ServiceProvider.GetRequiredService<ProjectMind.Application.Evaluation.EvaluationService>();
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<ProjectMind.Application.Evaluation.SurveyService>());
+        var summary = await evaluation.GetSummaryAsync(CancellationToken.None);
+        Assert.Equal(0, summary.Survey.Sus.N);
+
+        var client = factory.CreateClient();
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/evaluation")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/evaluation/survey")).StatusCode);
+    }
 }

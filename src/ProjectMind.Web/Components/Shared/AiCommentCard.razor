@@ -1,4 +1,6 @@
-@* AI analiz yorumu kartı (Durum ve What-if sekmeleri). Sadece gösterim: üretim/önbellek ProjectCommentService'te. *@
+@* AI analiz yorumu kartı (Durum ve What-if sekmeleri). Sadece gösterim: üretim/önbellek ProjectCommentService'te.
+   "Anlaşılır mıydı?" geri bildirimi ProjectCommentService.RateAsync ile yorumun AiAnalysisLog kaydına yazılır (RQ4). *@
+@inject AppScope Scope
 
 <section class="ai-comment" aria-live="polite">
     <div class="section-head">
@@ -48,6 +50,29 @@
             @Result.Model@(Result.CreatedAt is { } at ? $" · {at.ToLocalTime():dd.MM.yyyy HH:mm}" : "")@(Result.FromCache ? " · kaydedilmiş yorum (veri değişmedi)" : "")
             · Sayılar sistem hesaplarından alınır; yorum veriyi değiştirmez.
         </p>
+        @if (Result.LogId is not null)
+        {
+            <div class="comment-rating">
+                <span>Bu açıklama anlaşılır mıydı?</span>
+                <button class="btn btn-sm @(_helpful == true ? "btn-selected" : "")" disabled="@_rating" @onclick="() => RateAsync(true, _clarity)">Evet</button>
+                <button class="btn btn-sm @(_helpful == false ? "btn-selected" : "")" disabled="@_rating" @onclick="() => RateAsync(false, _clarity)">Hayır</button>
+                @if (_helpful is { } helpful)
+                {
+                    <span class="muted small" title="1 = hiç anlaşılır değil, 5 = çok anlaşılır">Puan (isteğe bağlı):</span>
+                    @for (var i = CommentRating.MinClarity; i <= CommentRating.MaxClarity; i++)
+                    {
+                        var value = i;
+                        <button class="btn btn-sm rating-value @(_clarity == value ? "btn-selected" : "")" disabled="@_rating"
+                                @onclick="() => RateAsync(helpful, value)">@value</button>
+                    }
+                    <span class="muted small">Kaydedildi, teşekkürler.</span>
+                }
+            </div>
+            @if (_rateError is not null)
+            {
+                <div class="inline-error">@_rateError</div>
+            }
+        }
     }
 </section>
 
@@ -56,4 +81,43 @@
     [Parameter] public bool Busy { get; set; }
     [Parameter] public EventCallback OnGenerate { get; set; }
     [Parameter] public string Hint { get; set; } = "Sonuçların sade Türkçe açıklaması için butona basın.";
+
+    private AnalysisCommentResult? _ratingFor;
+    private bool? _helpful;
+    private int? _clarity;
+    private bool _rating;
+    private string? _rateError;
+
+    protected override void OnParametersSet()
+    {
+        if (ReferenceEquals(_ratingFor, Result))
+            return;
+        _ratingFor = Result;
+        _helpful = Result?.Helpful;
+        _clarity = Result?.ClarityRating;
+        _rateError = null;
+    }
+
+    private async Task RateAsync(bool helpful, int? clarity)
+    {
+        if (Result?.LogId is not { } logId)
+            return;
+        _rating = true;
+        _rateError = null;
+        try
+        {
+            var saved = await Scope.RunAsync<ProjectCommentService, CommentRating>(s =>
+                s.RateAsync(logId, new CommentRating(helpful, clarity), CancellationToken.None));
+            _helpful = saved.Helpful;
+            _clarity = saved.ClarityRating;
+        }
+        catch (Exception ex) when (ex is BusinessRuleException or NotFoundException)
+        {
+            _rateError = ex.Message;
+        }
+        finally
+        {
+            _rating = false;
+        }
+    }
 }

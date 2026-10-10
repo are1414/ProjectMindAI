@@ -38,6 +38,8 @@ public static class DependencyInjection
         services.AddScoped<ReadOnlyToolHandler>();
         services.AddScoped<ProjectCommentService>();
         services.AddScoped<Demo.DemoProjectSeeder>();
+        services.AddScoped<Evaluation.SurveyService>();
+        services.AddScoped<Evaluation.EvaluationService>();
         services.AddOptions<Demo.DemoOptions>();
         services.AddSingleton(TimeProvider.System);
         return services;

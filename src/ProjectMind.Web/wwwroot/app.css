@@ -322,3 +322,23 @@ h1:focus { outline: none; }
 .ai-comment ul { margin: 0; padding-left: 1.2rem; line-height: 1.5; }
 .ai-comment-summary { margin: .5rem 0 0; line-height: 1.55; }
 .ai-comment-warning { margin: .5rem 0; padding: .4rem .6rem; background: #fffbeb; color: var(--text); border-left: 3px solid var(--warning); border-radius: 6px; font-size: .88rem; }
+
+/* Değerlendirme (Faz 9) */
+.eval-section { margin: 1.25rem 0 1.75rem; }
+.eval-section .section-head { display: flex; justify-content: space-between; align-items: center; gap: .75rem; flex-wrap: wrap; }
+.eval-section .section-head h2 { margin: 0; }
+.eval-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .6rem; margin: .75rem 0; }
+.eval-kpis > div { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: .6rem .8rem; display: flex; flex-direction: column; gap: .2rem; }
+.eval-kpis strong { font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.survey-consent { line-height: 1.55; }
+.settings-card label.survey-check { display: flex; gap: .5rem; align-items: center; font-weight: 600; }
+.settings-card label.survey-check input { width: auto; }
+.survey-items { padding-left: 1.3rem; margin: 0; }
+.survey-items li { margin: .85rem 0; }
+.survey-question { margin: 0 0 .35rem; line-height: 1.45; }
+.survey-scale { display: flex; gap: .4rem; flex-wrap: wrap; }
+.settings-card .survey-scale label { display: inline-flex; align-items: center; gap: .3rem; margin: 0; font-weight: 500; border: 1px solid var(--border); border-radius: 6px; padding: .3rem .6rem; cursor: pointer; }
+.settings-card .survey-scale input { width: auto; }
+.comment-rating { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin-top: .5rem; padding-top: .5rem; border-top: 1px solid var(--border); font-size: .88rem; }
+.btn-selected { background: var(--primary); border-color: var(--primary); color: #fff; }
+.rating-value { min-width: 2rem; }

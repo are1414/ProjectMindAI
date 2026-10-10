@@ -4,6 +4,65 @@ Her oturum sonunda en üste yeni kayıt eklenir. Format: yapılanlar · varsayı
 
 ---
 
+## 2026-10-10 (23) — Ekip turu 5a: değerlendirme altyapısı
+
+Kapsam: `docs/team/ANALIZ.md` → "Tur 5a — değerlendirme altyapısı" maddeleri 1–5 (ANALIZ madde 5, 7, 8; madde 6'nın koşucu
+kısmı ve Tur 5b yapılmadı). Karar D30.
+
+- **Değerlendirme sayfası** (`Application/Evaluation/EvaluationService.cs`, `Pages/Evaluation.razor`, `/evaluation`, sol menüde
+  "📊 Değerlendirme"): RQ1 (proje başına snapshot sayısı, ML tahminli gün sayısı, son SPI(t)/ML olasılığı/EVM ve ML bitişi),
+  RQ2 (son deneyin özellik önemi), RQ3 (what-if çalıştırma sayıları + RQ3 Likert), RQ4 (kaynağa göre kabul oranı, yorum kartı
+  şema/NumberGuard/anlaşılırlık özeti + RQ4 Likert), SUS (n, ortalama, SS, min/maks, Bangor sıfatı, 68 karşılaştırması,
+  katılımcı listesi + onaylı silme). Bileşenler yalnız `AppScope` ile servis çağırır; hesap `DescriptiveStats`, `LikertSummary`,
+  `SusScore`'da.
+- **CSV dışa aktarımları** (6 dosya; `Csv.cs`: RFC 4180, CRLF, InvariantCulture, ISO tarih, UTC zaman, UTF-8 BOM; mevcut
+  `pmDownload` JS fonksiyonu): `rq1-evm-ml-zaman-serisi` (`project_id,project,date,baseline_id,percent_complete,spi,spi_t,cpi,
+  health_score,evm_forecast,ml_probability,ml_forecast`), `rq2-ozellik-onemi`, `rq3-whatif-calistirmalari` (senaryo başına satır),
+  `rq4-oneri-kabul` (kaynak × araç × durum × toplu), `rq4-ai-kayitlari` (AiAnalysisLog; yorum metni, hata metni, girdi özeti yok),
+  `anket-sus-likert` (katılımcı başına satır).
+- **Anket** (`SurveyQuestionnaire`, `SurveyService`, `Pages/Survey.razor` `/evaluation/survey`, `Shared/SurveyItems.razor`):
+  onam metni + onay kutusu, katılımcı kodu `P` + 2–3 rakam (ad/e-posta girilemez), 10 SUS maddesi + RQ3_1/RQ3_2 (what-if karar
+  desteği/güven) + RQ4_1/RQ4_2 (AI açıklaması anlaşılır / eksik iş önerisi yararlı), 5'li ölçek. Eksik/aralık dışı/bilinmeyen
+  madde, onaysız gönderim, geçersiz kod ve tekrar eden kod Türkçe hatayla reddedilir. SUS puanı kayıtla saklanır; sonuç
+  katılımcıya gösterilmez (yalnız "kaydedildi").
+- **What-if çalıştırma kaydı** (`WhatIfRunLog`, `WhatIfService`): her başarılı karşılaştırma `Panel` ya da `AiTool`
+  (`simulate_what_if`, `ReadOnlyToolHandler`) kaynağıyla yazılır; senaryo başına değişiklik tanımı (ör.
+  `AddPerson count=1 skills=Backend weeklyHours=40`), plan/P50/P80 bitiş, hedef, olasılık, P80 farkı; süre ms, tur, tohum.
+  Hatalı karşılaştırma kaydedilmez.
+- **"Bu açıklama anlaşılır mıydı?"** (`AiCommentCard.razor`, `ProjectCommentService.RateAsync`): Evet/Hayır, ardından isteğe
+  bağlı 1–5 puan; yorumu üreten `AiAnalysisLog` satırına (`Helpful`, `ClarityRating`, `RatedAt`) yazılır. Önbellekten açılan
+  yorum aynı kaydı ve önceki puanı gösterir. Yalnız başarılı yorum puanlanır; Mock modda (yorum yok) butonlar görünmez.
+- **DB**: yeni migration `20261010202836_AddEvaluationSurveyAndRunLogs` (tablolar `SurveyResponses`, `SurveyAnswers`,
+  `WhatIfRunLogs`; `AiAnalysisLogs`'a 3 nullable sütun). Eski migration'lar değişmedi; `has-pending-model-changes` → "No changes".
+- **Testler 297/297** (263'ten +34): `EvaluationMathTests` (SUS 50 / 100 / 0, elle hesaplanan 75 ve 37,5, eksik/aralık dışı
+  reddi, 12 Bangor sınırı, örneklem SS 1..5 → 1,5811 ve 75/37,5 → 26,5165, Likert dağılımı ve katılma payı, CSV kaçışı + BOM,
+  anket yapısı ve kod doğrulama); `EvaluationServiceTests` (anket kaydı ve reddi, özet: 3 katılımcıda ortalama 54,1667 / SS
+  19,0941 / "Fena değil (OK)", Likert RQ3 ve silme; what-if kaydındaki P50/P80/olasılık dönen karşılaştırmayla aynı; AI aracı
+  kaynağı; hatalı karşılaştırma kaydedilmez; elle kurulmuş DB'de özetin her RQ sayısı; 6 CSV'nin başlığı, satır sayısı ve
+  tr-TR kültüründe bile nokta ondalık; dosya adı); `ProjectCommentServiceTests` (puan kayda yazılır, ikinci puan üzerine yazar,
+  önbellekte görünür, 1–5 dışı ve başarısız/sohbet kaydı reddi, Mock'ta LogId yok); `WebSmokeTests` (servisler DI'dan çözülür,
+  `/evaluation` ve `/evaluation/survey` 200). `dotnet build` 0 uyarı.
+
+**Varsayımlar**: SUS Türkçe metinleri için yayımlanmış bir çevirinin kelimesi kelimesine metnine güvenilir biçimde erişemedim;
+maddeler Brooke (1996) orijinaline sadık kendi çevirimizdir (olumlu/olumsuz madde sırası korunur). Raporda "Türkçe uyarlama,
+geçerlik çalışması yapılmamıştır" diye yazılmalı; istenirse yayımlanmış Türkçe SUS (ör. Demirkol ve Şeneler, 2018) metniyle
+değiştirilir (`SurveyQuestionnaire.Version` artırılarak). Bangor sıfatı için eşik = sıfatın makaledeki ortalama puanı (puan o
+ortalamaya ulaştıysa sıfat verilir; yaygın sınıflama). Ölçek etiketleri 1 "Kesinlikle katılmıyorum" … 5 "Kesinlikle katılıyorum".
+Katılımcı kodu başına tek cevap (tekrar test gerekiyorsa yeni kod). What-if kaydı proje silinse de kalır (AiAnalysisLog gibi).
+Anlaşılırlık puanı yalnız Evet/Hayır seçildikten sonra verilebilir. CSV'de ayırıcı virgül (Excel Türkçe yerel ayarında "Veri →
+Metinden" ile açılır; R/Python doğrudan okur).
+
+**Bilinen sorunlar**: Arayüz SQL Server olmadan tarayıcıda etkileşimli olarak denenmedi (derleme, DI ve sayfa yanıtı smoke testi
+var). RQ2 özellik önemi yalnız bu uygulama oturumunda deney çalıştırıldıysa vardır (rapor bellekte; Fikir Havuzu'nda kalıcı
+saklama). What-if'te yöneticinin "seçtiği" senaryo kaydedilmez (yalnız çalıştırmalar). Geliştirici/deneme kullanımı ile
+katılımcı kullanımı kayıtlarda ayrılmaz (Tur 5b'deki `EvaluationRunId` / katılımcı oturumu ile ele alınmalı). Hoffman açıklama
+memnuniyeti ölçeği ve görev süreleri eklenmedi (Fikir Havuzu).
+
+**Sıradaki adım**: Tur 5b — sağlayıcı karşılaştırma koşucusu (`eval-v1`, `EvaluationRunId`, token kullanımı), tohumlanmış eksik
+iş (kural vs hibrit recall) deneyi, RQ1 erken uyarı süresi ve çok tohumlu deney (ortalama ± SS); ardından 5–10 kişilik kullanıcı testi.
+
+---
+
 ## 2026-10-08 (22) — Ekip turu 4b: demo projesi
 
 Kapsam: `docs/team/ANALIZ.md` → "Tur 4b — demo" (ANALIZ madde 3 demo + madde 4'ün snapshot kısmı). Çok tohumlu deney,

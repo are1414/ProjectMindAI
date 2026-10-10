@@ -18,6 +18,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<BaselineItem> BaselineItems => Set<BaselineItem>();
     public DbSet<StatusUpdate> StatusUpdates => Set<StatusUpdate>();
     public DbSet<ProjectSnapshot> ProjectSnapshots => Set<ProjectSnapshot>();
+    public DbSet<WhatIfRunLog> WhatIfRunLogs => Set<WhatIfRunLog>();
+    public DbSet<SurveyResponse> SurveyResponses => Set<SurveyResponse>();
+    public DbSet<SurveyAnswer> SurveyAnswers => Set<SurveyAnswer>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder) =>
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);

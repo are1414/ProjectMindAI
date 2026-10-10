@@ -1,0 +1,44 @@
+@* Anket maddeleri (5'li Likert, radyo düğmeleri). Sadece giriş; doğrulama ve puan SurveyService'te. *@
+@using ProjectMind.Application.Evaluation
+
+<section class="settings-card">
+    <h2>@Title</h2>
+    <p class="muted small">@Hint 1 = @SurveyQuestionnaire.ScaleLabels[0], 5 = @SurveyQuestionnaire.ScaleLabels[^1].</p>
+    <ol class="survey-items">
+        @foreach (var item in Items)
+        {
+            var itemCode = item.Code;
+            <li>
+                <p class="survey-question">@item.Text</p>
+                <div class="survey-scale" role="radiogroup" aria-label="@item.Text">
+                    @for (var v = SusScore.MinAnswer; v <= SusScore.MaxAnswer; v++)
+                    {
+                        var value = v;
+                        <label title="@SurveyQuestionnaire.ScaleLabels[value - SusScore.MinAnswer]">
+                            <input type="radio" name="@itemCode" checked="@(Answers[itemCode] == value)" @onchange="() => SelectAsync(itemCode, value)" />
+                            @value
+                        </label>
+                    }
+                </div>
+            </li>
+        }
+    </ol>
+</section>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter] public string Hint { get; set; } = "";
+    [Parameter, EditorRequired] public IReadOnlyList<SurveyItem> Items { get; set; } = [];
+
+    /// <summary>Madde kodu → seçilen cevap (sayfa ile paylaşılan sözlük).</summary>
+    [Parameter, EditorRequired] public Dictionary<string, int?> Answers { get; set; } = [];
+
+    /// <summary>Cevap değişince sayfa (cevaplanan madde sayacı) yeniden çizilsin.</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private Task SelectAsync(string code, int value)
+    {
+        Answers[code] = value;
+        return OnChanged.InvokeAsync();
+    }
+}

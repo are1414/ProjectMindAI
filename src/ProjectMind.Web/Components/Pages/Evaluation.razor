@@ -1,0 +1,266 @@
+@page "/evaluation"
+@using ProjectMind.Application.Evaluation
+@inject AppScope Scope
+@inject IJSRuntime JS
+
+<PageTitle>Değerlendirme · ProjectMind AI</PageTitle>
+
+<div class="experiments evaluation">
+    <h1>Değerlendirme (Faz 9)</h1>
+    <p class="muted">
+        Araştırma sorularının verisi bu sayfada özetlenir ve her biri CSV olarak indirilir (virgül ayırıcı, nokta ondalık,
+        ISO tarih, Excel için UTF-8 BOM). Tüm sayılar sistem kayıtlarından C# ile hesaplanır. CSV'lerde API anahtarı,
+        modele gönderilen bağlam ve yorum metni yoktur.
+    </p>
+    <div class="experiment-actions">
+        <a class="btn btn-primary" href="/evaluation/survey">Anketi aç (katılımcı formu)</a>
+        <button class="btn" @onclick="LoadAsync">Yenile</button>
+    </div>
+
+    @if (_error is not null)
+    {
+        <div class="inline-error">@_error</div>
+    }
+
+    @if (_summary is not { } s)
+    {
+        <p class="muted">Yükleniyor…</p>
+    }
+    else
+    {
+        <section class="eval-section">
+            <div class="section-head">
+                <h2>RQ1 · EVM ve ML tahmini (snapshot zaman serisi)</h2>
+                <button class="btn btn-sm" disabled="@(s.Rq1.Count == 0)" @onclick="() => DownloadAsync(EvaluationExport.Rq1Timeline)">CSV indir</button>
+            </div>
+            <p class="muted small">
+                Her durum hesaplamasında günün EVM göstergeleri, Earned Schedule tahmini bitişi ve ML gecikme olasılığı birlikte
+                saklanır; "hangisi daha erken uyardı" bu seriden okunur. Sentetik deneyin sonuçları Deneyler sayfasındadır.
+            </p>
+            @if (s.Rq1.Count == 0)
+            {
+                <p class="muted">Henüz snapshot yok (durum sekmesini açın ya da demo projesini oluşturun).</p>
+            }
+            else
+            {
+                <div class="table-wrap">
+                    <table class="table table-compact">
+                        <thead>
+                            <tr>
+                                <th>Proje</th><th class="num">Snapshot</th><th class="num">ML tahminli</th><th>İlk / son gün</th>
+                                <th class="num">Son SPI(t)</th><th class="num">Son ML olasılığı</th><th>EVM tahmini bitiş</th><th>ML tahmini bitiş</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var r in s.Rq1)
+                            {
+                                <tr>
+                                    <td>@r.ProjectName</td>
+                                    <td class="num">@r.Snapshots</td>
+                                    <td class="num">@r.WithMlPrediction</td>
+                                    <td>@Format.Date(r.FirstDate) – @Format.Date(r.LastDate)</td>
+                                    <td class="num">@Dec(r.LastSpiTime)</td>
+                                    <td class="num">@Pct(r.LastDelayProbability)</td>
+                                    <td>@Format.Date(r.LastEvmForecast)</td>
+                                    <td>@Format.Date(r.LastMlForecast)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+
+        <section class="eval-section">
+            <div class="section-head">
+                <h2>RQ2 · Gecikmeyi açıklayan faktörler</h2>
+                <button class="btn btn-sm" disabled="@(s.Rq2 is null)" @onclick="() => DownloadAsync(EvaluationExport.Rq2Importance)">CSV indir</button>
+            </div>
+            @if (s.Rq2 is { } report)
+            {
+                <p class="muted small">
+                    Son deney: @report.SelectedClassifier · @report.Synthetic.Projects sentetik proje, tohum @report.Synthetic.Seed ·
+                    permütasyon önemi (AUC düşüşü). Ayrıntı ve grafik Deneyler sayfasında.
+                </p>
+                <div class="table-wrap">
+                    <table class="table table-compact">
+                        <thead><tr><th>Özellik</th><th class="num">AUC düşüşü</th></tr></thead>
+                        <tbody>
+                            @foreach (var f in report.Importance)
+                            {
+                                <tr><td>@f.Feature</td><td class="num">@f.AucDrop.ToString("0.000", Tr)</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <p class="muted">Bu oturumda deney çalıştırılmadı. <a href="/experiments">Deneyler</a> sayfasında deneyi çalıştırın.</p>
+            }
+        </section>
+
+        <section class="eval-section">
+            <div class="section-head">
+                <h2>RQ3 · What-if karar desteği</h2>
+                <button class="btn btn-sm" disabled="@(s.Rq3.Runs == 0)" @onclick="() => DownloadAsync(EvaluationExport.Rq3WhatIfRuns)">CSV indir</button>
+            </div>
+            <p class="small">
+                <strong>@s.Rq3.Runs</strong> çalıştırma (panel @s.Rq3.PanelRuns · AI aracı @s.Rq3.AiToolRuns) ·
+                @s.Rq3.Projects proje · @s.Rq3.Scenarios senaryo
+                @if (s.Rq3.DurationMs.Mean is { } mean)
+                {
+                    <text> · ortalama süre @Format.Number(Math.Round(mean)) ms</text>
+                }
+            </p>
+            <LikertTable Items="@s.Survey.LikertFor(SurveyItemGroup.Rq3)" />
+        </section>
+
+        <section class="eval-section">
+            <div class="section-head">
+                <h2>RQ4 · Hibrit öneriler ve AI açıklamaları</h2>
+                <span>
+                    <button class="btn btn-sm" disabled="@(s.Rq4.Acceptance.Count == 0)" @onclick="() => DownloadAsync(EvaluationExport.Rq4Acceptance)">Öneri kabul CSV</button>
+                    <button class="btn btn-sm" @onclick="() => DownloadAsync(EvaluationExport.Rq4AiLog)">AI kayıtları CSV</button>
+                </span>
+            </div>
+            @if (s.Rq4.Acceptance.Count == 0)
+            {
+                <p class="muted">Henüz AI önerisi yok.</p>
+            }
+            else
+            {
+                <div class="table-wrap">
+                    <table class="table table-compact">
+                        <thead>
+                            <tr>
+                                <th>Kaynak</th><th class="num">Toplam</th><th class="num">Uygulandı</th><th class="num">Toplu</th>
+                                <th class="num">Reddedildi</th><th class="num">Kabul oranı</th><th class="num">Kabul oranı (tek tek)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var a in s.Rq4.Acceptance)
+                            {
+                                <tr>
+                                    <td>@Format.Name(a.Source)</td><td class="num">@a.Total</td><td class="num">@a.Applied</td>
+                                    <td class="num">@a.AppliedInBulk</td><td class="num">@a.Rejected</td>
+                                    <td class="num">@Pct(ToDecimal(a.AcceptanceRate))</td><td class="num">@Pct(ToDecimal(a.IndividualAcceptanceRate))</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            <p class="small">
+                AI yorum kartları: <strong>@s.Rq4.Comments</strong> çağrı, @s.Rq4.ValidComments şemaya uygun ·
+                doğrulanamayan sayı içeren @s.Rq4.CommentsWithUnverified (@Pct(s.Rq4.UnverifiedShare)) ·
+                "Anlaşılır mıydı?" @s.Rq4.Rated cevap, Evet @Pct(s.Rq4.HelpfulShare)
+                @if (s.Rq4.Clarity.Mean is { } clarity)
+                {
+                    <text> · anlaşılırlık puanı ort. @Dec(clarity) (n=@s.Rq4.Clarity.N)</text>
+                }
+            </p>
+            <LikertTable Items="@s.Survey.LikertFor(SurveyItemGroup.Rq4)" />
+        </section>
+
+        <section class="eval-section">
+            <div class="section-head">
+                <h2>Kullanılabilirlik (SUS)</h2>
+                <button class="btn btn-sm" disabled="@(s.Survey.Sus.N == 0)" @onclick="() => DownloadAsync(EvaluationExport.Survey)">Anket CSV</button>
+            </div>
+            @if (s.Survey.Sus.N == 0)
+            {
+                <p class="muted">Henüz anket cevabı yok.</p>
+            }
+            else
+            {
+                var sus = s.Survey.Sus;
+                <div class="eval-kpis">
+                    <div><span class="muted small">Katılımcı</span><strong>@sus.N</strong></div>
+                    <div><span class="muted small">Ortalama SUS</span><strong>@Dec(sus.Mean)</strong></div>
+                    <div><span class="muted small">Standart sapma</span><strong>@Dec(sus.StdDev)</strong></div>
+                    <div><span class="muted small">En düşük / en yüksek</span><strong>@Dec(sus.Min) / @Dec(sus.Max)</strong></div>
+                    <div><span class="muted small">Bangor sıfatı (ortalama)</span><strong>@s.Survey.MeanAdjective</strong></div>
+                </div>
+                <p class="muted small">
+                    Karşılaştırma: SUS ortalaması ≈ @Format.Number(SusScore.AverageBenchmark) (Sauro & Lewis); puan yüzde değildir.
+                    Sıfat ölçeği Bangor, Kortum ve Miller (2009). Küçük örneklemde sonuçlar betimseldir.
+                </p>
+                <div class="table-wrap">
+                    <table class="table table-compact">
+                        <thead><tr><th>Katılımcı</th><th>Gönderim</th><th class="num">SUS</th><th>Sıfat</th><th></th></tr></thead>
+                        <tbody>
+                            @foreach (var r in s.Survey.Responses)
+                            {
+                                <tr>
+                                    <td>@r.ParticipantCode</td>
+                                    <td>@r.SubmittedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm", Tr)</td>
+                                    <td class="num">@Dec(r.SusScore)</td>
+                                    <td>@r.Adjective</td>
+                                    <td class="num">
+                                        @if (_confirmDelete == r.Id)
+                                        {
+                                            <button class="btn btn-sm btn-danger" @onclick="() => DeleteAsync(r.Id)">Silmeyi onayla</button>
+                                            <button class="btn btn-sm" @onclick="() => _confirmDelete = null">Vazgeç</button>
+                                        }
+                                        else
+                                        {
+                                            <button class="btn btn-sm" title="Katılımcı çekildiyse veya deneme kaydıysa" @onclick="() => _confirmDelete = r.Id">Sil</button>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+    }
+</div>
+
+@code {
+    private static readonly System.Globalization.CultureInfo Tr = System.Globalization.CultureInfo.GetCultureInfo("tr-TR");
+    private EvaluationSummary? _summary;
+    private string? _error;
+    private int? _confirmDelete;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _error = null;
+        _summary = await Scope.RunAsync<EvaluationService, EvaluationSummary>(s => s.GetSummaryAsync(CancellationToken.None));
+    }
+
+    private async Task DownloadAsync(EvaluationExport export)
+    {
+        _error = null;
+        try
+        {
+            var file = await Scope.RunAsync<EvaluationService, CsvFile>(s => s.ExportAsync(export, CancellationToken.None));
+            await JS.InvokeVoidAsync("pmDownload", file.FileName, file.Content);
+        }
+        catch (BusinessRuleException ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task DeleteAsync(int id)
+    {
+        _confirmDelete = null;
+        try
+        {
+            await Scope.RunAsync<SurveyService>(s => s.DeleteAsync(id, CancellationToken.None));
+        }
+        catch (NotFoundException ex)
+        {
+            _error = ex.Message;
+        }
+        await LoadAsync();
+    }
+
+    private static decimal? ToDecimal(double? v) => v is { } d ? (decimal)d : null;
+    private static string Dec(decimal? v) => v is { } x ? x.ToString("0.0#", Tr) : "—";
+    private static string Pct(decimal? v) => v is { } x ? "%" + Format.Number(Math.Round(x * 100, 1)) : "—";
+}

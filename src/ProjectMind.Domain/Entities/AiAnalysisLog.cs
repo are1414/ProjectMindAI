@@ -38,4 +38,12 @@ public class AiAnalysisLog : Entity
 
     /// <summary>Doğrulanmış yorum JSON'u (yalnız başarılı yorumlarda).</summary>
     public string? ResultJson { get; set; }
+
+    /// <summary>Yorum kartında "Bu açıklama anlaşılır mıydı?" cevabı (yalnız başarılı yorumlarda; RQ4).</summary>
+    public bool? Helpful { get; set; }
+
+    /// <summary>İsteğe bağlı anlaşılırlık puanı (1–5).</summary>
+    public int? ClarityRating { get; set; }
+
+    public DateTime? RatedAt { get; set; }
 }

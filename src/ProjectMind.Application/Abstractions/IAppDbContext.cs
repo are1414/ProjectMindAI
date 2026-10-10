@@ -17,6 +17,9 @@ public interface IAppDbContext
     DbSet<BaselineItem> BaselineItems { get; }
     DbSet<StatusUpdate> StatusUpdates { get; }
     DbSet<ProjectSnapshot> ProjectSnapshots { get; }
+    DbSet<WhatIfRunLog> WhatIfRunLogs { get; }
+    DbSet<SurveyResponse> SurveyResponses { get; }
+    DbSet<SurveyAnswer> SurveyAnswers { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

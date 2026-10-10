@@ -106,3 +106,10 @@ public enum AiAnalysisOutcome
     InvalidSchema,
     ModelError
 }
+
+/// <summary>What-if karşılaştırmasını kim çalıştırdı (RQ3).</summary>
+public enum WhatIfRunSource
+{
+    [Display(Name = "What-if paneli")] Panel,
+    [Display(Name = "AI aracı (simulate_what_if)")] AiTool
+}

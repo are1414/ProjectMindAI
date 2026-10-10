@@ -31,7 +31,17 @@ public sealed record AnalysisCommentResult(
     string? Message = null,
     string? Model = null,
     DateTime? CreatedAt = null,
-    bool FromCache = false);
+    bool FromCache = false,
+    int? LogId = null,
+    bool? Helpful = null,
+    int? ClarityRating = null);
+
+/// <summary>Yorum kartı geri bildirimi: "Bu açıklama anlaşılır mıydı?" (Evet/Hayır) + isteğe bağlı 1–5 puan (RQ4).</summary>
+public sealed record CommentRating(bool Helpful, int? ClarityRating = null)
+{
+    public const int MinClarity = 1;
+    public const int MaxClarity = 5;
+}
 
 /// <summary>
 /// Durum ve What-if sekmelerindeki "AI yorumu" kartları (Faz 8). LLM hiçbir sayı hesaplamaz: girdi, salt okunur
@@ -97,7 +107,8 @@ public sealed class ProjectCommentService(IAppDbContext db, IChatModel model)
         var unverified = string.IsNullOrEmpty(log.UnverifiedNumbers)
             ? []
             : JsonSerializer.Deserialize<List<string>>(log.UnverifiedNumbers) ?? [];
-        return new AnalysisCommentResult(AnalysisCommentStatus.Ready, comment, unverified, null, log.Model, log.CreatedAt, FromCache: true);
+        return new AnalysisCommentResult(AnalysisCommentStatus.Ready, comment, unverified, null, log.Model, log.CreatedAt, FromCache: true,
+            LogId: log.Id, Helpful: log.Helpful, ClarityRating: log.ClarityRating);
     }
 
     private async Task<AnalysisCommentResult> GenerateAsync(
@@ -159,7 +170,32 @@ public sealed class ProjectCommentService(IAppDbContext db, IChatModel model)
         log.DurationMs = (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds;
         db.AiAnalysisLogs.Add(log);
         await db.SaveChangesAsync(ct);
-        return result with { CreatedAt = result.Status == AnalysisCommentStatus.Ready ? log.CreatedAt : null };
+        return result with
+        {
+            CreatedAt = result.Status == AnalysisCommentStatus.Ready ? log.CreatedAt : null,
+            LogId = result.Status == AnalysisCommentStatus.Ready ? log.Id : null
+        };
+    }
+
+    /// <summary>
+    /// Gösterilen yorumun anlaşılırlık geri bildirimini kayda yazar. Yalnız başarılı yorum kaydı puanlanır; ikinci puan
+    /// öncekinin üzerine yazar. Yorum ve proje verisi değişmez.
+    /// </summary>
+    public async Task<CommentRating> RateAsync(int logId, CommentRating rating, CancellationToken ct)
+    {
+        if (rating.ClarityRating is { } c && (c < CommentRating.MinClarity || c > CommentRating.MaxClarity))
+            throw new BusinessRuleException($"Anlaşılırlık puanı {CommentRating.MinClarity}–{CommentRating.MaxClarity} arasında olmalı.");
+
+        var log = await db.AiAnalysisLogs.FirstOrDefaultAsync(l => l.Id == logId, ct)
+                  ?? throw new NotFoundException("AI yorum kaydı", logId);
+        if (log.Kind is not (AiAnalysisKind.ProjectComment or AiAnalysisKind.ScenarioComment) || log.Outcome != AiAnalysisOutcome.Success)
+            throw new BusinessRuleException("Yalnız gösterilen (başarılı) bir AI yorumu puanlanabilir.");
+
+        log.Helpful = rating.Helpful;
+        log.ClarityRating = rating.ClarityRating;
+        log.RatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return rating;
     }
 
     private const int MaxErrorLength = 1000;

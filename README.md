@@ -58,3 +58,18 @@ eksik bırakılan CI/CD, kullanıcı kabul testi ve dokümantasyon işleri ("Eks
 - Tarihler bugüne göredir; aynı gün aynı sonuç (sabit tohum; isteğe bağlı ayar bölümü `Demo`: `WeeksBack`, `Seed`, `Velocity`).
 - Demo zaten varsa ikinci kopya açılmaz; yeniden oluşturmak için sol menüden sohbeti **projeyle birlikte** silin.
 - İlk kullanımda ML modeli henüz eğitilmemişse eğitim birkaç saniye sürebilir.
+
+## Değerlendirme (Faz 9)
+
+Sol menüdeki **📊 Değerlendirme** sayfası (`/evaluation`) araştırma sorularının verisini özetler ve her birini CSV olarak indirir
+(virgül ayırıcı, nokta ondalık, ISO tarih, Excel için UTF-8 BOM):
+
+- **RQ1** snapshot zaman serisi: SPI, SPI(t), EVM (Earned Schedule) tahmini bitiş, ML gecikme olasılığı ve ML tahmini bitiş.
+- **RQ2** son deneyin özellik önemi (deney Deneyler sayfasında çalıştırılır).
+- **RQ3** what-if çalıştırmaları: panelden ve AI aracından (`simulate_what_if`) her karşılaştırma kaydedilir (senaryo
+  değişiklikleri, P50/P80, hedefe yetişme olasılığı, süre).
+- **RQ4** öneri kartları (kaynak × araç × durum × toplu karar) ve AI denetim kaydı (şema geçerliliği, doğrulanamayan sayılar,
+  süre, yorum kartındaki "Bu açıklama anlaşılır mıydı?" Evet/Hayır + isteğe bağlı 1–5 puan). Yorum metni ve bağlam CSV'ye girmez.
+- **Anket** (`/evaluation/survey`): onam metni, anonim katılımcı kodu (P01…; ad/e-posta yok), 10 SUS maddesi ve RQ3/RQ4 için
+  ikişer Likert maddesi. SUS puanı uygulamada hesaplanır; sayfada n, ortalama, standart sapma, min/maks ve Bangor sıfatı görünür.
+  Deneme ya da çekilen katılımcının cevabı sayfadan silinebilir.

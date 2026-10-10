@@ -53,7 +53,8 @@ public abstract class ServiceTestBase : IDisposable
         /// <summary>Döndürülecek ML bitiş tarihi (varsayılan yok).</summary>
         public DateOnly? Finish { get; set; }
         public ProjectMind.Application.Ml.DelayModelInfo? CurrentModel => Info;
-        public ProjectMind.Application.Ml.DelayExperimentReport? LastReport => null;
+        /// <summary>Son deney raporu (varsayılan yok; değerlendirme testleri elle verir).</summary>
+        public ProjectMind.Application.Ml.DelayExperimentReport? LastReport { get; set; }
 
         public Task<ProjectMind.Application.Ml.DelayPrediction?> PredictAsync(ProjectMind.Application.Ml.DelayFeatures features,
             ProjectMind.Application.Analytics.EvmResult evm, CancellationToken ct)
@@ -67,7 +68,7 @@ public abstract class ServiceTestBase : IDisposable
     }
 
     protected ProjectMind.Application.WhatIf.WhatIfService NewWhatIfService(DateTimeOffset? now = null) =>
-        new(NewScheduleService(now), Microsoft.Extensions.Options.Options.Create(new ProjectMind.Application.WhatIf.WhatIfOptions { Iterations = 100 }));
+        new(NewScheduleService(now), Db, Microsoft.Extensions.Options.Options.Create(new ProjectMind.Application.WhatIf.WhatIfOptions { Iterations = 100 }));
 
     protected AiActionService NewActionService() =>
         new(Db, new ProjectService(Db), new PersonService(Db), new WorkItemService(Db), new DependencyService(Db),

@@ -6,6 +6,7 @@ using ProjectMind.Application.Common;
 using ProjectMind.Application.MissingWork;
 using ProjectMind.Application.Planning;
 using ProjectMind.Application.WhatIf;
+using ProjectMind.Domain.Enums;
 
 namespace ProjectMind.Application.Ai;
 
@@ -120,7 +121,7 @@ public sealed class ReadOnlyToolHandler(
                     return new ToolExecutionResult("Henüz proje yok; önce proje oluşturulmalı.", true);
 
                 var scenario = await ToScenarioAsync(id, Parse<SimulateWhatIfPayload>(input), ct);
-                var result = await whatIf.CompareAsync(id, [scenario], ct);
+                var result = await whatIf.CompareAsync(id, [scenario], WhatIfRunSource.AiTool, ct);
                 var payload = new
                 {
                     current = AnalysisPayloads.Scenario(result.Current),

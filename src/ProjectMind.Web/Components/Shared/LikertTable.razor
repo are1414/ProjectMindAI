@@ -1,0 +1,40 @@
+@* Likert maddeleri özeti (Değerlendirme sayfası). Sadece gösterim; hesap SurveyService / LikertSummary'de. *@
+@using ProjectMind.Application.Evaluation
+
+@if (Items.Count > 0 && Items.Any(i => i.Stats.N > 0))
+{
+    <div class="table-wrap">
+        <table class="table table-compact">
+            <thead>
+                <tr>
+                    <th>Anket maddesi</th><th class="num">n</th><th class="num">Ortalama</th><th class="num">SS</th>
+                    <th class="num" title="1 / 2 / 3 / 4 / 5 cevap sayıları">Dağılım (1–5)</th><th class="num">Katılıyor (4–5)</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var l in Items)
+                {
+                    <tr>
+                        <td><span class="muted small">@l.ItemCode</span> @l.Text</td>
+                        <td class="num">@l.Stats.N</td>
+                        <td class="num">@Dec(l.Stats.Mean)</td>
+                        <td class="num">@Dec(l.Stats.StdDev)</td>
+                        <td class="num">@string.Join(" / ", l.Distribution)</td>
+                        <td class="num">@(l.AgreeShare is { } a ? "%" + Format.Number(Math.Round(a * 100, 1)) : "—")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+else
+{
+    <p class="muted small">Anket cevabı yok (Likert maddeleri anket formunda).</p>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<LikertSummary> Items { get; set; } = [];
+
+    private static readonly System.Globalization.CultureInfo Tr = System.Globalization.CultureInfo.GetCultureInfo("tr-TR");
+    private static string Dec(decimal? v) => v is { } x ? x.ToString("0.0#", Tr) : "—";
+}

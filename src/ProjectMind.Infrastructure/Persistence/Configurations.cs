@@ -180,3 +180,36 @@ internal sealed class ProjectSnapshotConfiguration : IEntityTypeConfiguration<Pr
             .HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Cascade);
     }
 }
+
+internal sealed class WhatIfRunLogConfiguration : IEntityTypeConfiguration<WhatIfRunLog>
+{
+    public void Configure(EntityTypeBuilder<WhatIfRunLog> b)
+    {
+        // Proje silinse de kalır (RQ3 kanıtı); yabancı anahtar yok, yalnız indeks.
+        b.Property(x => x.Source).HasConversion<string>().HasMaxLength(20);
+        b.Property(x => x.ResultsJson).IsRequired();
+        b.HasIndex(x => x.ProjectId);
+    }
+}
+
+internal sealed class SurveyResponseConfiguration : IEntityTypeConfiguration<SurveyResponse>
+{
+    public void Configure(EntityTypeBuilder<SurveyResponse> b)
+    {
+        b.Property(x => x.ParticipantCode).HasMaxLength(10).IsRequired();
+        b.HasIndex(x => x.ParticipantCode).IsUnique();
+        b.Property(x => x.QuestionnaireVersion).HasMaxLength(30).IsRequired();
+        b.Property(x => x.SusScore).HasPrecision(5, 2);
+        b.HasMany(x => x.Answers).WithOne()
+            .HasForeignKey(a => a.SurveyResponseId).OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+internal sealed class SurveyAnswerConfiguration : IEntityTypeConfiguration<SurveyAnswer>
+{
+    public void Configure(EntityTypeBuilder<SurveyAnswer> b)
+    {
+        b.Property(x => x.ItemCode).HasMaxLength(20).IsRequired();
+        b.HasIndex(x => new { x.SurveyResponseId, x.ItemCode }).IsUnique();
+    }
+}

@@ -1,0 +1,90 @@
+@page "/evaluation/survey"
+@using ProjectMind.Application.Evaluation
+@inject AppScope Scope
+
+<PageTitle>Anket · ProjectMind AI</PageTitle>
+
+<div class="settings survey">
+    <h1>Kullanıcı testi anketi</h1>
+
+    @if (_saved is { } saved)
+    {
+        <section class="settings-card">
+            <h2>Teşekkürler</h2>
+            <p class="settings-ok">@saved.ParticipantCode kodlu cevaplar kaydedildi.</p>
+            <div class="settings-actions">
+                <button class="btn btn-primary" @onclick="Reset">Yeni katılımcı</button>
+                <a class="btn" href="/evaluation">Değerlendirme sayfası</a>
+            </div>
+        </section>
+    }
+    else
+    {
+        <section class="settings-card">
+            <h2>Bilgilendirilmiş onam</h2>
+            <p class="survey-consent">@SurveyQuestionnaire.ConsentText</p>
+            <label class="survey-check">
+                <input type="checkbox" @bind="_consent" />
+                Okudum, gönüllü olarak katılmayı kabul ediyorum.
+            </label>
+
+            <label for="participant">Katılımcı kodu</label>
+            <input id="participant" @bind="_code" placeholder="@SurveyQuestionnaire.ParticipantCodeExample" autocomplete="off" maxlength="4" />
+            <small class="muted">Size verilen kodu yazın (ör. @SurveyQuestionnaire.ParticipantCodeExample). Adınızı veya e-postanızı yazmayın.</small>
+        </section>
+
+        <SurveyItems Title="Kullanılabilirlik (SUS)" Items="SurveyQuestionnaire.SusItems" Answers="_answers" OnChanged="StateHasChanged"
+                     Hint="Sistemi kullanma deneyiminize göre her ifadeye ne kadar katıldığınızı işaretleyin." />
+        <SurveyItems Title="Senaryo analizi ve AI açıklamaları" Items="SurveyQuestionnaire.LikertItems" Answers="_answers" OnChanged="StateHasChanged"
+                     Hint="Test görevlerinde kullandığınız what-if karşılaştırması, AI yorumları ve eksik iş önerileri için." />
+
+        @if (_error is not null)
+        {
+            <div class="inline-error">@_error</div>
+        }
+        <div class="settings-actions">
+            <button class="btn btn-primary" disabled="@(_busy || !_consent)" @onclick="SubmitAsync">Gönder</button>
+            <span class="muted small">@_answers.Count(a => a.Value is not null) / @SurveyQuestionnaire.AllItems.Count madde cevaplandı</span>
+        </div>
+    }
+</div>
+
+@code {
+    private readonly Dictionary<string, int?> _answers = NewAnswers();
+    private bool _consent;
+    private string _code = "";
+    private string? _error;
+    private bool _busy;
+    private SurveyResponseRow? _saved;
+
+    private static Dictionary<string, int?> NewAnswers() => SurveyQuestionnaire.AllItems.ToDictionary(i => i.Code, _ => (int?)null);
+
+    private async Task SubmitAsync()
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            var submission = new SurveySubmission(_code, _consent, new Dictionary<string, int?>(_answers));
+            _saved = await Scope.RunAsync<SurveyService, SurveyResponseRow>(s => s.SubmitAsync(submission, CancellationToken.None));
+        }
+        catch (BusinessRuleException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void Reset()
+    {
+        foreach (var key in _answers.Keys.ToList())
+            _answers[key] = null;
+        _consent = false;
+        _code = "";
+        _error = null;
+        _saved = null;
+    }
+}

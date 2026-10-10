@@ -275,4 +275,70 @@ public class ProjectCommentServiceTests : ServiceTestBase
         var cached = await NewService(model).FindScenarioCommentAsync(projectId, comparison, _ct);
         Assert.Equal(["98.765"], cached!.UnverifiedNumbers);            // aynı girdi → en son yorum
     }
+
+    [Fact]
+    public async Task Clarity_feedback_is_stored_on_the_comment_log_and_overwritten_by_a_second_rating()
+    {
+        // Tur 5a (RQ4): "Bu açıklama anlaşılır mıydı?" yorumu üreten AiAnalysisLog satırına yazılır.
+        var status = await SeedStatusAsync(Nov4);
+        var model = new ScriptedJsonModel(_ => Comment("Proje biraz geride.", [], []));
+        var service = NewService(model);
+        var generated = await service.GenerateProjectCommentAsync(status, _ct);
+        Assert.Equal(AnalysisCommentStatus.Ready, generated.Status);
+        var logId = Assert.IsType<int>(generated.LogId);
+        Assert.Null(generated.Helpful);
+
+        await service.RateAsync(logId, new CommentRating(false), _ct);
+        var second = await service.RateAsync(logId, new CommentRating(true, 4), _ct);
+        Assert.Equal(new CommentRating(true, 4), second);
+        Db.ChangeTracker.Clear();
+
+        var log = await Db.AiAnalysisLogs.SingleAsync(l => l.Id == logId, _ct);
+        Assert.True(log.Helpful);
+        Assert.Equal(4, log.ClarityRating);
+        Assert.NotNull(log.RatedAt);
+
+        // Önbellekten açılan yorum aynı kaydı ve puanı taşır.
+        var cached = await service.FindProjectCommentAsync(status, _ct);
+        Assert.Equal(logId, cached!.LogId);
+        Assert.True(cached.Helpful);
+        Assert.Equal(4, cached.ClarityRating);
+
+        await Assert.ThrowsAsync<ProjectMind.Application.Common.BusinessRuleException>(() =>
+            service.RateAsync(logId, new CommentRating(true, 6), _ct));
+    }
+
+    [Fact]
+    public async Task Only_successful_comment_logs_can_be_rated()
+    {
+        var status = await SeedStatusAsync(Nov4);
+        var invalid = await NewService(new ScriptedJsonModel(_ => "{}")).GenerateProjectCommentAsync(status, _ct);
+        Assert.Equal(AnalysisCommentStatus.Failed, invalid.Status);
+        Assert.Null(invalid.LogId);
+
+        var service = NewService(new ScriptedJsonModel(_ => "{}"));
+        var failedLog = await Db.AiAnalysisLogs.SingleAsync(_ct);
+        await Assert.ThrowsAsync<ProjectMind.Application.Common.BusinessRuleException>(() =>
+            service.RateAsync(failedLog.Id, new CommentRating(true), _ct));
+
+        var chat = new ProjectMind.Domain.Entities.AiAnalysisLog
+        {
+            Kind = AiAnalysisKind.Chat, PromptVersion = "chat", Outcome = AiAnalysisOutcome.Success
+        };
+        Db.AiAnalysisLogs.Add(chat);
+        await Db.SaveChangesAsync(_ct);
+        await Assert.ThrowsAsync<ProjectMind.Application.Common.BusinessRuleException>(() =>
+            service.RateAsync(chat.Id, new CommentRating(true), _ct));
+        await Assert.ThrowsAsync<ProjectMind.Application.Common.NotFoundException>(() =>
+            service.RateAsync(9999, new CommentRating(true), _ct));
+    }
+
+    [Fact]
+    public async Task Not_configured_model_returns_no_log_id_so_rating_is_hidden()
+    {
+        var status = await SeedStatusAsync(Nov4);
+        var result = await NewService(new ScriptedJsonModel(_ => "{}", configured: false)).GenerateProjectCommentAsync(status, _ct);
+        Assert.Equal(AnalysisCommentStatus.NotConfigured, result.Status);
+        Assert.Null(result.LogId);
+    }
 }
