@@ -218,3 +218,23 @@ Demo "Mobile Banking Modernization" tohumu (ANALIZ madde 4) + snapshot'a ML olas
 ### Sonraki turlar
 Değerlendirme sayfası ve RQ CSV'leri, SUS/Likert formu, sağlayıcı karşılaştırma koşucusu, what-if kaydı + "anlaşılır mı?"
 butonu; RQ1'e "erken uyarı süresi" ve çoklu tohum analizi (TEST_PAZAR öneri 10).
+
+---
+
+## Tur 5 kapsamı (lider, 2026-10-10)
+
+### Tur 5a — değerlendirme altyapısı (uygulama içi)
+1. `/evaluation` sayfası (bileşende iş mantığı yok; `EvaluationService`): RQ1–RQ4 başlıkları altında mevcut verilerin
+   özeti + her RQ için CSV dışa aktarım (RQ1: snapshot zaman serisi EVM vs ML tahmini; RQ2: özellik önemi; RQ3: what-if
+   çalıştırmaları + anket; RQ4: öneri kaynağına göre kabul oranı, yorum kartı NumberGuard sonuçları).
+2. Anket: uygulama içi SUS (10 soru, standart Türkçe çeviri, 1–5) + RQ3 ve RQ4 için 2'şer Likert sorusu. Anonim katılımcı
+   kodu, onay metni, kişisel veri yok. SUS skoru C# ile (0–100; testte 0 / 50 / 100 ve elle hesaplanmış örnek).
+   Ortalama, standart sapma, katılımcı sayısı ve Bangor sıfat ölçeği sayfada.
+3. What-if çalıştırma kaydı (senaryo değişiklikleri, P50/P80, hedefe yetişme olasılığı, süre) — RQ3 için.
+4. Yorum kartlarına "Bu açıklama anlaşılır mıydı?" (Evet/Hayır + isteğe bağlı 1–5) — `AiAnalysisLog` ile ilişkili.
+5. Migration'lar tek yeni migration'da.
+
+### Tur 5b — ölçüm koşucuları (5a'dan sonra)
+Sağlayıcı karşılaştırma koşucusu (`eval-v1` görev seti, demo üzerinde, tekrar sayısı ayarlı, sonuçlar audit'e
+`EvaluationRunId` ile), RQ4 için "k işi çıkar → kural/hibrit bulma oranı" deneyi, RQ1 için erken uyarı süresi ve çoklu tohum
+(ortalama ± ss) analizi.
