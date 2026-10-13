@@ -20,7 +20,8 @@ public sealed record WhatIfRunScenario(
 /// Mevcut planı ve senaryoları aynı varsayımlarla (deterministik plan + Monte Carlo) karşılaştırır. Proje verisi değişmez;
 /// her başarılı karşılaştırma RQ3 için <see cref="WhatIfRunLog"/>'a yazılır (kim çalıştırdı, sonuçlar, süre).
 /// </summary>
-public sealed class WhatIfService(ScheduleService schedules, IAppDbContext db, IOptions<WhatIfOptions> options)
+public sealed class WhatIfService(
+    ScheduleService schedules, IAppDbContext db, IOptions<WhatIfOptions> options, Evaluation.EvaluationRunContext? evaluation = null)
 {
     public const string CurrentPlanName = "Mevcut plan";
 
@@ -56,7 +57,8 @@ public sealed class WhatIfService(ScheduleService schedules, IAppDbContext db, I
         db.WhatIfRunLogs.Add(new WhatIfRunLog
         {
             ProjectId = projectId,
-            Source = source,
+            // Ölçüm koşusundaki çalıştırma kullanıcı kullanımı değildir (RQ3 özetine girmez, D31).
+            Source = evaluation?.IsActive == true ? WhatIfRunSource.Evaluation : source,
             ScenarioCount = comparison.Scenarios.Count,
             Iterations = o.Iterations,
             Seed = o.Seed,

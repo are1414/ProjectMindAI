@@ -344,7 +344,7 @@ public class EvaluationServiceTests : ServiceTestBase
             Assert.Equal(string.Join(',', EvaluationService.Rq4AiLogHeader), log[0]);
             Assert.Equal(1 + await Db.AiAnalysisLogs.CountAsync(_ct), log.Count);
             Assert.Contains(",ScenarioComment,", log[2]);
-            Assert.EndsWith(",2,\"137 | 1,5\",850,0,2", log[2]);
+            Assert.EndsWith(",2,\"137 | 1,5\",850,0,2,,,,,", log[2]);   // + boş token ve ölçüm koşusu kolonları (kullanıcı kaydı)
             Assert.DoesNotContain(log, l => l.Contains("gizli yorum metni") || l.Contains("hata ayrıntısı") || l.Contains("ABC"));
             Assert.DoesNotContain(EvaluationService.Rq4AiLogHeader,
                 h => h.Contains("key", StringComparison.OrdinalIgnoreCase) || h.Contains("result") || h == "context" || h.Contains("hash"));

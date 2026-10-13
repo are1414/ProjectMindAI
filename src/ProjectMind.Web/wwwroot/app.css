@@ -327,6 +327,9 @@ h1:focus { outline: none; }
 .eval-section { margin: 1.25rem 0 1.75rem; }
 .eval-section .section-head { display: flex; justify-content: space-between; align-items: center; gap: .75rem; flex-wrap: wrap; }
 .eval-section .section-head h2 { margin: 0; }
+.eval-subsection { margin-top: 1rem; padding-top: .75rem; border-top: 1px dashed var(--border); }
+.eval-subsection h3 { margin: 0; font-size: 1rem; }
+.provider-list { list-style: none; padding: 0; margin: .4rem 0; display: flex; flex-wrap: wrap; gap: .3rem 1.2rem; }
 .eval-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .6rem; margin: .75rem 0; }
 .eval-kpis > div { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: .6rem .8rem; display: flex; flex-direction: column; gap: .2rem; }
 .eval-kpis strong { font-size: 1.15rem; font-variant-numeric: tabular-nums; }

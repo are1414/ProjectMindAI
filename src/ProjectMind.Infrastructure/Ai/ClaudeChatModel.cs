@@ -27,6 +27,7 @@ public sealed class ClaudeChatModel(AiOptions options, ILogger<ClaudeChatModel> 
 
         List<ToolUnion> toolDefinitions = request.Tools.Select(ToTool).ToList();
         var reply = new StringBuilder();
+        ChatUsage? usage = null;
 
         for (var round = 0; round < o.MaxToolRounds; round++)
         {
@@ -42,9 +43,10 @@ public sealed class ClaudeChatModel(AiOptions options, ILogger<ClaudeChatModel> 
 
             logger.LogInformation("Claude turu: model {Model}, giriş {In} / çıkış {Out} token",
                 o.Claude.Model, response.Usage.InputTokens, response.Usage.OutputTokens);
+            usage = ChatUsage.Add(usage, ToUsage(response.Usage));
 
             if (response.StopReason == StopReason.Refusal)
-                return new ChatTurnResult("Bu isteği işleyemiyorum. Lütfen farklı şekilde ifade edin.", o.Claude.Model);
+                return new ChatTurnResult("Bu isteği işleyemiyorum. Lütfen farklı şekilde ifade edin.", o.Claude.Model, usage);
 
             List<ContentBlockParam> assistantContent = [];
             List<ContentBlockParam> toolResults = [];
@@ -73,7 +75,7 @@ public sealed class ClaudeChatModel(AiOptions options, ILogger<ClaudeChatModel> 
             }
 
             if (toolResults.Count == 0)
-                return new ChatTurnResult(reply.ToString(), o.Claude.Model);
+                return new ChatTurnResult(reply.ToString(), o.Claude.Model, usage);
 
             messages.Add(new MessageParam { Role = Role.Assistant, Content = assistantContent });
             messages.Add(new MessageParam { Role = Role.User, Content = toolResults });
@@ -81,7 +83,7 @@ public sealed class ClaudeChatModel(AiOptions options, ILogger<ClaudeChatModel> 
 
         logger.LogWarning("Araç turu sınırına ({Max}) ulaşıldı", o.MaxToolRounds);
         reply.AppendLine("(İşlem çok uzun sürdü; şu ana kadarki önerileri kontrol edin.)");
-        return new ChatTurnResult(reply.ToString(), o.Claude.Model);
+        return new ChatTurnResult(reply.ToString(), o.Claude.Model, usage);
     }
 
     public bool IsConfigured => true;
@@ -120,8 +122,11 @@ public sealed class ClaudeChatModel(AiOptions options, ILogger<ClaudeChatModel> 
             if (block.TryPickText(out TextBlock? text))
                 json.Append(text.Text);
         }
-        return new ChatJsonResult(json.ToString(), o.Claude.Model);
+        return new ChatJsonResult(json.ToString(), o.Claude.Model, ToUsage(response.Usage));
     }
+
+    /// <summary>Messages API kullanımı (giriş / çıkış token'ları; önbellek token'ları ayrı tutulmaz).</summary>
+    private static ChatUsage ToUsage(Usage usage) => new((int)usage.InputTokens, (int)usage.OutputTokens);
 
     /// <summary>JSON şemasını SDK'nın yapılandırılmış çıktı biçimine çevirir (test edilebilsin diye ayrı).</summary>
     public static JsonOutputFormat ToOutputFormat(JsonElement schema) => new()

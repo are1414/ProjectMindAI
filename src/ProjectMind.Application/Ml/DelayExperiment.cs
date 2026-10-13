@@ -11,7 +11,7 @@ public sealed record FeatureImportance(string Feature, double AucDrop);
 public sealed record DelayExperimentReport(
     SyntheticOptions Synthetic, int TrainProjects, int TestProjects, int TrainRows, int TestRows, double DelayedShare,
     IReadOnlyList<MethodEvaluation> Evaluations, string SelectedClassifier, IReadOnlyList<FeatureImportance> Importance,
-    DateTimeOffset CreatedAt)
+    DateTimeOffset CreatedAt, IReadOnlyList<EarlyWarningResult>? EarlyWarning = null)
 {
     public const string EvmMethod = "EVM (Earned Schedule)";
     public const int AllCheckpoints = 0;
@@ -33,9 +33,17 @@ public sealed record DelayExperimentReport(
         sb.AppendLine("feature,auc_drop");
         foreach (var f in Importance)
             sb.AppendLine($"{f.Feature},{F(f.AucDrop)}");
+
+        sb.AppendLine();
+        sb.AppendLine("early_warning_method,delayed_projects,detected,detected_share,mean_first_checkpoint,mean_lead_weeks,mean_lead_share,on_time_projects,false_alarms,false_alarm_share");
+        foreach (var w in EarlyWarning ?? [])
+            sb.AppendLine(string.Join(',', Quote(w.Method), w.DelayedProjects.ToString(c), w.Detected.ToString(c), N(w.DetectedShare),
+                N(w.MeanFirstCheckpoint), N(w.MeanLeadWeeks), N(w.MeanLeadShare), w.OnTimeProjects.ToString(c), w.FalseAlarms.ToString(c),
+                N(w.FalseAlarmShare)));
         return sb.ToString();
 
         string F(double v) => double.IsNaN(v) ? "" : v.ToString("0.0000", c);
+        string N(double? v) => v is { } d ? F(d) : "";
         static string Quote(string s) => $"\"{s.Replace("\"", "\"\"")}\"";
     }
 }
@@ -47,7 +55,9 @@ public sealed record DelayExperimentReport(
 /// </summary>
 public sealed class DelayExperiment(IDelayLearner learner)
 {
-    public (DelayExperimentReport Report, DelayModelBundle Model) Run(MlOptions options, DateTimeOffset now)
+    /// <param name="computeImportance">Permütasyon önemi (yavaş); çok tohumlu koşuda kapatılır.</param>
+    public (DelayExperimentReport Report, DelayModelBundle Model) Run(
+        MlOptions options, DateTimeOffset now, bool computeImportance = true, CancellationToken ct = default)
     {
         var projects = SyntheticProjectGenerator.Generate(options.ToSynthetic());
         var (train, test) = Split(projects, options.TrainShare, options.Seed);
@@ -67,25 +77,48 @@ public sealed class DelayExperiment(IDelayLearner learner)
         evaluations.AddRange(Evaluate(DelayExperimentReport.EvmMethod, testRows, actual, evmRatio, 1 + options.DelayTolerance,
             actualRatio, evmRatio));
 
+        var evmThreshold = 1 + options.DelayTolerance;
+        var earlyWarning = new List<EarlyWarningResult>
+        {
+            EarlyWarningResult.Compute(DelayExperimentReport.EvmMethod,
+                EarlyWarningProjects(test, testRows, evmRatio.Select(r => r >= evmThreshold).ToList()))
+        };
+
         var classifiers = new List<(IDelayClassifier Model, double Auc)>();
         foreach (var algorithm in learner.Classifiers)
         {
+            ct.ThrowIfCancellationRequested();
             var model = learner.TrainClassifier(algorithm, trainRows, options.Seed);
             var scores = model.PredictProbabilities(testFeatures).Select(v => (double)v).ToList();
             var rows = Evaluate(algorithm, testRows, actual, scores, options.Threshold, actualRatio, predictedRatio);
             evaluations.AddRange(rows);
             classifiers.Add((model, rows[0].Metrics.Auc));
+            earlyWarning.Add(EarlyWarningResult.Compute(algorithm,
+                EarlyWarningProjects(test, testRows, scores.Select(p => p >= options.Threshold).ToList())));
         }
 
         var best = classifiers.OrderByDescending(c => c.Auc).First().Model;
-        var importance = PermutationImportance(best, testFeatures, actual, options.PermutationRepeats, options.Seed);
+        ct.ThrowIfCancellationRequested();
+        var importance = computeImportance
+            ? PermutationImportance(best, testFeatures, actual, options.PermutationRepeats, options.Seed)
+            : [];
         var bestAll = evaluations.First(e => e.Method == best.Algorithm && e.Checkpoint == DelayExperimentReport.AllCheckpoints);
 
         var report = new DelayExperimentReport(options.ToSynthetic(), train.Count, test.Count, trainRows.Count, testRows.Count,
-            projects.Count(p => p.Delayed) / (double)projects.Count, evaluations, best.Algorithm, importance, now);
+            projects.Count(p => p.Delayed) / (double)projects.Count, evaluations, best.Algorithm, importance, now, earlyWarning);
         var info = new DelayModelInfo(best.Algorithm, regressor.Algorithm, MlOptions.DatasetVersion, options.Seed, options.Projects,
             trainRows.Count, bestAll.Metrics.Auc, bestAll.Metrics.F1, bestAll.DurationMae, now);
         return (report, new DelayModelBundle(best, regressor, info));
+    }
+
+    /// <summary>Test projelerini kontrol noktası işaretleriyle eşler (satırlar ve işaretler aynı sırada).</summary>
+    public static IReadOnlyList<EarlyWarningProject> EarlyWarningProjects(
+        IReadOnlyList<SyntheticProject> projects, IReadOnlyList<DelaySample> rows, IReadOnlyList<bool> flagged)
+    {
+        var checks = rows.Select((r, i) => (r.ProjectId, r.CheckpointPercent, Flagged: flagged[i]))
+            .ToLookup(x => x.ProjectId, x => (x.CheckpointPercent, x.Flagged));
+        return projects.Select(p => new EarlyWarningProject(p.Id, p.Delayed, p.PlannedWeeks, p.ActualWeeks, checks[p.Id].ToList()))
+            .ToList();
     }
 
     /// <summary>Projeleri karıştırıp ayırır (satır değil proje bazında: sızıntı olmasın).</summary>

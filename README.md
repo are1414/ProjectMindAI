@@ -73,3 +73,19 @@ Sol menüdeki **📊 Değerlendirme** sayfası (`/evaluation`) araştırma sorul
 - **Anket** (`/evaluation/survey`): onam metni, anonim katılımcı kodu (P01…; ad/e-posta yok), 10 SUS maddesi ve RQ3/RQ4 için
   ikişer Likert maddesi. SUS puanı uygulamada hesaplanır; sayfada n, ortalama, standart sapma, min/maks ve Bangor sıfatı görünür.
   Deneme ya da çekilen katılımcının cevabı sayfadan silinebilir.
+
+### Ölçüm koşucuları (Tur 5b)
+
+- **LLM sağlayıcı karşılaştırması** (`/evaluation` → "LLM sağlayıcı karşılaştırması"): sabit görev seti `eval-v1` (proje yorumu,
+  iki senaryolu senaryo yorumu, hibrit eksik iş ve salt okunur araç gerektiren 5 sohbet sorusu) demo projesinde, **API anahtarı
+  olan her sağlayıcıyla** (Gemini ve/veya Claude; Mock atlanır) `Evaluation:Repeats` (varsayılan 3) kez çalışır. Gerçek API
+  çağrısı yapar, ücretli olabilir; "İptal et" ile durdurulabilir. Hiçbir kart uygulanmaz: sohbette oluşan kartlar otomatik
+  reddedilir ve öneri kabul oranına girmez. Sonuç: sağlayıcı × görev için şema geçerlilik, doğrulanamayan sayı, hata oranı,
+  süre ve (sağlayıcı bildiriyorsa) token ortalaması + CSV. Ham çağrılar "AI kayıtları CSV"sinde `evaluation_run_id` ile.
+  Her iki anahtarı da ⚙ Ayarlar'a girin (seçili sağlayıcı olması gerekmez).
+- **Tohumlanmış eksik iş deneyi (RQ4)** (aynı sayfa, RQ4 bölümü): demo iş listesinden bellekte 4 şablon işi + 4 projeye özgü iş
+  çıkarılır (`Evaluation:RecallSeed`), kural-yalnız ve hibrit modun recall/precision'ı ölçülür. Kural kısmı anahtarsız çalışır;
+  hibrit kısım ayarlı sağlayıcıyla `Evaluation:RecallRepeats` kez çalışır.
+- **RQ1 erken uyarı ve çok tohumlu analiz** (`/experiments`): deney artık her yöntem için gecikmeyi ilk işaretlediği kontrol
+  noktasını, uyarı süresini (hafta) ve yanlış alarm payını verir. "Çok tohumlu deneyi çalıştır" deneyi `Ml:RobustnessSeeds`
+  (varsayılan 5) tohumla tekrarlar ve F1/AUC ortalama ± SS üretir (üretim modeli değişmez); CSV indirilebilir.

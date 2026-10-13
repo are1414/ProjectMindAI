@@ -23,6 +23,10 @@ public static class SyntheticProjectGenerator
     private const int VelocityWindowWeeks = 2;
     private const float ReportingNoise = 0.03f;
 
+    /// <summary>Kontrol noktasının (planlanan sürenin yüzdesi) denk geldiği hafta (en az 1).</summary>
+    public static int CheckpointWeek(int plannedWeeks, int checkpointPercent) =>
+        Math.Max(1, (int)MathF.Round(plannedWeeks * checkpointPercent / 100f));
+
     public static IReadOnlyList<SyntheticProject> Generate(SyntheticOptions options)
     {
         var random = new Random(options.Seed);
@@ -52,7 +56,7 @@ public static class SyntheticProjectGenerator
         var evHistory = new List<float> { 0 };
         var pvHistory = new List<float> { 0 };
         var samples = new List<(int Checkpoint, DelayFeatures F)>();
-        var checkpointWeeks = Checkpoints.ToDictionary(c => c, c => Math.Max(1, (int)MathF.Round(plannedWeeks * c / 100f)));
+        var checkpointWeeks = Checkpoints.ToDictionary(c => c, c => CheckpointWeek(plannedWeeks, c));
 
         var week = 0;
         var turnoverWeeks = 0;

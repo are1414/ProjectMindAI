@@ -20,6 +20,7 @@ public interface IAppDbContext
     DbSet<WhatIfRunLog> WhatIfRunLogs { get; }
     DbSet<SurveyResponse> SurveyResponses { get; }
     DbSet<SurveyAnswer> SurveyAnswers { get; }
+    DbSet<EvaluationRun> EvaluationRuns { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

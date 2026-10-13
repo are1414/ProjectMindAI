@@ -21,6 +21,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<WhatIfRunLog> WhatIfRunLogs => Set<WhatIfRunLog>();
     public DbSet<SurveyResponse> SurveyResponses => Set<SurveyResponse>();
     public DbSet<SurveyAnswer> SurveyAnswers => Set<SurveyAnswer>();
+    public DbSet<EvaluationRun> EvaluationRuns => Set<EvaluationRun>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder) =>
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);

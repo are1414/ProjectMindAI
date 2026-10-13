@@ -1,4 +1,5 @@
 @page "/experiments"
+@implements IDisposable
 @inject IDelayPredictor Predictor
 @inject IJSRuntime JS
 @inject AppScope Scope
@@ -88,6 +89,41 @@
             (ML satırlarında FastTree regresyonu, EVM satırında 1/SPI(t)). Kontrol noktası: planlanan sürenin yüzdesi.
         </p>
 
+        @if (r.EarlyWarning is { Count: > 0 } warnings)
+        {
+            <h2>Erken uyarı (RQ1, test seti)</h2>
+            <p class="muted small">
+                Geciken her test projesinde yöntemin gecikmeyi ilk işaretlediği kontrol noktası. Sentetik üretici yalnız %25 / %50 / %75
+                kontrol noktası üretir; ara haftalar ölçülmez. Uyarı süresi = gerçek bitiş haftası − işaretin haftası. Yanlış alarm:
+                zamanında biten projede herhangi bir noktada "gecikecek" denmesi. EVM eşiği 1/SPI(t) ≥ 1 + tolerans, ML eşiği olasılık ≥
+                @MlSettings.Value.Threshold.ToString("0.##", Tr).
+            </p>
+            <div class="table-wrap">
+                <table class="table table-compact">
+                    <thead>
+                        <tr>
+                            <th>Yöntem</th><th class="num">Geciken proje</th><th class="num">Yakalanan</th><th class="num">İlk işaret (ort. %)</th>
+                            <th class="num">Uyarı süresi (ort. hafta)</th><th class="num">Kalan süre payı</th><th class="num">Yanlış alarm</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var w in warnings)
+                        {
+                            <tr class="@(w.Method == DelayExperimentReport.EvmMethod ? "evm-row" : "")">
+                                <td>@w.Method @(w.Method == r.SelectedClassifier ? "(seçilen)" : "")</td>
+                                <td class="num">@w.DelayedProjects</td>
+                                <td class="num">@w.Detected (@P(w.DetectedShare))</td>
+                                <td class="num">@D(w.MeanFirstCheckpoint, "0.#")</td>
+                                <td class="num">@D(w.MeanLeadWeeks, "0.0")</td>
+                                <td class="num">@P(w.MeanLeadShare)</td>
+                                <td class="num">@w.FalseAlarms / @w.OnTimeProjects (@P(w.FalseAlarmShare))</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
         <h2>Özellik önemi (@r.SelectedClassifier, permütasyon)</h2>
         <p class="muted small">Özellik test setinde karıştırılınca AUC'nin ortalama düşüşü. Büyük değer = model bu göstergeye dayanıyor.</p>
         <ul class="importance">
@@ -101,6 +137,79 @@
                 </li>
             }
         </ul>
+    }
+
+    <h2>Çok tohumlu sağlamlık analizi (RQ1/RQ2)</h2>
+    <p class="muted small">
+        Deney N farklı tohumla (veri üretimi, eğitim/test ayrımı ve öğrenici tohumu birlikte; tohumlar @MlSettings.Value.Seed,
+        @(MlSettings.Value.Seed + 1), …) tekrarlanır; ortalama ± örneklem standart sapması verilir. Üretim modeli değişmez.
+        "Seçilen ML": her tohumda en yüksek test AUC'li sınıflandırıcı. Tohum başına birkaç saniye sürer.
+    </p>
+    <div class="experiment-actions">
+        <label class="small">Tohum sayısı
+            <input type="number" min="2" max="@MlSettings.Value.MaxRobustnessSeeds" @bind="_seeds" disabled="@MultiRunning" style="width:4.5rem" />
+        </label>
+        @if (MultiRunning)
+        {
+            <button class="btn btn-danger" @onclick="() => _multiCts?.Cancel()">İptal et</button>
+            <span class="small">@_multiProgress</span>
+        }
+        else
+        {
+            <button class="btn" disabled="@_running" @onclick="RunMultiAsync">Çok tohumlu deneyi çalıştır</button>
+            @if (_multi is not null)
+            {
+                <button class="btn" @onclick="DownloadMultiAsync">CSV indir</button>
+            }
+            @if (_multiProgress is not null)
+            {
+                <span class="small muted">@_multiProgress</span>
+            }
+        }
+    </div>
+    @if (_multiError is not null)
+    {
+        <div class="inline-error">@_multiError</div>
+    }
+    @if (_multi is { } ms)
+    {
+        <p class="small">
+            @ms.Seeds.Count tohum (@string.Join(", ", ms.Seeds)) × @ms.ProjectsPerSeed proje · seçilen sınıflandırıcılar:
+            @string.Join(", ", ms.SelectedPerSeed)
+        </p>
+        <div class="table-wrap">
+            <table class="table table-compact">
+                <thead>
+                    <tr><th>Yöntem</th><th>Kontrol noktası</th><th class="num">F1 ort. ± SS</th><th class="num">AUC ort. ± SS</th><th class="num">Doğruluk ort. ± SS</th><th class="num">n</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in ms.Rows)
+                    {
+                        <tr class="@(row.Method == DelayExperimentReport.EvmMethod ? "evm-row" : "")">
+                            <td>@row.Method</td><td>@CheckpointText(row.Checkpoint)</td>
+                            <td class="num">@MeanSd(row.F1)</td><td class="num">@MeanSd(row.Auc)</td><td class="num">@MeanSd(row.Accuracy)</td>
+                            <td class="num">@row.F1.N</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <div class="table-wrap">
+            <table class="table table-compact">
+                <thead>
+                    <tr><th>Erken uyarı</th><th class="num">Yakalanan pay</th><th class="num">Uyarı süresi (hafta)</th><th class="num">İlk işaret (%)</th><th class="num">Yanlış alarm payı</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var w in ms.EarlyWarning)
+                    {
+                        <tr class="@(w.Method == DelayExperimentReport.EvmMethod ? "evm-row" : "")">
+                            <td>@w.Method</td><td class="num">@MeanSd(w.DetectedShare)</td><td class="num">@MeanSd(w.MeanLeadWeeks, "0.0")</td>
+                            <td class="num">@MeanSd(w.MeanFirstCheckpoint, "0.#")</td><td class="num">@MeanSd(w.FalseAlarmShare)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
     }
 
     <h2>AI öneri kabul oranı (kaynağa göre)</h2>
@@ -161,9 +270,18 @@
 
     private IReadOnlyList<SourceAcceptance>? _acceptance;
 
+    private MultiSeedReport? _multi;
+    private int _seeds;
+    private string? _multiProgress;
+    private string? _multiError;
+    private CancellationTokenSource? _multiCts;
+    private bool MultiRunning => _multiCts is not null;
+
     protected override async Task OnInitializedAsync()
     {
         _report = Predictor.LastReport;
+        _multi = Predictor.LastMultiSeedReport;
+        _seeds = MlSettings.Value.RobustnessSeeds;
         _acceptance = await Scope.RunAsync<AiActionService, IReadOnlyList<SourceAcceptance>>(
             s => s.GetAcceptanceBySourceAsync(CancellationToken.None));
     }
@@ -193,6 +311,46 @@
     }
 
     private static string N(double v) => double.IsNaN(v) ? "—" : v.ToString("0.000", Tr);
+    private static string D(double? v, string format) => v is { } d ? d.ToString(format, Tr) : "—";
+    private static string P(double? v) => v is { } d ? "%" + (d * 100).ToString("0.#", Tr) : "—";
+
+    private static string MeanSd(MetricSummary m, string format = "0.000") =>
+        m.Mean is { } mean ? mean.ToString(format, Tr) + (m.Sd is { } sd ? " ± " + sd.ToString(format, Tr) : "") : "—";
+
+    private async Task RunMultiAsync()
+    {
+        _multiError = null;
+        _multiCts = new CancellationTokenSource();
+        var token = _multiCts.Token;
+        var seeds = _seeds;
+        var progress = new Progress<string>(m => { _multiProgress = m; StateHasChanged(); });
+        try
+        {
+            // Eğitim arka planda (Task.Run içinde); sayfa etkileşimli kalır ve iptal edilebilir.
+            _multi = await Predictor.RunMultiSeedAsync(seeds, progress, token);
+        }
+        catch (OperationCanceledException)
+        {
+            _multiProgress = "İptal edildi.";
+        }
+        catch (BusinessRuleException ex)
+        {
+            _multiError = ex.Message;
+        }
+        finally
+        {
+            _multiCts?.Dispose();
+            _multiCts = null;
+        }
+    }
+
+    private async Task DownloadMultiAsync()
+    {
+        if (_multi is not null)
+            await JS.InvokeVoidAsync("pmDownload", $"cok-tohumlu-deney-{_multi.CreatedAt:yyyyMMdd-HHmm}.csv", _multi.ToCsv());
+    }
+
+    public void Dispose() => _multiCts?.Cancel();
 
     private static string CheckpointText(int c) => c == DelayExperimentReport.AllCheckpoints ? "Tümü" : $"%{c}";
 

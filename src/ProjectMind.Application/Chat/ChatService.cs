@@ -23,7 +23,8 @@ public sealed class ChatService(
     ProjectService projects,
     ProjectContextBuilder contextBuilder,
     AiOptions options,
-    MissingWorkService missingWork)
+    MissingWorkService missingWork,
+    Evaluation.EvaluationRunContext? evaluation = null)
 {
     /// <summary>"Eksik iş var mı?" kısayolunun sohbete yazılan metni.</summary>
     public const string MissingWorkShortcut = "Eksik iş var mı?";
@@ -158,10 +159,12 @@ public sealed class ChatService(
         IReadOnlyList<string> unverified = [];
         var outcome = AiAnalysisOutcome.Success;
         string? error = null;
+        ChatUsage? usage = null;
         var started = Stopwatch.GetTimestamp();
         try
         {
             var result = await model.CompleteTurnAsync(request, executor, ct);
+            usage = result.Usage;
             reply = string.IsNullOrWhiteSpace(result.Text) ? "Önerilerimi aşağıda görebilirsiniz." : result.Text.Trim();
             modelName = result.Model;
 
@@ -207,7 +210,7 @@ public sealed class ChatService(
             await actions.AttachToMessageAsync(executor.CreatedActionIds, assistant.Id, ct);
 
         // Denetim kaydı (Faz 8): tam bağlam metni ve anahtar saklanmaz, yalnız ölçümler.
-        db.AiAnalysisLogs.Add(new AiAnalysisLog
+        var log = new AiAnalysisLog
         {
             Kind = AiAnalysisKind.Chat,
             ProjectId = await db.ChatSessions.Where(s => s.Id == sessionId).Select(s => s.ProjectId).FirstOrDefaultAsync(ct),
@@ -222,7 +225,9 @@ public sealed class ChatService(
             Outcome = outcome,
             ErrorMessage = error is null ? null : Truncate(error, MaxErrorLength),
             DurationMs = durationMs
-        });
+        };
+        (evaluation ?? new Evaluation.EvaluationRunContext()).Apply(log, usage);
+        db.AiAnalysisLogs.Add(log);
         await db.SaveChangesAsync(ct);
 
         return new ChatMessageResponse(assistant.Id, assistant.Role, assistant.Content, assistant.CreatedAt);

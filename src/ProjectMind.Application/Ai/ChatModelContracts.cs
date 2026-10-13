@@ -13,7 +13,18 @@ public sealed record ChatTurnRequest(
     string UserMessage,
     IReadOnlyList<ChatToolDefinition> Tools);
 
-public sealed record ChatTurnResult(string Text, string Model);
+/// <summary>
+/// Sağlayıcının bildirdiği token kullanımı (Gemini usageMetadata, Claude usage). Araç turlu sohbette turların toplamıdır.
+/// Bildirmeyen sağlayıcıda null (Faz 9 sağlayıcı karşılaştırması; maliyet hesabı yapılmaz).
+/// </summary>
+public sealed record ChatUsage(int InputTokens, int OutputTokens)
+{
+    /// <summary>İki ölçümü toplar; biri yoksa diğeri döner.</summary>
+    public static ChatUsage? Add(ChatUsage? a, ChatUsage? b) =>
+        a is null ? b : b is null ? a : new ChatUsage(a.InputTokens + b.InputTokens, a.OutputTokens + b.OutputTokens);
+}
+
+public sealed record ChatTurnResult(string Text, string Model, ChatUsage? Usage = null);
 
 public sealed record ToolExecutionResult(string Content, bool IsError);
 
@@ -24,7 +35,7 @@ public sealed record ToolExecutionResult(string Content, bool IsError);
 public sealed record ChatJsonRequest(string SystemPrompt, string UserMessage, string SchemaName, JsonElement Schema);
 
 /// <summary>Modelin döndürdüğü ham JSON metni (doğrulanmamış) ve kullanılan model.</summary>
-public sealed record ChatJsonResult(string Json, string Model);
+public sealed record ChatJsonResult(string Json, string Model, ChatUsage? Usage = null);
 
 /// <summary>Bir sohbet turu sırasında modelin çağırdığı araçları çalıştırır.</summary>
 public interface IChatToolExecutor

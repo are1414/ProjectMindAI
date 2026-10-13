@@ -135,6 +135,62 @@ public class MlTests(ITestOutputHelper output)
         }
     }
 
+    private sealed class CountingStore : IDelayModelStore
+    {
+        public int Saves { get; private set; }
+        public void Save(DelayModelBundle bundle) => Saves++;
+        public DelayModelBundle? Load() => null;
+    }
+
+    [Fact]
+    public async Task Multi_seed_experiment_aggregates_seeds_with_early_warning_and_keeps_production_model()
+    {
+        var store = new CountingStore();
+        var options = new MlOptions { Projects = 120, Seed = 7, PermutationRepeats = 1 };
+        var predictor = new DelayPredictionService(new MlNetDelayLearner(), store, Options.Create(options), TimeProvider.System);
+        var messages = new List<string>();
+
+        var report = await predictor.RunMultiSeedAsync(2, new SyncProgress(messages.Add), CancellationToken.None);
+
+        Assert.Equal([7, 8], report.Seeds);
+        Assert.Equal(120, report.ProjectsPerSeed);
+        Assert.Equal(0, store.Saves);                      // üretim modeli değişmedi
+        Assert.Null(predictor.CurrentModel);
+        Assert.Same(report, predictor.LastMultiSeedReport);
+        Assert.Contains(messages, m => m.Contains("Tohum 8 (2/2)"));
+        // EVM + 3 sınıflandırıcı + seçilen ML; tümü + 3 kontrol noktası.
+        Assert.Equal(5 * 4, report.Rows.Count);
+        Assert.All(report.Rows, r => Assert.Equal(2, r.F1.N));
+        Assert.Equal(5, report.EarlyWarning.Count);
+        Assert.Contains(report.EarlyWarning, w => w.Method == MultiSeedReport.SelectedMlMethod && w.DetectedShare.N == 2);
+
+        await Assert.ThrowsAsync<ProjectMind.Application.Common.BusinessRuleException>(() =>
+            predictor.RunMultiSeedAsync(1, null, CancellationToken.None));
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => predictor.RunMultiSeedAsync(2, null, cts.Token));
+    }
+
+    [Fact]
+    public void Single_experiment_reports_early_warning_for_evm_and_each_classifier()
+    {
+        var (report, _) = new DelayExperiment(new MlNetDelayLearner())
+            .Run(new MlOptions { Projects = 120, PermutationRepeats = 1 }, DateTimeOffset.UnixEpoch, computeImportance: false);
+
+        Assert.Empty(report.Importance);
+        var warnings = report.EarlyWarning!;
+        Assert.Equal([DelayExperimentReport.EvmMethod, .. new MlNetDelayLearner().Classifiers], warnings.Select(w => w.Method));
+        Assert.All(warnings, w => Assert.Equal(report.TestProjects, w.DelayedProjects + w.OnTimeProjects));
+        Assert.All(warnings.Where(w => w.MeanFirstCheckpoint is not null),
+            w => Assert.InRange(w.MeanFirstCheckpoint!.Value, 25, 75));
+        Assert.Contains("early_warning_method", report.ToCsv());
+    }
+
+    private sealed class SyncProgress(Action<string> onReport) : IProgress<string>
+    {
+        public void Report(string value) => onReport(value);
+    }
+
     private sealed class SpiTimeOnlyModel : IDelayClassifier
     {
         public string Algorithm => "test";

@@ -77,7 +77,8 @@ public sealed class EvaluationService(IAppDbContext db, IDelayPredictor predicto
     public static readonly IReadOnlyList<string> Rq4AiLogHeader =
     [
         "log_id", "created_at", "kind", "project_id", "model", "prompt_version", "tools_called", "context_length",
-        "outcome", "schema_valid", "unverified_count", "unverified_numbers", "duration_ms", "helpful", "clarity_rating"
+        "outcome", "schema_valid", "unverified_count", "unverified_numbers", "duration_ms", "helpful", "clarity_rating",
+        "input_tokens", "output_tokens", "evaluation_run_id", "evaluation_provider", "evaluation_task"
     ];
 
     public static IReadOnlyList<string> SurveyHeader =>
@@ -103,17 +104,18 @@ public sealed class EvaluationService(IAppDbContext db, IDelayPredictor predicto
             })
             .OrderBy(r => r.ProjectId).ToList();
 
-        // RQ3: what-if çalıştırmaları.
-        var runs = await db.WhatIfRunLogs.AsNoTracking()
+        // RQ3: what-if çalıştırmaları (ölçüm koşusunun çalıştırmaları kullanıcı kullanımı değildir, D31).
+        var runs = await db.WhatIfRunLogs.AsNoTracking().Where(r => r.Source != WhatIfRunSource.Evaluation)
             .Select(r => new { r.ProjectId, r.Source, r.ScenarioCount, r.DurationMs }).ToListAsync(ct);
         var rq3 = new Rq3Summary(runs.Count, runs.Count(r => r.Source == WhatIfRunSource.Panel),
             runs.Count(r => r.Source == WhatIfRunSource.AiTool), runs.Select(r => r.ProjectId).Distinct().Count(),
             runs.Sum(r => r.ScenarioCount), DescriptiveStats.Of(runs.Select(r => (decimal)r.DurationMs)));
 
-        // RQ4: kaynağa göre kabul + yorum kartları (NumberGuard, anlaşılırlık).
-        var acceptance = await db.AiActions.AsNoTracking().Select(a => new { a.Source, a.Status, a.DecidedInBulk }).ToListAsync(ct);
+        // RQ4: kaynağa göre kabul + yorum kartları (NumberGuard, anlaşılırlık). Ölçüm koşusu kayıtları hariç (D31).
+        var acceptance = await db.AiActions.AsNoTracking().Where(a => a.EvaluationRunId == null)
+            .Select(a => new { a.Source, a.Status, a.DecidedInBulk }).ToListAsync(ct);
         var comments = await db.AiAnalysisLogs.AsNoTracking()
-            .Where(l => l.Kind == AiAnalysisKind.ProjectComment || l.Kind == AiAnalysisKind.ScenarioComment)
+            .Where(l => (l.Kind == AiAnalysisKind.ProjectComment || l.Kind == AiAnalysisKind.ScenarioComment) && l.EvaluationRunId == null)
             .Select(l => new { l.Outcome, l.UnverifiedNumberCount, l.Helpful, l.ClarityRating }).ToListAsync(ct);
         var valid = comments.Where(c => c.Outcome == AiAnalysisOutcome.Success).ToList();
         var rated = valid.Where(c => c.Helpful is not null).ToList();
@@ -184,7 +186,7 @@ public sealed class EvaluationService(IAppDbContext db, IDelayPredictor predicto
 
     private async Task<string> Rq4AcceptanceAsync(CancellationToken ct)
     {
-        var actions = await db.AiActions.AsNoTracking()
+        var actions = await db.AiActions.AsNoTracking().Where(a => a.EvaluationRunId == null)
             .Select(a => new { a.Source, a.ToolName, a.Status, a.DecidedInBulk }).ToListAsync(ct);
         var groups = actions.GroupBy(a => (a.Source, a.ToolName, a.Status, a.DecidedInBulk))
             .OrderBy(g => g.Key.Source).ThenBy(g => g.Key.ToolName, StringComparer.Ordinal).ThenBy(g => g.Key.Status)
@@ -202,14 +204,16 @@ public sealed class EvaluationService(IAppDbContext db, IDelayPredictor predicto
             .Select(l => new
             {
                 l.Id, l.CreatedAt, l.Kind, l.ProjectId, l.Model, l.PromptVersion, l.ToolsCalled, l.ContextLength, l.Outcome,
-                l.SchemaValid, l.UnverifiedNumberCount, l.UnverifiedNumbers, l.DurationMs, l.Helpful, l.ClarityRating
+                l.SchemaValid, l.UnverifiedNumberCount, l.UnverifiedNumbers, l.DurationMs, l.Helpful, l.ClarityRating,
+                l.InputTokens, l.OutputTokens, l.EvaluationRunId, l.EvaluationProvider, l.EvaluationTask
             }).ToListAsync(ct);
         return Csv.Build(Rq4AiLogHeader, logs.Select(l => (IReadOnlyList<string>)
         [
             Csv.Int(l.Id), Csv.Time(l.CreatedAt), l.Kind.ToString(), Csv.Int(l.ProjectId), l.Model ?? "", l.PromptVersion,
             l.ToolsCalled ?? "", Csv.Int(l.ContextLength), l.Outcome.ToString(), Csv.Bool(l.SchemaValid),
             Csv.Int(l.UnverifiedNumberCount), UnverifiedList(l.UnverifiedNumbers), Csv.Int(l.DurationMs), Csv.Bool(l.Helpful),
-            Csv.Int(l.ClarityRating)
+            Csv.Int(l.ClarityRating), Csv.Int(l.InputTokens), Csv.Int(l.OutputTokens), Csv.Int(l.EvaluationRunId),
+            l.EvaluationProvider ?? "", l.EvaluationTask ?? ""
         ]));
     }
 

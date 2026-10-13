@@ -1,0 +1,136 @@
+@using ProjectMind.Application.Evaluation
+@using ProjectMind.Application.MissingWork
+@implements IDisposable
+@inject AppScope Scope
+@inject IJSRuntime JS
+@inject Microsoft.Extensions.Options.IOptions<EvaluationOptions> Settings
+
+<div class="eval-subsection">
+    <div class="section-head">
+        <h3>Tohumlanmış eksik iş deneyi (@MissingWorkRecall.Version): kural-yalnız vs hibrit</h3>
+        <button class="btn btn-sm" disabled="@(_report is null)" @onclick="DownloadAsync">CSV indir</button>
+    </div>
+    <p class="muted small">
+        Demo projesinin iş listesinden bellekte @Settings.Value.RecallTemplateItems şablon işi (bir şablonun tek karşılığı) ve
+        @Settings.Value.RecallOtherItems projeye özgü iş çıkarılır (tohum @Settings.Value.RecallSeed; veritabanı değişmez, kart
+        oluşmaz). Kural katmanı deterministiktir; hibrit mod ayarlı LLM ile @Settings.Value.RecallRepeats kez çalışır (Mock modda
+        atlanır). Recall = geri bulunan / çıkarılan; precision alt sınırdır (çıkarılmamış ama yararlı LLM önerileri de yanlış sayılır).
+    </p>
+    <div class="experiment-actions">
+        @if (Running)
+        {
+            <button class="btn btn-danger" @onclick="Cancel">İptal et</button>
+            <span class="small">@_progress</span>
+        }
+        else
+        {
+            <button class="btn" @onclick="RunAsync">Deneyi çalıştır</button>
+        }
+    </div>
+    @if (_error is not null)
+    {
+        <div class="inline-error">@_error</div>
+    }
+
+    @if (_report is { } r)
+    {
+        <p class="small">
+            Çıkarılan işler: @string.Join(", ", r.Removed.Select(x => $"{x.Name} ({(x.Group == RemovedGroup.Template ? "şablon" : "özgü")})"))
+            @if (r.Note is { } note)
+            {
+                <br /><span class="muted">@note</span>
+            }
+        </p>
+        <div class="table-wrap">
+            <table class="table table-compact">
+                <thead>
+                    <tr>
+                        <th>Mod</th><th class="num">Recall (şablon)</th><th class="num">Recall (özgü)</th><th class="num">Recall (tümü)</th>
+                        <th class="num">Öneri</th><th class="num">Precision</th><th>Geri bulunan</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr class="evm-row">
+                        <td>Kural-yalnız</td>
+                        <td class="num">@Pct(r.Rule.Template.Recall)</td><td class="num">@Pct(r.Rule.Other.Recall)</td>
+                        <td class="num">@Pct(r.Rule.All.Recall)</td><td class="num">@r.Rule.Suggestions</td>
+                        <td class="num">@Pct(r.Rule.Precision)</td><td>@string.Join(", ", r.Rule.RecoveredNames)</td>
+                    </tr>
+                    @foreach (var h in r.Hybrid)
+                    {
+                        <tr>
+                            <td>Hibrit #@h.Repeat @(h.Status == LlmLayerStatus.Success ? "" : $"({h.Status})")</td>
+                            <td class="num">@Pct(h.Score.Template.Recall)</td><td class="num">@Pct(h.Score.Other.Recall)</td>
+                            <td class="num">@Pct(h.Score.All.Recall)</td><td class="num">@h.Score.Suggestions</td>
+                            <td class="num">@Pct(h.Score.Precision)</td><td>@string.Join(", ", h.Score.RecoveredNames)</td>
+                        </tr>
+                    }
+                    @if (r.SuccessfulHybrid.Count > 0)
+                    {
+                        <tr>
+                            <td><strong>Hibrit ort. ± SS</strong> (n=@r.SuccessfulHybrid.Count)</td>
+                            <td class="num">@MeanSd(r.HybridRecall(s => s.Template))</td>
+                            <td class="num">@MeanSd(r.HybridRecall(s => s.Other))</td>
+                            <td class="num">@MeanSd(r.HybridRecall(s => s.All))</td>
+                            <td></td>
+                            <td class="num">@MeanSd(r.HybridPrecision)</td>
+                            <td></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    private RecallExperimentReport? _report;
+    private string? _progress;
+    private string? _error;
+    private CancellationTokenSource? _cts;
+
+    private bool Running => _cts is not null;
+
+    private async Task RunAsync()
+    {
+        _error = null;
+        _cts = new CancellationTokenSource();
+        var token = _cts.Token;
+        var progress = new Progress<string>(m => { _progress = m; StateHasChanged(); });
+        try
+        {
+            _report = await Task.Run(() => Scope.RunAsync<MissingWorkRecallService, RecallExperimentReport>(
+                s => s.RunAsync(progress, token)), token);
+        }
+        catch (OperationCanceledException)
+        {
+            _progress = "İptal edildi.";
+        }
+        catch (BusinessRuleException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _cts?.Dispose();
+            _cts = null;
+        }
+    }
+
+    private void Cancel() => _cts?.Cancel();
+
+    private async Task DownloadAsync()
+    {
+        if (_report is null)
+            return;
+        var file = _report.ToCsv();
+        await JS.InvokeVoidAsync("pmDownload", file.FileName, file.Content);
+    }
+
+    public void Dispose() => _cts?.Cancel();
+
+    private static string Pct(decimal? v) => v is { } x ? "%" + Format.Number(Math.Round(x * 100, 1)) : "—";
+
+    private static string MeanSd(DescriptiveStats s) =>
+        s.Mean is { } m ? Pct(m) + (s.StdDev is { } sd ? " ± " + Format.Number(Math.Round(sd * 100, 1)) : "") : "—";
+}

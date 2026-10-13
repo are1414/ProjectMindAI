@@ -109,7 +109,10 @@
 - [x] Uygulama içi anket (`/evaluation/survey`): onam, anonim katılımcı kodu, 10 SUS + RQ3/RQ4 için 2'şer Likert maddesi;
   SUS puanı, ortalama ± SS, min/maks, Bangor sıfatı
 - [x] What-if çalıştırma kaydı (panel + `simulate_what_if`; RQ3) ve yorum kartında "Bu açıklama anlaşılır mıydı?" (Evet/Hayır + 1–5; RQ4)
-- [ ] RQ1–RQ4 ölçümleri (Tur 5b: erken uyarı süresi + çok tohumlu deney, tohumlanmış eksik iş deneyi), LLM sağlayıcı karşılaştırması
+- [x] Ölçüm koşucuları (Tur 5b, D31): LLM sağlayıcı karşılaştırma koşucusu (`eval-v1`, `EvaluationRun`, token kaydı, CSV),
+  RQ4 tohumlanmış eksik iş deneyi (kural-yalnız vs hibrit recall/precision), RQ1 erken uyarı süresi ve çok tohumlu deney (ort. ± SS)
+- [x] RQ1 sentetik ölçüm sonuçları (5 tohum, erken uyarı) — PROGRESS (24)
+- [ ] LLM sağlayıcı karşılaştırmasının ve RQ4 hibrit deneyinin gerçek anahtarlarla çalıştırılması (kullanıcı adımı; maliyetli)
 - [ ] 5–10 kişilik kullanıcı testi (SUS anketi) — form hazır, test oturumları yapılacak
 
 ### FAZ 10 — Rapor ve sunum
@@ -151,3 +154,6 @@ docs/                          Plan, kararlar, ilerleme
 - Yorum yüklerinde yön ifadesini C#'ın hazır cümle olarak vermesi ("120,5 saat geride"), ardından NumberGuard'ın sadeleştirilmesi (TEST_PAZAR Q3)
 - Hoffman vd. 8 maddelik açıklama memnuniyeti ölçeğinin ankete eklenmesi (TEST_PAZAR Faz 9 önerisi; bugün RQ4 için 2 Likert maddesi + kart geri bildirimi)
 - Anket formunda görev tamamlama süresi / görev başarı alanları (ANALIZ madde 7, opsiyonel)
+- RQ1 duyarlılık analizi: sentetik üretici parametrelerinin (gürültü, kapsam artışı, iyimserlik) sonuçlara etkisi (TEST_PAZAR)
+- RQ4 hibrit ek önerilerinin ilgililiğinin iki hakemle etiketlenmesi (Cohen κ); precision bugün alt sınır
+- Sentetik üreticiye haftalık kontrol noktaları (erken uyarı bugün yalnız %25/%50/%75)

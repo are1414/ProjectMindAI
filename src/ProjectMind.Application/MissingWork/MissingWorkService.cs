@@ -58,7 +58,8 @@ public sealed class MissingWorkService(
     ScheduleService schedules,
     IAppDbContext db,
     IChatModel model,
-    IOptions<MissingWorkOptions> options)
+    IOptions<MissingWorkOptions> options,
+    Evaluation.EvaluationRunContext? evaluation = null)
 {
     public const string NotConfiguredMessage =
         "AI ek önerileri için ⚙ Ayarlar'dan API anahtarı ekleyin; şu an yalnız kural (şablon) tabanlı öneriler gösteriliyor.";
@@ -91,12 +92,25 @@ public sealed class MissingWorkService(
             llm.Truncated);
     }
 
+    /// <summary>
+    /// Bellekteki bir iş listesi için hibrit kontrol (RQ4 tohumlanmış eksik iş deneyi): proje bilgisi verilen özetten, işler
+    /// verilen listeden okunur; veritabanındaki işler değişmez ve plan etkisi hesaplanmaz. LLM çağrısı yine denetim kaydına
+    /// yazılır (ölçüm bağlamındaysa koşuya etiketli).
+    /// </summary>
+    public async Task<HybridMissingWorkResult> CheckHybridForItemsAsync(ProjectOverview overview, CancellationToken ct)
+    {
+        var rule = MissingWorkDetector.Detect(overview.Project.Type, overview.WorkItems);
+        var llm = await RunLlmLayerAsync(overview, rule, null, ct);
+        return new HybridMissingWorkResult(rule, llm.Kept, llm.Status, llm.Message, llm.Dropped, llm.Unverified, null, llm.Model,
+            llm.Truncated);
+    }
+
     /// <summary>Projede en son başarılı LLM katmanı çağrısının önerdiği iş adları (kart kaynağını belirlemek için).</summary>
     public static async Task<IReadOnlyList<string>> LatestLlmSuggestionNamesAsync(IAppDbContext db, int projectId, CancellationToken ct)
     {
         var json = await db.AiAnalysisLogs.AsNoTracking()
             .Where(l => l.ProjectId == projectId && l.Kind == AiAnalysisKind.MissingWork
-                        && l.Outcome == AiAnalysisOutcome.Success && l.ResultJson != null)
+                        && l.Outcome == AiAnalysisOutcome.Success && l.ResultJson != null && l.EvaluationRunId == null)
             .OrderByDescending(l => l.Id)
             .Select(l => l.ResultJson)
             .FirstOrDefaultAsync(ct);
@@ -145,10 +159,12 @@ public sealed class MissingWorkService(
 
         var started = Stopwatch.GetTimestamp();
         LlmLayerOutcome outcome;
+        ChatUsage? usage = null;
         try
         {
             var answer = await model.CompleteJsonAsync(request, ct);
             log.Model = answer.Model;
+            usage = answer.Usage;
             var parsed = LlmMissingWorkSchema.TryParse(answer.Json, out var error);
             if (parsed is null)
             {
@@ -189,6 +205,7 @@ public sealed class MissingWorkService(
         }
 
         log.DurationMs = (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+        (evaluation ?? new Evaluation.EvaluationRunContext()).Apply(log, usage);
         db.AiAnalysisLogs.Add(log);
         await db.SaveChangesAsync(ct);
         return outcome;

@@ -65,6 +65,11 @@ public abstract class ServiceTestBase : IDisposable
 
         public Task<ProjectMind.Application.Ml.DelayExperimentReport> RunExperimentAsync(CancellationToken ct) =>
             throw new NotSupportedException();
+
+        public ProjectMind.Application.Ml.MultiSeedReport? LastMultiSeedReport => null;
+
+        public Task<ProjectMind.Application.Ml.MultiSeedReport> RunMultiSeedAsync(int seeds, IProgress<string>? progress, CancellationToken ct) =>
+            throw new NotSupportedException();
     }
 
     protected ProjectMind.Application.WhatIf.WhatIfService NewWhatIfService(DateTimeOffset? now = null) =>

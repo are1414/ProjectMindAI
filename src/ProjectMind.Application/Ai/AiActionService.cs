@@ -75,7 +75,8 @@ public sealed class AiActionService(
     PersonService people,
     WorkItemService workItems,
     DependencyService dependencies,
-    ScheduleService schedules)
+    ScheduleService schedules,
+    Evaluation.EvaluationRunContext? evaluation = null)
 {
     private const string DefaultCurrency = "TRY";
     private const decimal DefaultHoursPerDay = 8;
@@ -103,17 +104,21 @@ public sealed class AiActionService(
             ToolName = toolName,
             PayloadJson = input.GetRawText(),
             Summary = summary,
-            Source = source ?? await ResolveSourceAsync(session, toolName, input, ct)
+            Source = source ?? await ResolveSourceAsync(session, toolName, input, ct),
+            EvaluationRunId = evaluation?.RunId
         };
         db.AiActions.Add(action);
         await db.SaveChangesAsync(ct);
         return AiActionResponse.From(action);
     }
 
-    /// <summary>Tüm öneriler için kaynağa göre kabul/red sayıları ve kabul oranı (Deneyler sayfası, RQ4).</summary>
+    /// <summary>
+    /// Kullanıcı önerileri için kaynağa göre kabul/red sayıları ve kabul oranı (Deneyler sayfası, RQ4). Ölçüm koşusu kartları
+    /// (<see cref="AiAction.EvaluationRunId"/> dolu) karar kullanıcıya ait olmadığı için hariçtir (D31).
+    /// </summary>
     public async Task<IReadOnlyList<SourceAcceptance>> GetAcceptanceBySourceAsync(CancellationToken ct)
     {
-        var rows = await db.AiActions.AsNoTracking().Select(a => new { a.Source, a.Status, a.DecidedInBulk }).ToListAsync(ct);
+        var rows = await db.AiActions.AsNoTracking().Where(a => a.EvaluationRunId == null).Select(a => new { a.Source, a.Status, a.DecidedInBulk }).ToListAsync(ct);
         return SourceAcceptance.Compute(rows.Select(r => (r.Source, r.Status, r.DecidedInBulk)));
     }
 

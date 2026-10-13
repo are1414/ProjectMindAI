@@ -45,6 +45,9 @@ namespace ProjectMind.Infrastructure.Persistence.Migrations
                     b.Property<bool>("DecidedInBulk")
                         .HasColumnType("bit");
 
+                    b.Property<int?>("EvaluationRunId")
+                        .HasColumnType("int");
+
                     b.Property<string>("PayloadJson")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -82,6 +85,8 @@ namespace ProjectMind.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ChatSessionId");
 
+                    b.HasIndex("EvaluationRunId");
+
                     b.ToTable("AiActions");
                 });
 
@@ -115,12 +120,26 @@ namespace ProjectMind.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 
+                    b.Property<string>("EvaluationProvider")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int?>("EvaluationRunId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("EvaluationTask")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
                     b.Property<bool?>("Helpful")
                         .HasColumnType("bit");
 
                     b.Property<string>("InputHash")
                         .HasMaxLength(64)
                         .HasColumnType("nvarchar(64)");
+
+                    b.Property<int?>("InputTokens")
+                        .HasColumnType("int");
 
                     b.Property<string>("Kind")
                         .IsRequired()
@@ -135,6 +154,9 @@ namespace ProjectMind.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
+
+                    b.Property<int?>("OutputTokens")
+                        .HasColumnType("int");
 
                     b.Property<int?>("ProjectId")
                         .HasColumnType("int");
@@ -168,6 +190,8 @@ namespace ProjectMind.Infrastructure.Persistence.Migrations
                         .HasColumnType("datetime2");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("EvaluationRunId");
 
                     b.HasIndex("ProjectId", "Kind", "InputHash");
 
@@ -323,6 +347,61 @@ namespace ProjectMind.Infrastructure.Persistence.Migrations
                     b.HasIndex("ProjectId");
 
                     b.ToTable("ChatSessions");
+                });
+
+            modelBuilder.Entity("ProjectMind.Domain.Entities.EvaluationRun", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("FinishedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<int?>("ProjectId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Providers")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("Repeats")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("StartedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("TaskSetVersion")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("EvaluationRuns");
                 });
 
             modelBuilder.Entity("ProjectMind.Domain.Entities.Person", b =>

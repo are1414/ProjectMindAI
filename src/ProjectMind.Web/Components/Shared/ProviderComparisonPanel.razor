@@ -1,0 +1,214 @@
+@using ProjectMind.Application.Evaluation
+@implements IDisposable
+@inject AppScope Scope
+@inject IJSRuntime JS
+@inject Microsoft.Extensions.Options.IOptions<EvaluationOptions> Settings
+
+<section class="eval-section">
+    <div class="section-head">
+        <h2>LLM sağlayıcı karşılaştırması (@EvaluationTaskSet.Version)</h2>
+        <button class="btn btn-sm" disabled="@(_report is null)" @onclick="DownloadAsync">CSV indir</button>
+    </div>
+    <p class="muted small">
+        Sabit görev seti demo projesinde ("Mobile Banking Modernization"; yoksa oluşturulur) API anahtarı olan her sağlayıcıyla
+        tekrarlanır: proje yorumu, senaryo yorumu (+1 Backend / +1 Frontend), hibrit eksik iş ve salt okunur araç gerektiren
+        @EvaluationTaskSet.Tasks.Count(t => t.Kind == EvaluationTaskKind.Chat) sohbet sorusu. Hiçbir kart uygulanmaz: sohbette
+        oluşan kartlar otomatik reddedilir ve öneri kabul oranına girmez. <strong>Gerçek API çağrısı yapar ve ücretli olabilir</strong>
+        (sağlayıcı başına @EvaluationTaskSet.Tasks.Count görev × tekrar; sohbet görevleri birden çok çağrı yapabilir).
+    </p>
+
+    @if (_providers is not null)
+    {
+        <ul class="small provider-list">
+            @foreach (var p in _providers)
+            {
+                <li>
+                    @if (p.IsAvailable)
+                    {
+                        <span>✓ <strong>@p.Name</strong> · @p.ModelName</span>
+                    }
+                    else
+                    {
+                        <span class="muted">— @p.Name: @p.SkipReason</span>
+                    }
+                </li>
+            }
+        </ul>
+    }
+
+    <div class="experiment-actions">
+        <label class="small">Tekrar
+            <input type="number" min="1" max="@Settings.Value.MaxRepeats" @bind="_repeats" disabled="@Running" style="width:4.5rem" />
+        </label>
+        @if (Running)
+        {
+            <button class="btn btn-danger" @onclick="Cancel">İptal et</button>
+            <span class="small">@_progress</span>
+        }
+        else
+        {
+            <button class="btn btn-primary" disabled="@(!AnyAvailable)" @onclick="RunAsync">Karşılaştırmayı çalıştır</button>
+            @if (_progress is not null)
+            {
+                <span class="small muted">@_progress</span>
+            }
+        }
+    </div>
+
+    @if (_error is not null)
+    {
+        <div class="inline-error">@_error</div>
+    }
+
+    @if (_runs is { Count: > 0 })
+    {
+        <label class="small">Koşu
+            <select value="@_selectedRunId" @onchange="SelectRunAsync" disabled="@Running">
+                @foreach (var r in _runs)
+                {
+                    <option value="@r.Id">#@r.Id · @r.StartedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm", Tr) · @Format.Name(r.Status) · @r.Calls çağrı</option>
+                }
+            </select>
+        </label>
+    }
+    else if (_runs is not null)
+    {
+        <p class="muted">Henüz karşılaştırma koşusu yok.</p>
+    }
+
+    @if (_report is { } rep)
+    {
+        <p class="small">
+            Koşu #@rep.Run.Id · @rep.Run.Providers · @rep.Run.Repeats tekrar · @Format.Name(rep.Run.Status)
+            @if (rep.Run.Notes is { } notes)
+            {
+                <br /><span class="muted">Not: @notes</span>
+            }
+        </p>
+        <div class="table-wrap">
+            <table class="table table-compact">
+                <thead>
+                    <tr>
+                        <th>Sağlayıcı</th><th>Görev</th><th class="num">Çağrı</th><th class="num">Hata</th>
+                        <th class="num" title="Şeması geçerli / şeması denetlenen (JSON görevleri)">Şema geçerli</th>
+                        <th class="num" title="En az bir doğrulanamayan sayı içeren başarılı cevap payı">Doğrulanamayan sayılı</th>
+                        <th class="num" title="Başarılı cevap başına doğrulanamayan sayı">Sayı/cevap</th>
+                        <th class="num">Süre ort. ± SS (ms)</th>
+                        <th class="num" title="Sağlayıcının bildirdiği ortalama giriş / çıkış token'ı">Token giriş / çıkış</th>
+                        <th class="num" title="Sohbet sorularında beklenen salt okunur aracın çağrılma oranı">Beklenen araç</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in rep.Rows)
+                    {
+                        <tr class="@(r.Task == ProviderTaskStats.AllTasks ? "evm-row" : "")">
+                            <td>@r.Provider</td>
+                            <td>@(r.Task == ProviderTaskStats.AllTasks ? "Tümü" : r.Task)</td>
+                            <td class="num">@r.Calls</td>
+                            <td class="num">@Pct(r.ErrorRate)</td>
+                            <td class="num">@Pct(r.SchemaValidRate)</td>
+                            <td class="num">@Pct(r.UnverifiedShare)</td>
+                            <td class="num">@Dec(r.UnverifiedPerAnswer)</td>
+                            <td class="num">@Ms(r.DurationMs.Mean) ± @Ms(r.DurationMs.StdDev)</td>
+                            <td class="num">@Ms(r.MeanInputTokens) / @Ms(r.MeanOutputTokens)</td>
+                            <td class="num">@Pct(r.ExpectedToolRate)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <p class="muted small">
+            Token boş: sağlayıcı kullanım bildirmedi. Ham çağrılar "AI kayıtları CSV"sinde (evaluation_run_id kolonu) yer alır.
+            Sohbet cevaplarında şema denetimi yoktur (serbest metin).
+        </p>
+    }
+</section>
+
+@code {
+    private static readonly System.Globalization.CultureInfo Tr = System.Globalization.CultureInfo.GetCultureInfo("tr-TR");
+    private IReadOnlyList<EvaluationProvider>? _providers;
+    private IReadOnlyList<EvaluationRunInfo>? _runs;
+    private ProviderComparisonReport? _report;
+    private int? _selectedRunId;
+    private int _repeats;
+    private string? _progress;
+    private string? _error;
+    private CancellationTokenSource? _cts;
+
+    private bool Running => _cts is not null;
+    private bool AnyAvailable => _providers?.Any(p => p.IsAvailable) == true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _repeats = Settings.Value.Repeats;
+        _providers = await Scope.RunAsync<ProviderComparisonService, IReadOnlyList<EvaluationProvider>>(s => Task.FromResult(s.Providers()));
+        await LoadRunsAsync(null);
+    }
+
+    private async Task LoadRunsAsync(int? select)
+    {
+        _runs = await Scope.RunAsync<ProviderComparisonService, IReadOnlyList<EvaluationRunInfo>>(
+            s => s.ListRunsAsync(EvaluationRunKind.ProviderComparison, CancellationToken.None));
+        _selectedRunId = select ?? _runs.FirstOrDefault()?.Id;
+        await LoadReportAsync();
+    }
+
+    private async Task LoadReportAsync()
+    {
+        _report = _selectedRunId is { } id
+            ? await Scope.RunAsync<ProviderComparisonService, ProviderComparisonReport>(s => s.GetReportAsync(id, CancellationToken.None))
+            : null;
+    }
+
+    private async Task SelectRunAsync(ChangeEventArgs e)
+    {
+        _selectedRunId = int.TryParse(e.Value?.ToString(), out var id) ? id : null;
+        await LoadReportAsync();
+    }
+
+    private async Task RunAsync()
+    {
+        _error = null;
+        _cts = new CancellationTokenSource();
+        var token = _cts.Token;
+        var repeats = _repeats;
+        var progress = new Progress<string>(m => { _progress = m; StateHasChanged(); });
+        try
+        {
+            // Uzun koşu arka planda; sayfa etkileşimli kalır, "İptal et" token'ı iptal eder.
+            var run = await Task.Run(() => Scope.RunAsync<ProviderComparisonService, EvaluationRunInfo>(
+                s => s.RunAsync(repeats, progress, token)), token);
+            await LoadRunsAsync(run.Id);
+        }
+        catch (OperationCanceledException)
+        {
+            _progress = "İptal edildi.";
+            await LoadRunsAsync(null);
+        }
+        catch (BusinessRuleException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _cts?.Dispose();
+            _cts = null;
+        }
+    }
+
+    private void Cancel() => _cts?.Cancel();
+
+    private async Task DownloadAsync()
+    {
+        if (_selectedRunId is not { } id)
+            return;
+        var file = await Scope.RunAsync<ProviderComparisonService, CsvFile>(s => s.ExportAsync(id, CancellationToken.None));
+        await JS.InvokeVoidAsync("pmDownload", file.FileName, file.Content);
+    }
+
+    public void Dispose() => _cts?.Cancel();
+
+    private static string Pct(decimal? v) => v is { } x ? "%" + Format.Number(Math.Round(x * 100, 1)) : "—";
+    private static string Dec(decimal? v) => v is { } x ? x.ToString("0.0#", Tr) : "—";
+    private static string Ms(decimal? v) => v is { } x ? Format.Number(Math.Round(x)) : "—";
+}

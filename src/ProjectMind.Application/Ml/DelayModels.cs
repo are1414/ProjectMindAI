@@ -58,6 +58,12 @@ public sealed class MlOptions
     public double TrainShare { get; set; } = 0.7;
     public double Threshold { get; set; } = 0.5;
     public int PermutationRepeats { get; set; } = 5;
+
+    /// <summary>Çok tohumlu sağlamlık analizinde tohum sayısı (tohumlar Seed, Seed+1, …).</summary>
+    public int RobustnessSeeds { get; set; } = 5;
+
+    /// <summary>Çok tohumlu analizde izin verilen en fazla tohum (süre koruması).</summary>
+    public int MaxRobustnessSeeds { get; set; } = 30;
     public string ModelDirectory { get; set; } = "App_Data/models";
 
     /// <summary>Eğitim verisindeki geçen süre oranı aralığı; dışındaki tahminler "düşük güven" olarak işaretlenir.</summary>

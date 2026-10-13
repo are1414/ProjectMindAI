@@ -106,7 +106,7 @@
                 <button class="btn btn-sm" disabled="@(s.Rq3.Runs == 0)" @onclick="() => DownloadAsync(EvaluationExport.Rq3WhatIfRuns)">CSV indir</button>
             </div>
             <p class="small">
-                <strong>@s.Rq3.Runs</strong> çalıştırma (panel @s.Rq3.PanelRuns · AI aracı @s.Rq3.AiToolRuns) ·
+                <strong>@s.Rq3.Runs</strong> kullanıcı çalıştırması (panel @s.Rq3.PanelRuns · AI aracı @s.Rq3.AiToolRuns) ·
                 @s.Rq3.Projects proje · @s.Rq3.Scenarios senaryo
                 @if (s.Rq3.DurationMs.Mean is { } mean)
                 {
@@ -161,7 +161,11 @@
                 }
             </p>
             <LikertTable Items="@s.Survey.LikertFor(SurveyItemGroup.Rq4)" />
+            <p class="muted small">Ölçüm koşularının kartları ve yorumları (sağlayıcı karşılaştırması) bu özete ve kabul oranına girmez.</p>
+            <RecallExperimentPanel />
         </section>
+
+        <ProviderComparisonPanel />
 
         <section class="eval-section">
             <div class="section-head">

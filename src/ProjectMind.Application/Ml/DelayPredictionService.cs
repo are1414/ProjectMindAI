@@ -43,6 +43,14 @@ public interface IDelayPredictor
     Task<DelayPrediction?> PredictAsync(DelayFeatures features, EvmResult evm, CancellationToken ct);
     Task<DelayExperimentReport> RunExperimentAsync(CancellationToken ct);
     DelayExperimentReport? LastReport { get; }
+
+    /// <summary>
+    /// Deneyi <paramref name="seeds"/> farklı tohumla çalıştırır ve ortalama ± SS raporu üretir (RQ1/RQ2 sağlamlık, D31).
+    /// Üretim modeli değişmez; arka planda çalışır ve iptal edilebilir.
+    /// </summary>
+    Task<MultiSeedReport> RunMultiSeedAsync(int seeds, IProgress<string>? progress, CancellationToken ct);
+
+    MultiSeedReport? LastMultiSeedReport { get; }
 }
 
 /// <summary>
@@ -58,6 +66,41 @@ public sealed class DelayPredictionService(
 
     public DelayModelInfo? CurrentModel => _model?.Info;
     public DelayExperimentReport? LastReport { get; private set; }
+    public MultiSeedReport? LastMultiSeedReport { get; private set; }
+
+    public async Task<MultiSeedReport> RunMultiSeedAsync(int seeds, IProgress<string>? progress, CancellationToken ct)
+    {
+        var o = options.Value;
+        if (seeds < 2 || seeds > o.MaxRobustnessSeeds)
+            throw new Common.BusinessRuleException($"Tohum sayısı 2–{o.MaxRobustnessSeeds} arasında olmalı.");
+
+        var report = await Task.Run(() =>
+        {
+            var experiment = new DelayExperiment(learner);
+            var reports = new List<DelayExperimentReport>();
+            for (var i = 0; i < seeds; i++)
+            {
+                ct.ThrowIfCancellationRequested();
+                var seed = o.Seed + i;
+                progress?.Report($"Tohum {seed} ({i + 1}/{seeds}) çalışıyor…");
+                var seeded = WithSeed(o, seed);
+                reports.Add(experiment.Run(seeded, clock.GetUtcNow(), computeImportance: false, ct).Report);
+            }
+            return MultiSeedReport.Aggregate(reports, clock.GetUtcNow());
+        }, ct);
+
+        LastMultiSeedReport = report;
+        progress?.Report("Tamamlandı.");
+        return report;
+    }
+
+    /// <summary>Ayarların kopyası, yalnız tohum değişik (üretici, ayrım ve öğrenici tohumu).</summary>
+    public static MlOptions WithSeed(MlOptions o, int seed) => new()
+    {
+        Projects = o.Projects, Seed = seed, DelayTolerance = o.DelayTolerance, TrainShare = o.TrainShare, Threshold = o.Threshold,
+        PermutationRepeats = o.PermutationRepeats, ModelDirectory = o.ModelDirectory, MinElapsedRatio = o.MinElapsedRatio,
+        MaxElapsedRatio = o.MaxElapsedRatio, RobustnessSeeds = o.RobustnessSeeds, MaxRobustnessSeeds = o.MaxRobustnessSeeds
+    };
 
     public async Task<DelayPrediction?> PredictAsync(DelayFeatures features, EvmResult evm, CancellationToken ct)
     {

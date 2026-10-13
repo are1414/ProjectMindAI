@@ -34,6 +34,7 @@ public sealed class GeminiChatModel(HttpClient http, AiOptions options, ILogger<
 
         var functionDeclarations = new JsonArray(request.Tools.Select(ToDeclaration).ToArray<JsonNode?>());
         var reply = new StringBuilder();
+        ChatUsage? usage = null;
 
         for (var round = 0; round < o.MaxToolRounds; round++)
         {
@@ -47,13 +48,14 @@ public sealed class GeminiChatModel(HttpClient http, AiOptions options, ILogger<
 
             JsonNode response;
             (response, model) = await SendWithFallbackAsync(model, o, body, ct);
+            usage = ChatUsage.Add(usage, ReadUsage(response));
             var candidate = response["candidates"]?.AsArray().FirstOrDefault();
             var content = candidate?["content"];
             if (content?["parts"] is not JsonArray parts)
             {
                 var reason = candidate?["finishReason"]?.GetValue<string>() ?? response["promptFeedback"]?["blockReason"]?.GetValue<string>();
                 logger.LogWarning("Gemini boş cevap döndü: {Reason}", reason);
-                return new ChatTurnResult("Bu isteği işleyemedim. Lütfen farklı şekilde ifade edin.", model);
+                return new ChatTurnResult("Bu isteği işleyemedim. Lütfen farklı şekilde ifade edin.", model, usage);
             }
 
             contents.Add(content.DeepClone());
@@ -83,14 +85,14 @@ public sealed class GeminiChatModel(HttpClient http, AiOptions options, ILogger<
             }
 
             if (functionResponses.Count == 0)
-                return new ChatTurnResult(reply.ToString(), model);
+                return new ChatTurnResult(reply.ToString(), model, usage);
 
             contents.Add(new JsonObject { ["role"] = "user", ["parts"] = functionResponses });
         }
 
         logger.LogWarning("Araç turu sınırına ({Max}) ulaşıldı", o.MaxToolRounds);
         reply.AppendLine("(İşlem çok uzun sürdü; şu ana kadarki önerileri kontrol edin.)");
-        return new ChatTurnResult(reply.ToString(), model);
+        return new ChatTurnResult(reply.ToString(), model, usage);
     }
 
     public bool IsConfigured => true;
@@ -128,7 +130,19 @@ public sealed class GeminiChatModel(HttpClient http, AiOptions options, ILogger<
         var json = string.Concat(parts.OfType<JsonObject>()
             .Where(p => p["thought"]?.GetValue<bool>() != true && p["text"] is not null)
             .Select(p => p["text"]!.GetValue<string>()));
-        return new ChatJsonResult(json, model);
+        return new ChatJsonResult(json, model, ReadUsage(response));
+    }
+
+    /// <summary>
+    /// generateContent cevabındaki usageMetadata: giriş = promptTokenCount, çıkış = candidatesTokenCount + thoughtsTokenCount
+    /// (düşünce token'ları da çıkış olarak faturalanır). Alan yoksa null.
+    /// </summary>
+    public static ChatUsage? ReadUsage(JsonNode? response)
+    {
+        if (response?["usageMetadata"] is not JsonObject usage || usage["promptTokenCount"] is not JsonValue prompt)
+            return null;
+        static int Count(JsonNode? node) => node is JsonValue v && v.TryGetValue<int>(out var n) ? n : 0;
+        return new ChatUsage(Count(prompt), Count(usage["candidatesTokenCount"]) + Count(usage["thoughtsTokenCount"]));
     }
 
     private const string JsonMimeType = "application/json";

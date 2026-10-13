@@ -50,7 +50,7 @@ public sealed record CommentRating(bool Helpful, int? ClarityRating = null)
 /// Yorum yalnız istek üzerine üretilir; her çağrı <see cref="AiAnalysisLog"/>'a yazılır ve girdi değişmediyse son
 /// başarılı yorum yeniden gösterilir. Yorum veriyi değiştirmez.
 /// </summary>
-public sealed class ProjectCommentService(IAppDbContext db, IChatModel model)
+public sealed class ProjectCommentService(IAppDbContext db, IChatModel model, Evaluation.EvaluationRunContext? evaluation = null)
 {
     public const string InvalidAnswerMessage =
         "AI cevabı beklenen biçimde değildi; doğrulanamayan yorum gösterilmedi. Biraz sonra tekrar deneyin.";
@@ -95,7 +95,7 @@ public sealed class ProjectCommentService(IAppDbContext db, IChatModel model)
         var hash = InputHash(kind, input, model.ProviderKey);
         var log = await db.AiAnalysisLogs.AsNoTracking()
             .Where(l => l.ProjectId == projectId && l.Kind == kind && l.InputHash == hash
-                        && l.Outcome == AiAnalysisOutcome.Success && l.ResultJson != null)
+                        && l.Outcome == AiAnalysisOutcome.Success && l.ResultJson != null && l.EvaluationRunId == null)
             .OrderByDescending(l => l.Id)
             .FirstOrDefaultAsync(ct);
         if (log is null)
@@ -130,10 +130,12 @@ public sealed class ProjectCommentService(IAppDbContext db, IChatModel model)
 
         var started = Stopwatch.GetTimestamp();
         AnalysisCommentResult result;
+        ChatUsage? usage = null;
         try
         {
             var answer = await model.CompleteJsonAsync(request, ct);
             log.Model = answer.Model;
+            usage = answer.Usage;
             var comment = AnalysisCommentSchema.TryParse(answer.Json, out var error);
             if (comment is null)
             {
@@ -168,6 +170,7 @@ public sealed class ProjectCommentService(IAppDbContext db, IChatModel model)
         }
 
         log.DurationMs = (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+        (evaluation ?? NoEvaluation).Apply(log, usage);
         db.AiAnalysisLogs.Add(log);
         await db.SaveChangesAsync(ct);
         return result with
@@ -199,6 +202,8 @@ public sealed class ProjectCommentService(IAppDbContext db, IChatModel model)
     }
 
     private const int MaxErrorLength = 1000;
+
+    private static readonly Evaluation.EvaluationRunContext NoEvaluation = new();
 
     private static string? Truncate(string? text) => text is { Length: > MaxErrorLength } ? text[..MaxErrorLength] : text;
 

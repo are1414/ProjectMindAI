@@ -40,6 +40,10 @@ public static class DependencyInjection
         services.AddScoped<Demo.DemoProjectSeeder>();
         services.AddScoped<Evaluation.SurveyService>();
         services.AddScoped<Evaluation.EvaluationService>();
+        services.AddScoped<Evaluation.EvaluationRunContext>();
+        services.AddScoped<Evaluation.ProviderComparisonService>();
+        services.AddScoped<Evaluation.MissingWorkRecallService>();
+        services.AddOptions<Evaluation.EvaluationOptions>();
         services.AddOptions<Demo.DemoOptions>();
         services.AddSingleton(TimeProvider.System);
         return services;

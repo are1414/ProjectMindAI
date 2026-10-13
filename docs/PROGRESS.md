@@ -4,6 +4,71 @@ Her oturum sonunda en üste yeni kayıt eklenir. Format: yapılanlar · varsayı
 
 ---
 
+## 2026-10-10 (24) — Ekip turu 5b: ölçüm koşucuları
+
+Kapsam: `docs/team/ANALIZ.md` → "Tur 5b — ölçüm koşucuları" (ANALIZ madde 6 koşucu kısmı, madde 4 çok tohumlu kısım,
+TEST_PAZAR RQ1/RQ4 önerileri). Karar D31.
+
+- **LLM sağlayıcı karşılaştırma koşucusu** (`Evaluation/ProviderComparisonService.cs`, `EvaluationTaskSet.cs` (eval-v1),
+  `ProviderComparisonStats.cs`, `EvaluationRunContext.cs`, `IEvaluationModelCatalog` + `Infrastructure/Ai/EvaluationModelCatalog.cs`):
+  8 görev (proje yorumu, iki senaryolu yorum, hibrit eksik iş, 5 sohbet sorusu: get_project_status ×2, preview_schedule,
+  check_missing_work, simulate_what_if) demo projesinde anahtarı olan her sağlayıcıyla n kez (varsayılan 3). Her görev kendi DI
+  kapsamında gerçek servislerle; kapsamlı bağlam sağlayıcıyı seçer ve AI kayıtlarını/kartları/what-if kaydını koşuya etiketler.
+  Kartlar uygulanmaz, otomatik reddedilir; koşu sohbetleri silinir. Rapor: sağlayıcı × görev (tümü + görev başına) hata oranı,
+  şema geçerlilik, doğrulanamayan sayı payı ve cevap başına sayısı, süre ort. ± SS, token ortalamaları, beklenen araç oranı;
+  CSV. `/evaluation` sayfasında `ProviderComparisonPanel` (sağlayıcı listesi + atlananlar, tekrar sayısı, maliyet uyarısı,
+  arka planda çalışma, ilerleme, İptal, koşu seçimi).
+- **Token kullanımı**: `ChatUsage` (`ChatTurnResult`/`ChatJsonResult` isteğe bağlı alan); Gemini `usageMetadata`
+  (`GeminiChatModel.ReadUsage`), Claude `Usage`; araç turları toplanır; sohbet, yorum ve eksik iş kayıtlarına yazılır.
+- **Ölçüm verisi ayrımı**: koşu kayıtları RQ4 kabul oranından (Deneyler + Değerlendirme + öneri CSV), yorum özetinden, yorum
+  önbelleğinden, kart kaynağı için son LLM önerisi eşleşmesinden ve RQ3 özetinden hariç; AI kaydı CSV'sine 5 kolon eklendi
+  (`input_tokens, output_tokens, evaluation_run_id, evaluation_provider, evaluation_task`).
+- **RQ4 tohumlanmış eksik iş deneyi** (`MissingWorkRecall.cs`, `MissingWorkRecallService.cs`, `RecallExperimentPanel`): 4 şablon
+  işi + 4 projeye özgü iş bellekte çıkarılır (tohum 11), kural-yalnız (deterministik) ve hibrit (ayarlı model, 3 tekrar; Mock'ta
+  atlanır; `MissingWorkService.CheckHybridForItemsAsync`) recall/precision; CSV. Demo üzerinde kural-yalnız: şablon recall 1,
+  özgü recall 0 (tanım gereği), toplam 0,5.
+- **RQ1 erken uyarı** (`Ml/EarlyWarning.cs`, `DelayExperiment`): her yöntem için yakalanan geciken proje payı, ilk işaret noktası,
+  uyarı süresi (hafta), kalan süre payı, yanlış alarm payı; Deneyler sayfasında tablo ve deney CSV'sinde bölüm.
+- **Çok tohumlu analiz** (`Ml/MultiSeedExperiment.cs`, `IDelayPredictor.RunMultiSeedAsync`): N tohum (varsayılan 5), F1/AUC/doğruluk
+  ve erken uyarı ölçütlerinin ortalama ± SS; "Seçilen ML" satırı; üretim modeli değişmez; arka planda, iptal edilebilir; CSV.
+- **DB**: yeni migration `20261010204738_AddEvaluationRuns` (`EvaluationRuns` tablosu; `AiAnalysisLogs` 5, `AiActions` 1 nullable
+  kolon + indeksler). Eski migration'lar değişmedi; `has-pending-model-changes` → "No changes".
+- **Testler 313/313** (297'den +16): `MeasurementMathTests` (erken uyarı elle örnek: yakalanan 2/3, ilk işaret %37,5, uyarı 10 hafta,
+  yanlış alarm 1/2; çok tohumlu ort./SS: F1 0,6/0,7/0,8 → 0,7 ± 0,1, seçilen ML 0,6667 ± 0,152753, NaN AUC atlanır; recall/precision
+  elle örnek: kural 1/4 recall, precision 1; hibrit 3/4, precision 0,75; seçim deterministik ve tek karşılık kuralı; sağlayıcı
+  istatistikleri elle örnek; Gemini usage), `MeasurementRunnerTests` (iki sahte sağlayıcı + Mock: 51 kaydın hepsi etiketli, A'da
+  token 100/20, B'de null, B yorum şema 2/3, hata 3/24, A beklenen araç 12/15; kartlar reddedildi ve iş eklenmedi; kabul oranı ve
+  RQ3/RQ4 özetleri değişmedi; anahtarsız sağlayıcıda koşu yok; iptal → Cancelled; recall Mock ve hibrit), `MlTests` (gerçek
+  ML.NET ile 2 tohum, model kaydedilmez; tek deneyde erken uyarı), `WebSmokeTests`. `dotnet build` 0 uyarı.
+
+**Sentetik sonuçlar** (varsayılan ayarlar: 400 proje, %70/%30 proje bazlı ayrım, eşik 0,5, tolerans %10):
+- Tek tohum (42), test setinde 71 geciken / 49 zamanında proje: EVM gecikmeyi %60,6'sında yakaladı (ilk işaret ort. %41,9,
+  uyarı süresi 10,6 hafta, yanlış alarm %4,1); seçilen ML (LogisticRegression) %94,4 (ilk işaret %28,7, 10,3 hafta, yanlış alarm %53,1).
+- 5 tohum (42–46), tüm kontrol noktaları: F1 EVM 0,665 ± 0,058 vs seçilen ML 0,873 ± 0,027; AUC EVM 0,891 ± 0,027 vs seçilen ML
+  0,902 ± 0,018. %25 noktasında F1 EVM 0,607 ± 0,058 vs ML 0,844 ± 0,046. Erken uyarı: yakalanan pay EVM 0,646 ± 0,042 vs ML
+  0,971 ± 0,022; uyarı süresi EVM 11,0 ± 1,1 hafta vs ML 10,3 ± 0,5 hafta (EVM'nin yakaladıkları zaten ağır gecikmeli projeler;
+  ML daha erken noktada işaretler: ilk işaret %37,1 ± 3,2 vs %28,2 ± 0,6); yanlış alarm EVM 0,055 ± 0,026 vs ML 0,445 ± 0,056.
+  Seçilen sınıflandırıcı tohuma göre değişti (LR ×3, FastForest ×2). Yorum: ML daha çok ve daha erken yakalıyor ama 0,5 eşiğinde
+  çok yanlış alarm veriyor; AUC farkı küçük — fark büyük ölçüde eşik/kalibrasyondan geliyor. Sentetik veri döngüselliği sınırlılıktır.
+
+**Varsayımlar**: Erken uyarı yalnız üreticinin %25/%50/%75 noktalarında ölçülür (ara hafta yok; haftalık nokta Fikir Havuzu'nda).
+Uyarı süresi yalnız yakalanan projelerin ortalamasıdır (yakalama payıyla birlikte okunmalı). Recall deneyinde "şablon işi" =
+bir şablonun projedeki tek karşılığı; şablonu başka işlerce de kapsanan işler seçilmez. LLM önerisinin eşleşmesi temkinlidir
+(ad benzerliği veya şablon anahtar kelimesi); precision alt sınırdır. Gemini çıkış token'ı düşünce token'larını içerir; Claude
+önbellek token'ları ayrı tutulmaz. Koşucu demo projesinin bugünkü durumunu ve snapshot'ını günceller (durum sekmesini açmakla aynı).
+Sağlayıcı karşılaştırması seçili sağlayıcıdan bağımsız olarak anahtarı girilmiş her sağlayıcıyı çalıştırır.
+
+**Bilinen sorunlar**: Gerçek anahtarlarla koşu yapılmadı (kullanıcı adımı; maliyetli) — sağlayıcı ve hibrit recall sonuçları
+henüz yok. Arayüz SQL Server olmadan tarayıcıda etkileşimli denenmedi (derleme, DI ve sayfa smoke testi var). Koşu sırasında
+kullanıcı demo projesinin sohbetini açarsa koşunun geçici sohbet oturumu kısa süre en son oturum olarak görünebilir (koşu sonunda
+silinir). Çok tohumlu rapor ve recall raporu yalnız bellekte (Fikir Havuzu: kalıcı saklama); sağlayıcı koşusu DB'de kalıcı.
+Duyarlılık analizi ve RQ4 hakem etiketlemesi yapılmadı (Fikir Havuzu).
+
+**Sıradaki adım**: Kullanıcı Gemini ve Claude anahtarlarıyla `/evaluation`'da sağlayıcı karşılaştırmasını ve hibrit recall
+deneyini çalıştırıp CSV'leri almalı; ardından 5–10 kişilik kullanıcı testi (SUS) ve Faz 10 rapor.
+
+---
+
 ## 2026-10-10 (23) — Ekip turu 5a: değerlendirme altyapısı
 
 Kapsam: `docs/team/ANALIZ.md` → "Tur 5a — değerlendirme altyapısı" maddeleri 1–5 (ANALIZ madde 5, 7, 8; madde 6'nın koşucu

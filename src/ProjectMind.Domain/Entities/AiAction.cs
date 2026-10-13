@@ -24,5 +24,8 @@ public class AiAction : Entity
     /// <summary>Önerinin kaynağı (kural / LLM / kullanıcı). Eski kayıtlar ve henüz ayrıştırılmayan öneriler: Unknown.</summary>
     public AiActionSource Source { get; set; } = AiActionSource.Unknown;
 
+    /// <summary>Ölçüm koşusunda (sağlayıcı karşılaştırması) oluşan kart: otomatik reddedilir, RQ4 kabul oranına girmez (D31).</summary>
+    public int? EvaluationRunId { get; set; }
+
     public ChatSession? ChatSession { get; set; }
 }

@@ -53,6 +53,10 @@ public class WebSmokeTests(WebFactory factory) : IClassFixture<WebFactory>
         await using var scope = factory.Services.CreateAsyncScope();
         var evaluation = scope.ServiceProvider.GetRequiredService<ProjectMind.Application.Evaluation.EvaluationService>();
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<ProjectMind.Application.Evaluation.SurveyService>());
+        var comparison = scope.ServiceProvider.GetRequiredService<ProjectMind.Application.Evaluation.ProviderComparisonService>();
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<ProjectMind.Application.Evaluation.MissingWorkRecallService>());
+        // Anahtarsız test ortamında Mock her zaman listelenir ve atlanır.
+        Assert.Contains(comparison.Providers(), p => p.Name == "Mock" && !p.IsAvailable);
         var summary = await evaluation.GetSummaryAsync(CancellationToken.None);
         Assert.Equal(0, summary.Survey.Sus.N);
 

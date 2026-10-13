@@ -111,5 +111,26 @@ public enum AiAnalysisOutcome
 public enum WhatIfRunSource
 {
     [Display(Name = "What-if paneli")] Panel,
-    [Display(Name = "AI aracı (simulate_what_if)")] AiTool
+    [Display(Name = "AI aracı (simulate_what_if)")] AiTool,
+
+    /// <summary>Ölçüm koşusu (sağlayıcı karşılaştırması); RQ3 kullanıcı özetine girmez.</summary>
+    [Display(Name = "Ölçüm koşusu")] Evaluation
+}
+
+/// <summary>Ölçüm koşusunun türü (D31).</summary>
+public enum EvaluationRunKind
+{
+    /// <summary>LLM sağlayıcı karşılaştırması (sabit görev seti, demo projesi).</summary>
+    [Display(Name = "Sağlayıcı karşılaştırması")] ProviderComparison,
+
+    /// <summary>RQ4 tohumlanmış eksik iş deneyinin hibrit (LLM) kısmı.</summary>
+    [Display(Name = "Eksik iş bulma deneyi")] MissingWorkRecall
+}
+
+public enum EvaluationRunStatus
+{
+    [Display(Name = "Çalışıyor")] Running,
+    [Display(Name = "Tamamlandı")] Completed,
+    [Display(Name = "İptal edildi")] Cancelled,
+    [Display(Name = "Hata")] Failed
 }

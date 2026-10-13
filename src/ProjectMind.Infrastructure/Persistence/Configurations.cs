@@ -102,6 +102,7 @@ internal sealed class AiActionConfiguration : IEntityTypeConfiguration<AiAction>
         b.Property(a => a.ResultMessage).HasMaxLength(1000);
         b.Property(a => a.Status).HasConversion<string>().HasMaxLength(20);
         b.Property(a => a.Source).HasConversion<string>().HasMaxLength(20);
+        b.HasIndex(a => a.EvaluationRunId);
         // Sohbet silinince öneri kaydı silinmez (RQ4 kabul verisi); servis karara bağlanmamış önerileri ayrıca siler.
         b.HasOne(a => a.ChatSession).WithMany()
             .HasForeignKey(a => a.ChatSessionId).OnDelete(DeleteBehavior.SetNull);
@@ -122,7 +123,23 @@ internal sealed class AiAnalysisLogConfiguration : IEntityTypeConfiguration<AiAn
         b.Property(x => x.UnverifiedNumbers).HasMaxLength(2000);
         b.Property(x => x.ErrorMessage).HasMaxLength(1000);
         b.Property(x => x.InputHash).HasMaxLength(64);
+        b.Property(x => x.EvaluationProvider).HasMaxLength(100);
+        b.Property(x => x.EvaluationTask).HasMaxLength(50);
         b.HasIndex(x => new { x.ProjectId, x.Kind, x.InputHash });
+        b.HasIndex(x => x.EvaluationRunId);
+    }
+}
+
+internal sealed class EvaluationRunConfiguration : IEntityTypeConfiguration<EvaluationRun>
+{
+    public void Configure(EntityTypeBuilder<EvaluationRun> b)
+    {
+        // Kayıtlar proje silinse de kalır (ölçüm kanıtı); yabancı anahtar yok.
+        b.Property(x => x.Kind).HasConversion<string>().HasMaxLength(30);
+        b.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
+        b.Property(x => x.TaskSetVersion).HasMaxLength(30).IsRequired();
+        b.Property(x => x.Providers).HasMaxLength(500).IsRequired();
+        b.Property(x => x.Notes).HasMaxLength(2000);
     }
 }
 

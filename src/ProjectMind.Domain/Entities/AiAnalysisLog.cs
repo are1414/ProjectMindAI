@@ -46,4 +46,22 @@ public class AiAnalysisLog : Entity
     public int? ClarityRating { get; set; }
 
     public DateTime? RatedAt { get; set; }
+
+    /// <summary>
+    /// Ölçüm koşusu (<see cref="EvaluationRun"/>) kaydı mı? Doluysa satır kullanıcı kullanımı değil değerlendirme verisidir:
+    /// RQ4 kullanıcı özetlerine ve yorum önbelleğine girmez (D31).
+    /// </summary>
+    public int? EvaluationRunId { get; set; }
+
+    /// <summary>Koşudaki sağlayıcı adı (Gemini / Claude); yalnız ölçüm kayıtlarında.</summary>
+    public string? EvaluationProvider { get; set; }
+
+    /// <summary>Görev setindeki görevin kimliği (ör. "chat-status"); yalnız ölçüm kayıtlarında.</summary>
+    public string? EvaluationTask { get; set; }
+
+    /// <summary>Sağlayıcının bildirdiği giriş token sayısı (araç turlarının toplamı); bildirmezse null.</summary>
+    public int? InputTokens { get; set; }
+
+    /// <summary>Sağlayıcının bildirdiği çıkış token sayısı (Gemini'de düşünce token'ları dahil); bildirmezse null.</summary>
+    public int? OutputTokens { get; set; }
 }

@@ -24,8 +24,12 @@ public static class DependencyInjection
         services.AddHttpClient<GeminiChatModel>(c => c.Timeout = TimeSpan.FromMinutes(2));
         services.AddScoped<ClaudeChatModel>();
         services.AddScoped<NotConfiguredChatModel>();
+        services.AddScoped<Application.Evaluation.IEvaluationModelCatalog, Ai.EvaluationModelCatalog>();
         services.AddScoped<IChatModel>(sp =>
         {
+            // Ölçüm koşucusu bu kapsam için sağlayıcıyı seçtiyse o kullanılır (D31).
+            if (sp.GetRequiredService<Application.Evaluation.EvaluationRunContext>().ModelOverride is { } evaluationModel)
+                return evaluationModel;
             var ai = sp.GetRequiredService<AiOptions>();
             bool Is(string provider) => string.Equals(ai.Provider, provider, StringComparison.OrdinalIgnoreCase);
 
