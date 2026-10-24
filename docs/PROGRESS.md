@@ -4,6 +4,45 @@ Her oturum sonunda en üste yeni kayıt eklenir. Format: yapılanlar · varsayı
 
 ---
 
+## 2026-10-24 (25) — Faz 9/10 hazırlık: test protokolü, ölçüm rehberi, demo senaryosu
+
+Kapsam: Faz 9'un açık iki maddesi (kullanıcı testi, gerçek anahtarlarla ölçüm) için uygulanmaya hazır belgeler; Faz 10
+için demo videosu senaryosu (aktif faz Faz 9; Faz 10 belgesi kullanıcının açık isteğiyle hazırlandı). **Kod değişmedi.**
+
+- **`docs/evaluation/KULLANICI_TESTI.md`**: amaç (RQ3, RQ4, SUS), katılımcı profili, kurulum kontrol listesi (temiz test
+  veritabanı — ayrı `Initial Catalog` ya da drop/update; ⚙ Ayarlar'da Gemini anahtarı; her katılımcı öncesi demo sohbetinde
+  **Projeyi sil** → **Demo projesini oluştur**), moderatör metni, onam metni (uygulamadaki `ConsentText` + KVKK'ya uygun
+  sözlü ek bilgi, P01… kodları, eşleşme listesi yok), gerçek arayüz adlarıyla 5 görev (Durum okuma, sohbet sorusu, What-if
+  +1 Backend ve P80, "Eksik iş var mı?" kartlarını tek tek, "AI yorumu üret" + "Bu açıklama anlaşılır mıydı?"), hedef süre
+  ve başarı ölçütleri, gözlem formu, `/evaluation/survey` anketi, CSV dışa aktarma listesi, betimsel analiz planı (SUS
+  ort. vs 68 ve Bangor sıfatları, toplu kararlar hariç kaynağa göre kabul oranı, Likert dağılımları; n < 10'da çıkarımsal
+  iddia yok), geçerlilik tehditleri.
+- **`docs/evaluation/OLCUM_REHBERI.md`**: iki anahtarın Ayarlar'a girilmesi (son kaydedilen aktif olur), `/evaluation`'da
+  sağlayıcı karşılaştırması (eval-v1) ve recall deneyi (recall-v1, ikinci sağlayıcı için sağlayıcı değiştirme), `/experiments`'ta
+  tek ve çok tohumlu RQ1; her biri için indirilecek CSV adı, kaba süre/maliyet tahmini (tahmin olarak etiketli; maliyet
+  token kolonlarından hesaplanır), rapordaki önerilen yeri ve doldurulacak kayıt tablosu.
+- **`docs/presentation/DEMO_VIDEO_SENARYOSU.md`**: 11 sahnelik ≈ 7:45 dk senaryo (zaman, ekran, eylem, Türkçe anlatım),
+  çekim öncesi hazırlık ve kurgu notları; anlatımdaki sayılar `[…]` yer tutucusu (ekranda görülen değerle doldurulur).
+- **PLAN.md**: Faz 9 açık maddelerinin altına "[x] Kullanıcı testi protokolü hazırlandı" ve "[x] Ölçüm rehberi hazırlandı",
+  Faz 10'un altına "[x] Demo videosu senaryosu hazırlandı" alt satırları; ana maddeler (test, ölçüm, video) **işaretlenmedi**.
+  Kod Yapısı'na `docs/evaluation`, `docs/presentation` eklendi.
+- **Test**: kod değişmediği hâlde doğrulama için `dotnet build` 0 hata, `dotnet test` 313/313 yeşil.
+
+**Varsayımlar**: Görev sırası What-if → Eksik iş olarak değiştirildi (kart kabulü projeye iş ekler; her katılımcı what-if'i
+aynı planla çalıştırsın). Hedef süreler (3–5 dk/görev) tahmindir, pilot oturumla ayarlanmalı. Görev sonrası tek soru (SEQ,
+1–7) gözlem formunda kâğıt üzerinde tutulur (uygulamada alan yok; ilgili madde Fikir Havuzu'nda: anket formunda görev süresi/başarı alanları). Katılımcı ↔ kayıt eşlemesi yalnız
+oturum saatleriyle yapılabilir (kayıtlar katılımcı kodu taşımaz). Süre/maliyet notları ölçülmedi.
+
+**Bilinen sorunlar**: Belgeler arayüz kodundan hazırlandı; arayüz SQL Server ile tarayıcıda bu oturumda açılıp adım adım
+denenmedi — pilot oturumda etiketler ve süreler doğrulanmalı. Demo değerleri tarihe göre üretildiği için belgelerde sabit sayı
+yok; moderatör/çekimci değerleri o gün ekrandan not eder. Proje silinse de kart kararları, what-if ve AI kayıtları kalır;
+temiz test verisi için ayrı veritabanı önerildi.
+
+**Sıradaki adım**: Kullanıcı: (1) OLCUM_REHBERI'ne göre gerçek anahtarlarla ölçümler + CSV; (2) 1 pilot katılımcı, protokol
+düzeltmesi; (3) 5–10 katılımcıyla test, CSV'ler; (4) Faz 10 rapor bölümleri ve demo videosu çekimi.
+
+---
+
 ## 2026-10-10 (24) — Ekip turu 5b: ölçüm koşucuları
 
 Kapsam: `docs/team/ANALIZ.md` → "Tur 5b — ölçüm koşucuları" (ANALIZ madde 6 koşucu kısmı, madde 4 çok tohumlu kısım,

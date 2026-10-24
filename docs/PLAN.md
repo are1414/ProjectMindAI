@@ -113,10 +113,13 @@
   RQ4 tohumlanmış eksik iş deneyi (kural-yalnız vs hibrit recall/precision), RQ1 erken uyarı süresi ve çok tohumlu deney (ort. ± SS)
 - [x] RQ1 sentetik ölçüm sonuçları (5 tohum, erken uyarı) — PROGRESS (24)
 - [ ] LLM sağlayıcı karşılaştırmasının ve RQ4 hibrit deneyinin gerçek anahtarlarla çalıştırılması (kullanıcı adımı; maliyetli)
+  - [x] Ölçüm rehberi hazırlandı (`docs/evaluation/OLCUM_REHBERI.md`: eval-v1, recall-v1, çok tohumlu RQ1; CSV ve rapordaki yeri)
 - [ ] 5–10 kişilik kullanıcı testi (SUS anketi) — form hazır, test oturumları yapılacak
+  - [x] Kullanıcı testi protokolü hazırlandı (`docs/evaluation/KULLANICI_TESTI.md`: kurulum, onam, 5 görev, gözlem formu, analiz planı)
 
 ### FAZ 10 — Rapor ve sunum
 - [ ] Rapor bölümleri, sunum, demo videosu
+  - [x] Demo videosu senaryosu hazırlandı (`docs/presentation/DEMO_VIDEO_SENARYOSU.md`; video çekilmedi)
 
 ## Kod Yapısı
 
@@ -129,6 +132,8 @@ src/
 tests/
   ProjectMind.Tests/           Birim + entegrasyon (servis ve form) testleri
 docs/                          Plan, kararlar, ilerleme
+  evaluation/                  Kullanıcı testi protokolü, ölçüm rehberi
+  presentation/                Sunum ve demo videosu senaryosu
 ```
 
 ## Fikir Havuzu (uygulanmadı — sadece not)
