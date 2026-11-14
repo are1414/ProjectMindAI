@@ -9,6 +9,9 @@ public class LocalSettingsTests : IDisposable
 {
     private readonly string _root = Directory.CreateTempSubdirectory("pm-local-").FullName;
 
+    // Web SDK gerçek appsettings.Local.json dosyasını test bin klasörüne de kopyalar; testler onu okumasın diye boş bir bin klasörü verilir.
+    private string Bin => Path.Combine(_root, "bin");
+
     private string LocalFile => Path.Combine(_root, LocalSettings.FileName);
 
     [Fact]
@@ -17,10 +20,10 @@ public class LocalSettingsTests : IDisposable
         File.WriteAllText(LocalFile, """{ "AI": { "Provider": "Gemini", "Gemini": { "ApiKey": "AIzaTEST1234" } } }""");
         var config = new ConfigurationManager();
 
-        LocalSettings.Register(config, _root);
+        LocalSettings.Register(config, _root, Bin);
 
         Assert.Equal("AIzaTEST1234", config["AI:Gemini:ApiKey"]);
-        Assert.Contains("Okundu", LocalSettings.Inspect(_root));
+        Assert.Contains("Okundu", LocalSettings.Inspect(_root, Bin));
     }
 
     [Fact]
@@ -37,7 +40,7 @@ public class LocalSettingsTests : IDisposable
         Assert.Equal("x-model", json["AI"]!["Gemini"]!["Model"]!.GetValue<string>());
 
         var config = new ConfigurationManager();
-        LocalSettings.Register(config, _root);
+        LocalSettings.Register(config, _root, Bin);
         Assert.Equal("AIzaNEWKEY", config["AI:Gemini:ApiKey"]);
     }
 
@@ -52,10 +55,10 @@ public class LocalSettingsTests : IDisposable
     [Fact]
     public void Reports_hidden_txt_extension_and_missing_file()
     {
-        Assert.Contains("bulunamadı", LocalSettings.Inspect(_root));
+        Assert.Contains("bulunamadı", LocalSettings.Inspect(_root, Bin));
 
         File.WriteAllText(LocalFile + ".txt", "{}");
-        Assert.Contains(".txt silinmeli", LocalSettings.Inspect(_root));
+        Assert.Contains(".txt silinmeli", LocalSettings.Inspect(_root, Bin));
     }
 
     [Fact]
@@ -63,8 +66,8 @@ public class LocalSettingsTests : IDisposable
     {
         File.WriteAllText(LocalFile, """{ "AI": { "Gemini": { "ApiKey": "x" }  """);
 
-        LocalSettings.Register(new ConfigurationManager(), _root);
-        Assert.Contains("JSON hatası", LocalSettings.Inspect(_root));
+        LocalSettings.Register(new ConfigurationManager(), _root, Bin);
+        Assert.Contains("JSON hatası", LocalSettings.Inspect(_root, Bin));
     }
 
     [Fact]

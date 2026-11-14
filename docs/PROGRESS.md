@@ -4,6 +4,32 @@ Her oturum sonunda en üste yeni kayıt eklenir. Format: yapılanlar · varsayı
 
 ---
 
+## 2026-11-14 (26) — Build onarımı: Pkcs güvenlik açığı + LocalSettings test izolasyonu
+
+Kapsam: Faz dışı bakım; kod değişmeden kırılan build'in onarımı. Yeni özellik yok.
+
+- **Sorun 1 — `dotnet build` başarısız (NU1902/NU1903)**: NuGet'te yeni yayımlanan iki bildirim (GHSA-846f-f764-76mx yüksek,
+  GHSA-2fmv-rv2c-59x7 orta; .NET DoS) `System.Security.Cryptography.Pkcs` ≤ 9.0.20 ve 10.0.0–10.0.12'yi kapsıyor. Zincir:
+  `Microsoft.EntityFrameworkCore.SqlServer 10.0.12 → Microsoft.Data.SqlClient 6.1.6 → Pkcs 9.0.11`. `TreatWarningsAsErrors`
+  audit uyarılarını hataya çeviriyor.
+- **Çözüm**: `ProjectMind.Infrastructure.csproj`'a `System.Security.Cryptography.Pkcs 10.0.15` doğrudan referansı (geçişli
+  bağımlılık sabitlemesi; Web ve Tests en yakın sürüm kuralıyla bunu alır). **Neden yeni paket**: paket zaten geçişli olarak
+  vardı, yalnız sürümü yükseltildi. Alternatif EF Core/SqlClient yükseltmesi daha geniş bir değişiklik; uyarıyı susturmak
+  (`NoWarn`/`NuGetAudit=false`) açığı gizler. `dotnet list package --vulnerable --include-transitive`: 5 projede de açık yok.
+- **Sorun 2 — 3 `LocalSettingsTests` testi kırmızı** (yalnız Ayarlar'dan anahtar kaydedilmiş makinede): Web SDK
+  `appsettings.Local.json`'u bin klasörüne kopyalıyor, Tests projesi Web'e referans verdiği için dosya test bin'ine de
+  geliyor; `LocalSettings` adaylarındaki `AppContext.BaseDirectory` bu gerçek dosyayı okuyordu.
+- **Çözüm**: `LocalSettings.Register/Inspect`'e isteğe bağlı `binDirectory` parametresi (verilmezse `AppContext.BaseDirectory`;
+  `Program.cs` değişmedi). Testler geçici klasördeki boş bir `bin` yolunu verir.
+- **Test**: `dotnet build` 0 uyarı/0 hata, `dotnet test` 313/313 yeşil.
+
+**Bilinen sorunlar**: Kişisel `appsettings.Local.json` (gerçek anahtar) hâlâ `tests/ProjectMind.Tests/bin/` altına kopyalanıyor
+(git dışı, yalnız yerel). SqlClient yamalı Pkcs'i getiren sürüme geçildiğinde sabitleme kaldırılabilir.
+
+**Sıradaki adım**: Faz 9 açık maddeleri (kullanıcı testi, gerçek anahtarlarla ölçüm).
+
+---
+
 ## 2026-10-24 (25) — Faz 9/10 hazırlık: test protokolü, ölçüm rehberi, demo senaryosu
 
 Kapsam: Faz 9'un açık iki maddesi (kullanıcı testi, gerçek anahtarlarla ölçüm) için uygulanmaya hazır belgeler; Faz 10

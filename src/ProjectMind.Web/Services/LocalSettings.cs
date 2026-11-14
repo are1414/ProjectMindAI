@@ -17,19 +17,21 @@ public static class LocalSettings
 
     public static string PrimaryPath(string contentRoot) => Path.Combine(contentRoot, FileName);
 
-    private static IEnumerable<string> Candidates(string contentRoot) => new[]
+    /// <param name="binDirectory">Bin klasörü; verilmezse <see cref="AppContext.BaseDirectory"/>. Testler kendi
+    /// klasörünü verir, çünkü Web SDK gerçek dosyayı test projesinin bin klasörüne de kopyalar.</param>
+    private static IEnumerable<string> Candidates(string contentRoot, string? binDirectory) => new[]
         {
             PrimaryPath(contentRoot),                                              // src/ProjectMind.Web
             Path.GetFullPath(Path.Combine(contentRoot, "..", "..", FileName)),     // çözüm (repo) kökü
-            Path.Combine(AppContext.BaseDirectory, FileName)                       // bin klasörü
+            Path.Combine(binDirectory ?? AppContext.BaseDirectory, FileName)       // bin klasörü
         }
         .Distinct(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Ayar dosyalarını yapılandırmaya ekler. Proje klasöründeki dosya yoksa da izlenir (sonradan oluşturulabilir).</summary>
-    public static void Register(ConfigurationManager configuration, string contentRoot)
+    public static void Register(ConfigurationManager configuration, string contentRoot, string? binDirectory = null)
     {
         var primary = PrimaryPath(contentRoot);
-        foreach (var path in Candidates(contentRoot))
+        foreach (var path in Candidates(contentRoot, binDirectory))
         {
             var exists = File.Exists(path);
             if ((exists && IsValidJson(path, out _)) || (!exists && path == primary))
@@ -38,10 +40,10 @@ public static class LocalSettings
     }
 
     /// <summary>Hangi dosyanın bulunduğunu/okunduğunu anlatan teşhis metni.</summary>
-    public static string Inspect(string contentRoot)
+    public static string Inspect(string contentRoot, string? binDirectory = null)
     {
         var notes = new List<string>();
-        foreach (var path in Candidates(contentRoot))
+        foreach (var path in Candidates(contentRoot, binDirectory))
         {
             if (File.Exists(path))
                 notes.Add(IsValidJson(path, out var error) ? $"Okundu: {path}" : $"'{path}' okunamadı, JSON hatası: {error}");
