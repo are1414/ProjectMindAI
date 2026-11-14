@@ -21,14 +21,32 @@ public sealed record AddPersonPayload(string Name, List<Skill> Skills, decimal W
 public sealed record UpdatePersonPayload(
     int PersonId, string? Name = null, List<Skill>? Skills = null, decimal? WeeklyCapacityHours = null, decimal? HourlyCost = null);
 
+/// <param name="AssigneeNames">Atanan kişiler (birlikte çalışırlar, D32).</param>
+/// <param name="AssigneeName">Eski tek kişilik alan (araç şemasında yok); D32'den önce oluşmuş bekleyen kartlar için okunur.</param>
 public sealed record AddWorkItemPayload(
     string Name, WorkPhase Phase, Skill RequiredSkill, decimal EstimatedHours, string? Description = null,
-    Priority? Priority = null, string? AssigneeName = null, string? ParentName = null);
+    Priority? Priority = null, List<string>? AssigneeNames = null, string? ParentName = null, string? AssigneeName = null);
 
+/// <param name="AssigneeNames">Atananların tam listesi (mevcut atamanın yerine geçer; boş liste = atama kaldırılır, D32).</param>
+/// <param name="AssigneeName">Eski tek kişilik alan (araç şemasında yok); D32'den önce oluşmuş bekleyen kartlar için okunur.</param>
 public sealed record UpdateWorkItemPayload(
     int WorkItemId, string? Name = null, string? Description = null, WorkPhase? Phase = null, Skill? RequiredSkill = null, Priority? Priority = null,
-    decimal? EstimatedHours = null, string? AssigneeName = null, WorkItemStatus? Status = null, int? PercentComplete = null,
-    decimal? ActualHours = null, DateOnly? PlannedStart = null, DateOnly? PlannedEnd = null, string? ParentName = null);
+    decimal? EstimatedHours = null, List<string>? AssigneeNames = null, WorkItemStatus? Status = null, int? PercentComplete = null,
+    decimal? ActualHours = null, DateOnly? PlannedStart = null, DateOnly? PlannedEnd = null, string? ParentName = null,
+    string? AssigneeName = null);
+
+public static class AssigneeRequest
+{
+    /// <summary>
+    /// İstenen atananlar: assigneeNames (kırpılmış, boşlar ve tekrarlar atılmış) ya da eski kartın assigneeName alanı
+    /// (boş = atamayı kaldır). İkisi de yoksa null (atama değişmez).
+    /// </summary>
+    public static List<string>? Names(List<string>? names, string? legacyName) =>
+        names is not null
+            ? names.Where(n => !string.IsNullOrWhiteSpace(n)).Select(n => n.Trim()).Distinct().ToList()
+            : legacyName is null ? null
+            : string.IsNullOrWhiteSpace(legacyName) ? [] : [legacyName.Trim()];
+}
 
 public sealed record RemoveWorkItemPayload(int WorkItemId);
 

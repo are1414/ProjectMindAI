@@ -41,9 +41,9 @@ public sealed class PersonService(IAppDbContext db)
     public async Task DeleteAsync(int projectId, int id, CancellationToken ct)
     {
         var person = await FindAsync(projectId, id, ct);
-        // Kişi silinince atandığı işler boşa çıkar (iş silinmez).
-        await db.WorkItems.Where(w => w.AssigneeId == id)
-            .ExecuteUpdateAsync(s => s.SetProperty(w => w.AssigneeId, (int?)null), ct);
+        // Kişi silinince yalnız onun atamaları düşer (iş silinmez; işin diğer atananları kalır). Atama kişiye NO ACTION ile
+        // bağlı (D32); bellekte izlenen atamalar da silinsin diye toplu silme yerine kayıtlar üzerinden silinir.
+        db.WorkItemAssignments.RemoveRange(await db.WorkItemAssignments.Where(a => a.PersonId == id).ToListAsync(ct));
         db.People.Remove(person);
         await db.SaveChangesAsync(ct);
     }

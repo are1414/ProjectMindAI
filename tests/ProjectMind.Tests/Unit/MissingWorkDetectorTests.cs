@@ -10,7 +10,7 @@ public class MissingWorkDetectorTests
 
     private static WorkItemResponse Item(string name, string? description = null) => new(
         ++_nextId, 1, name, description, WorkPhase.Development, Skill.Backend, Priority.Medium, 8,
-        null, null, null, null, WorkItemStatus.NotStarted, 0, 0);
+        [], null, null, null, WorkItemStatus.NotStarted, 0, 0);
 
     /// <summary>Gerçekçi ve eksiksiz bir web projesi planı (kullanıcının yazabileceği doğal adlarla).</summary>
     private static List<WorkItemResponse> CompleteWebPlan() =>

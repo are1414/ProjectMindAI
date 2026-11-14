@@ -24,8 +24,9 @@ public sealed class WorkItemRequest
     [Display(Name = "Tahmini efor (saat)"), Range(0.5, 10000)]
     public decimal EstimatedHours { get; set; } = 8;
 
-    [Display(Name = "Atanan kişi")]
-    public int? AssigneeId { get; set; }
+    /// <summary>Atanan kişiler; birden çok kişi işi birlikte yapar (D32). Boşsa otomatik plan bir kişi seçer.</summary>
+    [Display(Name = "Atanan kişiler")]
+    public List<int> AssigneeIds { get; set; } = [];
 
     [Display(Name = "Üst iş")]
     public int? ParentId { get; set; }
@@ -48,7 +49,7 @@ public sealed class WorkItemRequest
     public static WorkItemRequest From(WorkItemResponse w) => new()
     {
         Name = w.Name, Description = w.Description, Phase = w.Phase, RequiredSkill = w.RequiredSkill,
-        Priority = w.Priority, EstimatedHours = w.EstimatedHours, AssigneeId = w.AssigneeId, ParentId = w.ParentId,
+        Priority = w.Priority, EstimatedHours = w.EstimatedHours, AssigneeIds = [.. w.AssigneeIds], ParentId = w.ParentId,
         PlannedStart = w.PlannedStart, PlannedEnd = w.PlannedEnd, Status = w.Status,
         PercentComplete = w.PercentComplete, ActualHours = w.ActualHours
     };
@@ -63,7 +64,7 @@ public sealed record WorkItemResponse(
     Skill RequiredSkill,
     Priority Priority,
     decimal EstimatedHours,
-    int? AssigneeId,
+    IReadOnlyList<int> AssigneeIds,
     int? ParentId,
     DateOnly? PlannedStart,
     DateOnly? PlannedEnd,
@@ -73,5 +74,5 @@ public sealed record WorkItemResponse(
 {
     public static WorkItemResponse From(WorkItem w) => new(
         w.Id, w.ProjectId, w.Name, w.Description, w.Phase, w.RequiredSkill, w.Priority, w.EstimatedHours,
-        w.AssigneeId, w.ParentId, w.PlannedStart, w.PlannedEnd, w.Status, w.PercentComplete, w.ActualHours);
+        w.Assignments.Select(a => a.PersonId).Order().ToList(), w.ParentId, w.PlannedStart, w.PlannedEnd, w.Status, w.PercentComplete, w.ActualHours);
 }

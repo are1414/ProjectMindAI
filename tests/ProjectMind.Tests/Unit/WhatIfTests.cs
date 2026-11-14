@@ -11,7 +11,7 @@ public class WhatIfTests
     private static readonly DateOnly Monday = new(2026, 11, 2);
 
     private static PlanActivity Task(int id, decimal hours, params int[] predecessors) =>
-        new(id, $"İş {id}", hours, Skill.Backend, Priority.Medium, null, predecessors);
+        new(id, $"İş {id}", hours, Skill.Backend, Priority.Medium, [], predecessors);
 
     /// <summary>İki bağımsız 80 saatlik backend işi, tek backendci (8 s/gün).</summary>
     private static PlanInput TwoTasksOnePerson() =>
@@ -103,12 +103,29 @@ public class WhatIfTests
     }
 
     [Fact]
+    public void Removing_a_person_keeps_the_rest_of_the_team()
+    {
+        var input = TwoTasksOnePerson() with
+        {
+            People = [new PlanResource(1, "Ayşe", Skill.Backend, 40, 100), new PlanResource(2, "Ali", Skill.Backend, 40, 100)],
+            Activities = [Task(1, 80) with { FixedAssigneeIds = [1, 2] }, Task(2, 80) with { FixedAssigneeIds = [2] }]
+        };
+
+        var applied = ScenarioApplier.Apply(input, NoParents, Monday,
+            [new ScenarioChange(ScenarioChangeKind.RemovePerson, PersonId: 2)], new WhatIfOptions());
+
+        Assert.Equal([1], applied.Input.Activities[0].FixedAssigneeIds);
+        Assert.Empty(applied.Input.Activities[1].FixedAssigneeIds);   // tek atananı çıkarılan iş otomatik atanır
+        Assert.All(ResourceScheduler.Schedule(applied.Input).Activities, a => Assert.Equal([1], a.AssigneeIds));
+    }
+
+    [Fact]
     public void Remove_person_and_capacity_change_and_deadline()
     {
         var input = TwoTasksOnePerson() with
         {
             People = [new PlanResource(1, "Ayşe", Skill.Backend, 40, 100), new PlanResource(2, "Ali", Skill.Backend, 40, 100)],
-            Activities = [Task(1, 80) with { FixedAssigneeId = 2 }, Task(2, 80)]
+            Activities = [Task(1, 80) with { FixedAssigneeIds = [2] }, Task(2, 80)]
         };
 
         var applied = ScenarioApplier.Apply(input, NoParents, Monday,
@@ -119,7 +136,7 @@ public class WhatIfTests
         ], new WhatIfOptions());
 
         Assert.Single(applied.Input.People);
-        Assert.Null(applied.Input.Activities[0].FixedAssigneeId);   // Ali'nin işi yeniden dağıtılır
+        Assert.Empty(applied.Input.Activities[0].FixedAssigneeIds);   // Ali'nin işi yeniden dağıtılır
         Assert.Equal(new DateOnly(2027, 1, 29), applied.TargetDate);
         Assert.Equal(40, ResourceScheduler.Schedule(applied.Input).DurationWorkdays);   // 160 saat / 4 s/gün
         Assert.Equal(3, applied.Notes.Count);

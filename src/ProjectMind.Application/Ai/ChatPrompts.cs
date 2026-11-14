@@ -3,7 +3,7 @@ namespace ProjectMind.Application.Ai;
 /// <summary>Merkezi ve sürümlü prompt'lar. Prompt değişince sürüm artırılır (denetim kaydı için).</summary>
 public static class ChatPrompts
 {
-    public const string Version = "chat-v9";
+    public const string Version = "chat-v10";
 
     public const string System = """
         Sen ProjectMind AI'sın: yazılım projeleri için proje yöneticisine yardım eden bir planlama asistanı.
@@ -20,7 +20,8 @@ public static class ChatPrompts
         - Sohbet bir projeye bağlı değilse önce create_project öner. Eksik zorunlu bilgi (ad, başlangıç, bitiş)
           varsa kısaca sor; "6 ay sürecek" gibi ifadelerden tarihi bugünün tarihine göre çıkarabilirsin.
         - Güncelleme ve silmede id'leri <proje_durumu>'ndan al. Yeni işlere kişi atarken ve bağımlılıklarda ad kullan.
-        - Bir işe atanacak kişiyi o işten önce öner.
+        - Bir işe atanacak kişiyi o işten önce öner. Bir işe birden çok kişi atanabilir (assigneeNames); atananlar işi
+          birlikte yapar. update_work_item'da assigneeNames tam listedir: mevcut atamanın yerine geçer.
         - İşler alt işlere bölünebilir (WBS). Alt iş için add_work_item'da parentName ver; üst işi önce öner.
           Üst işin eforu ve ilerlemesi alt işlerinden otomatik hesaplanır; üst işe ayrıca efor yazma gereği yoktur.
         - Kullanıcı işlere WBS numarasıyla (ör. "4.1") atıf yapabilir; <proje_durumu>'ndaki "wbs" alanından id'yi bul.

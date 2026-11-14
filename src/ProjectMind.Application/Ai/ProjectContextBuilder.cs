@@ -56,7 +56,7 @@ public sealed class ProjectContextBuilder(IAppDbContext db, ProjectOverviewServi
                     requiredSkill = w.RequiredSkill.ToString(),
                     priority = w.Priority.ToString(),
                     w.EstimatedHours,
-                    assignee = w.AssigneeId is null ? null : o.PersonName(w.AssigneeId),
+                    assignees = w.AssigneeIds.Count == 0 ? null : w.AssigneeIds.Select(id => o.PersonName(id)).ToList(),
                     status = w.Status.ToString(),
                     w.PercentComplete,
                     w.ActualHours

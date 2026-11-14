@@ -43,6 +43,7 @@ public static class AiTools
 
     private static object Str(string description) => new { type = "string", description };
     private static object Num(string description) => new { type = "number", description };
+    private static object StrList(string description) => new { type = "array", items = new { type = "string" }, description };
     private static object Int(string description) => new { type = "integer", description };
     private static object Date(string description) => new { type = "string", description = description + " (YYYY-MM-DD)" };
     private static object Enum<T>(string description) where T : struct, System.Enum =>
@@ -114,7 +115,8 @@ public static class AiTools
                 requiredSkill = Enum<Skill>("İşi yapmak için gereken tek beceri"),
                 priority = Enum<Priority>("Öncelik"),
                 estimatedHours = Num("Tahmini efor (saat)"),
-                assigneeName = Str("Atanacak kişinin adı (projede kayıtlı ya da aynı turda önerilmiş olmalı)"),
+                assigneeNames = StrList("Atanacak kişilerin adları (projede kayıtlı ya da aynı turda önerilmiş olmalı). " +
+                                        "Birden çok kişi işi birlikte yapar"),
                 parentName = Str("Alt iş ise üst işin adı (projede kayıtlı ya da bu turda daha önce önerilmiş olmalı)")
             }, "name", "phase", "requiredSkill", "estimatedHours")),
 
@@ -129,7 +131,8 @@ public static class AiTools
                 requiredSkill = Enum<Skill>("Gereken beceri"),
                 priority = Enum<Priority>("Öncelik"),
                 estimatedHours = Num("Tahmini efor (saat)"),
-                assigneeName = Str("Atanacak kişinin adı"),
+                assigneeNames = StrList("Atanan kişilerin TAM listesi; mevcut atamanın yerine geçer. Kişi eklerken mevcut " +
+                                        "atananları da yaz; atamayı kaldırmak için boş liste"),
                 status = Enum<WorkItemStatus>("Durum"),
                 percentComplete = Int("Tamamlanma yüzdesi 0-100"),
                 actualHours = Num("Şimdiye kadar harcanan saat"),

@@ -46,7 +46,7 @@ public class ServiceTests : ServiceTestBase
         // Kişi silinince işler kalır, atama boşalır
         await _people.DeleteAsync(project.Id, person.Id, _ct);
         Db.ChangeTracker.Clear();
-        Assert.All(await _workItems.ListAsync(project.Id, _ct), w => Assert.Null(w.AssigneeId));
+        Assert.All(await _workItems.ListAsync(project.Id, _ct), w => Assert.Empty(w.AssigneeIds));
 
         // İş silinince bağımlılıkları da silinir
         await _workItems.DeleteAsync(project.Id, db.Id, _ct);
@@ -149,8 +149,47 @@ public class ServiceTests : ServiceTestBase
         return request;
     }
 
+    [Fact]
+    public async Task Work_item_can_have_several_assignees()
+    {
+        var project = await _projects.CreateAsync(NewProject(), _ct);
+        var ali = await _people.CreateAsync(project.Id, new PersonRequest { Name = "Ali", Skills = [Skill.Backend], WeeklyCapacityHours = 40 }, _ct);
+        var ayse = await _people.CreateAsync(project.Id, new PersonRequest { Name = "Ayşe", Skills = [Skill.Backend], WeeklyCapacityHours = 40 }, _ct);
+
+        var request = WorkItem("API", Skill.Backend, null);
+        request.AssigneeIds = [ayse.Id, ali.Id, ayse.Id];
+        var api = await _workItems.CreateAsync(project.Id, request, _ct);
+        Assert.Equal([ali.Id, ayse.Id], api.AssigneeIds);   // tekrarlar atılır, id sırası
+
+        // Başka projenin kişisi atanamaz.
+        var other = await _projects.CreateAsync(NewProject(), _ct);
+        var stranger = await _people.CreateAsync(other.Id, new PersonRequest { Name = "Can", Skills = [Skill.Backend], WeeklyCapacityHours = 40 }, _ct);
+        var update = WorkItemRequest.From(api);
+        update.AssigneeIds = [ali.Id, stranger.Id];
+        var error = await Assert.ThrowsAsync<BusinessRuleException>(() => _workItems.UpdateAsync(project.Id, api.Id, update, _ct));
+        Assert.Equal("Atanan kişi bu projeye ait değil.", error.Message);
+
+        // Kişi silinince yalnız onun ataması düşer.
+        await _people.DeleteAsync(project.Id, ali.Id, _ct);
+        Db.ChangeTracker.Clear();
+        Assert.Equal([ayse.Id], (await _workItems.GetAsync(project.Id, api.Id, _ct)).AssigneeIds);
+
+        // Atama listesi güncellemede tamamen değişir; boş liste atamayı kaldırır.
+        update = WorkItemRequest.From(await _workItems.GetAsync(project.Id, api.Id, _ct));
+        update.AssigneeIds = [];
+        Assert.Empty((await _workItems.UpdateAsync(project.Id, api.Id, update, _ct)).AssigneeIds);
+        Assert.Empty(Db.WorkItemAssignments);
+
+        // Atamalı proje silinebilir.
+        update.AssigneeIds = [ayse.Id];
+        await _workItems.UpdateAsync(project.Id, api.Id, update, _ct);
+        await _projects.DeleteAsync(project.Id, _ct);
+        Assert.Empty(Db.WorkItemAssignments);
+        Assert.DoesNotContain(Db.People, p => p.ProjectId == project.Id);
+    }
+
     private static WorkItemRequest WorkItem(string name, Skill skill, int? assigneeId) => new()
     {
-        Name = name, RequiredSkill = skill, EstimatedHours = 16, AssigneeId = assigneeId
+        Name = name, RequiredSkill = skill, EstimatedHours = 16, AssigneeIds = assigneeId is { } id ? [id] : []
     };
 }

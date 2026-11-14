@@ -762,9 +762,6 @@ namespace ProjectMind.Infrastructure.Persistence.Migrations
                         .HasPrecision(8, 2)
                         .HasColumnType("decimal(8,2)");
 
-                    b.Property<int?>("AssigneeId")
-                        .HasColumnType("int");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
@@ -819,13 +816,26 @@ namespace ProjectMind.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AssigneeId");
-
                     b.HasIndex("ParentId");
 
                     b.HasIndex("ProjectId");
 
                     b.ToTable("WorkItems");
+                });
+
+            modelBuilder.Entity("ProjectMind.Domain.Entities.WorkItemAssignment", b =>
+                {
+                    b.Property<int>("WorkItemId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("PersonId")
+                        .HasColumnType("int");
+
+                    b.HasKey("WorkItemId", "PersonId");
+
+                    b.HasIndex("PersonId");
+
+                    b.ToTable("WorkItemAssignments");
                 });
 
             modelBuilder.Entity("ProjectMind.Domain.Entities.WorkItemDependency", b =>
@@ -957,11 +967,6 @@ namespace ProjectMind.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("ProjectMind.Domain.Entities.WorkItem", b =>
                 {
-                    b.HasOne("ProjectMind.Domain.Entities.Person", "Assignee")
-                        .WithMany()
-                        .HasForeignKey("AssigneeId")
-                        .OnDelete(DeleteBehavior.NoAction);
-
                     b.HasOne("ProjectMind.Domain.Entities.WorkItem", "Parent")
                         .WithMany()
                         .HasForeignKey("ParentId")
@@ -973,11 +978,28 @@ namespace ProjectMind.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("Assignee");
-
                     b.Navigation("Parent");
 
                     b.Navigation("Project");
+                });
+
+            modelBuilder.Entity("ProjectMind.Domain.Entities.WorkItemAssignment", b =>
+                {
+                    b.HasOne("ProjectMind.Domain.Entities.Person", "Person")
+                        .WithMany()
+                        .HasForeignKey("PersonId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("ProjectMind.Domain.Entities.WorkItem", "WorkItem")
+                        .WithMany("Assignments")
+                        .HasForeignKey("WorkItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Person");
+
+                    b.Navigation("WorkItem");
                 });
 
             modelBuilder.Entity("ProjectMind.Domain.Entities.WorkItemDependency", b =>
@@ -1025,6 +1047,11 @@ namespace ProjectMind.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("ProjectMind.Domain.Entities.SurveyResponse", b =>
                 {
                     b.Navigation("Answers");
+                });
+
+            modelBuilder.Entity("ProjectMind.Domain.Entities.WorkItem", b =>
+                {
+                    b.Navigation("Assignments");
                 });
 #pragma warning restore 612, 618
         }

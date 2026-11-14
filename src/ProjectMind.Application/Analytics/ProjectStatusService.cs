@@ -68,7 +68,7 @@ public sealed class ProjectStatusService(
         }
 
         var remaining = preview.Plan.TotalHours;
-        var unassigned = preview.Plan.Activities.Where(a => a.AssigneeId is null).Sum(a => a.Hours);
+        var unassigned = preview.Plan.Activities.Where(a => a.AssigneeIds.Count == 0).Sum(a => a.Hours);
         var blocked = leaves.Where(w => w.Status == WorkItemStatus.Blocked).ToList();
         var overdue = leaves.Where(w => w.PlannedEnd is { } end && end < today && w.Status != WorkItemStatus.Done).ToList();
         var troubled = blocked.Concat(overdue).DistinctBy(w => w.Id)

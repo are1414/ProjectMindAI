@@ -245,10 +245,10 @@ public sealed class MissingWorkService(
 
         // Ek işlere çakışmasın diye negatif id; önerilen ardıllar ada göre eşleşen mevcut işlerdir. LLM işlerinin ardılı yok.
         var extra = rule.Missing.Select((m, i) => new ExtraActivity(
-                new PlanActivity(-(i + 1), m.Name, m.DefaultHours, m.Skill, Priority.Medium, null, []),
+                new PlanActivity(-(i + 1), m.Name, m.DefaultHours, m.Skill, Priority.Medium, [], []),
                 overview.WorkItems.Where(w => m.SuggestedSuccessors.Contains(w.Name)).Select(w => w.Id).ToList()))
             .Concat(llm.Select((l, i) => new ExtraActivity(
-                new PlanActivity(-(rule.Missing.Count + i + 1), l.Name, l.Hours, l.Skill, Priority.Medium, null, []), [])))
+                new PlanActivity(-(rule.Missing.Count + i + 1), l.Name, l.Hours, l.Skill, Priority.Medium, [], []), [])))
             .ToList();
 
         var (current, withMissing) = await schedules.SimulateAsync(projectId, extra, ct);

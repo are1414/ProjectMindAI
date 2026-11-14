@@ -197,7 +197,7 @@ public class MeasurementMathTests
     public void Removal_selection_uses_sole_covering_leaves_and_is_deterministic()
     {
         WorkItemResponse W(int id, string name, int? parent = null, WorkItemStatus status = WorkItemStatus.NotStarted) =>
-            new(id, 1, name, null, WorkPhase.Development, Skill.Backend, Priority.Medium, 8, null, parent, null, null, status, 0, 0);
+            new(id, 1, name, null, WorkPhase.Development, Skill.Backend, Priority.Medium, 8, [], parent, null, null, status, 0, 0);
 
         var items = new[]
         {

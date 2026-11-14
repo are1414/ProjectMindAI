@@ -68,15 +68,46 @@ public class ScheduleServiceTests : ServiceTestBase
     }
 
     [Fact]
+    public async Task Apply_keeps_team_assignment_and_weights_baseline_rate_by_hours()
+    {
+        var (projectId, ids) = await SeedAsync();
+        var people = new PersonService(Db);
+        var zeynep = await people.CreateAsync(projectId,
+            new PersonRequest { Name = "Zeynep", Skills = [Skill.Backend], WeeklyCapacityHours = 40, HourlyCost = 200 }, _ct);
+        var ayse = await Db.People.AsNoTracking().SingleAsync(p => p.Name == "Ayşe", _ct);
+        var items = new WorkItemService(Db);
+        var api = WorkItemRequest.From(await items.GetAsync(projectId, ids["API"], _ct));
+        api.AssigneeIds = [ayse.Id, zeynep.Id];
+        await items.UpdateAsync(projectId, ids["API"], api, _ct);
+        Db.ChangeTracker.Clear();
+
+        var applied = await NewScheduleService().ApplyAsync(projectId, _ct);
+
+        // API 16 s: Ayşe ve Zeynep gün 0'da 8'er saat → 1 gün.
+        var planned = applied.Plan.Activities.Single(a => a.Id == ids["API"]);
+        Assert.Equal((0, 0), (planned.StartDay, planned.FinishDay));
+        Assert.Equal([ayse.Id, zeynep.Id], planned.AssigneeIds);
+
+        var saved = await Db.WorkItems.AsNoTracking().Include(w => w.Assignments).SingleAsync(w => w.Id == ids["API"], _ct);
+        Assert.Equal([ayse.Id, zeynep.Id], saved.Assignments.Select(a => a.PersonId).Order());
+
+        // Baseline ücreti: (8 × 100 + 8 × 200) / 16 = 150; çok kişili satırda AssigneeId boş.
+        var line = await Db.BaselineItems.AsNoTracking().SingleAsync(i => i.WorkItemId == ids["API"], _ct);
+        Assert.Equal(150, line.HourlyCost);
+        Assert.Null(line.AssigneeId);
+    }
+
+    [Fact]
     public async Task Apply_writes_dates_assignees_parent_span_and_baseline()
     {
         var (projectId, ids) = await SeedAsync();
 
         await NewScheduleService().ApplyAsync(projectId, _ct);
 
-        var items = await Db.WorkItems.AsNoTracking().Where(w => w.ProjectId == projectId).ToDictionaryAsync(w => w.Name, _ct);
+        var items = await Db.WorkItems.AsNoTracking().Include(w => w.Assignments)
+            .Where(w => w.ProjectId == projectId).ToDictionaryAsync(w => w.Name, _ct);
         var ayse = await Db.People.AsNoTracking().SingleAsync(p => p.Name == "Ayşe", _ct);
-        Assert.Equal(ayse.Id, items["API"].AssigneeId);
+        Assert.Equal(ayse.Id, items["API"].Assignments.Single().PersonId);
         Assert.Equal(new DateOnly(2026, 11, 2), items["API"].PlannedStart);
         Assert.Equal(items["API"].PlannedStart, items["Backend"].PlannedStart);   // üst iş = alt işlerin aralığı
         Assert.Equal(items["DB"].PlannedEnd, items["Backend"].PlannedEnd);

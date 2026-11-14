@@ -51,7 +51,7 @@ public class AiActionServiceTests : ServiceTestBase
         await Propose(AiTools.AddWorkItem, new
         {
             name = "Backend API", phase = "Development", requiredSkill = "Backend",
-            estimatedHours = 120, assigneeName = "Ayşe"
+            estimatedHours = 120, assigneeNames = new[] { "Ayşe" }
         });
         await Propose(AiTools.AddWorkItem, new { name = "Test", phase = "Test", requiredSkill = "Test", estimatedHours = 40 });
         await Propose(AiTools.AddDependency, new { predecessorName = "Backend API", successorName = "Test" });
@@ -64,9 +64,9 @@ public class AiActionServiceTests : ServiceTestBase
         Assert.NotNull(session.ProjectId);
         Assert.Equal("Mobil Bankacılık", session.Title);
 
-        var backend = await Db.WorkItems.AsNoTracking().SingleAsync(w => w.Name == "Backend API");
+        var backend = await Db.WorkItems.AsNoTracking().Include(w => w.Assignments).SingleAsync(w => w.Name == "Backend API");
         var ayse = await Db.People.AsNoTracking().SingleAsync();
-        Assert.Equal(ayse.Id, backend.AssigneeId);
+        Assert.Equal(ayse.Id, backend.Assignments.Single().PersonId);
         Assert.Equal(Skill.Backend | Skill.Database, ayse.Skills);
         Assert.Single(Db.WorkItemDependencies);
     }
@@ -116,6 +116,35 @@ public class AiActionServiceTests : ServiceTestBase
         Assert.Equal(WorkItemStatus.InProgress, updated.Status);
         Assert.Equal(40, updated.PercentComplete);
         Assert.Equal(24, updated.EstimatedHours);
+    }
+
+    [Fact]
+    public async Task Work_item_cards_assign_several_people_and_can_clear_them()
+    {
+        await Propose(AiTools.CreateProject, Project);
+        await Propose(AiTools.AddPerson, new { name = "Ali", skills = new[] { "Backend" }, weeklyCapacityHours = 40 });
+        await Propose(AiTools.AddPerson, new { name = "Ayşe", skills = new[] { "Backend" }, weeklyCapacityHours = 40 });
+        var add = await Propose(AiTools.AddWorkItem, new
+        {
+            name = "API", phase = "Development", requiredSkill = "Backend", estimatedHours = 32, assigneeNames = new[] { "Ali", "Ayşe" }
+        });
+        Assert.Equal("İş ekle: API · Geliştirme · Backend · 32 saat · Ali, Ayşe", add.Summary);
+        Assert.All(await _actions.ApplyAllPendingAsync(_sessionId, _ct), r => Assert.Equal(AiActionStatus.Applied, r.Status));
+
+        var item = await Db.WorkItems.AsNoTracking().Include(w => w.Assignments).SingleAsync();
+        Assert.Equal(2, item.Assignments.Count);
+
+        var clear = await Propose(AiTools.UpdateWorkItem, new { workItemId = item.Id, assigneeNames = Array.Empty<string>() });
+        Assert.Equal("İşi güncelle (API): atanan = yok (atama kaldırılır)", clear.Summary);
+        await _actions.ApplyAsync(clear.Id, _ct);
+        Assert.Empty(Db.WorkItemAssignments);
+
+        // D32'den önce oluşmuş tek kişilik kart (assigneeName) hâlâ uygulanır.
+        var legacy = await Propose(AiTools.UpdateWorkItem, new { workItemId = item.Id, assigneeName = "Ayşe" });
+        Assert.Equal("İşi güncelle (API): atanan = Ayşe", legacy.Summary);
+        await _actions.ApplyAsync(legacy.Id, _ct);
+        var ayse = await Db.People.AsNoTracking().SingleAsync(p => p.Name == "Ayşe");
+        Assert.Equal(ayse.Id, (await Db.WorkItemAssignments.AsNoTracking().SingleAsync()).PersonId);
     }
 
     [Fact]

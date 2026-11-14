@@ -15,7 +15,6 @@ public class WorkItem : Entity
     public Priority Priority { get; set; } = Priority.Medium;
     public decimal EstimatedHours { get; set; }
 
-    public int? AssigneeId { get; set; }
     public DateOnly? PlannedStart { get; set; }
     public DateOnly? PlannedEnd { get; set; }
 
@@ -24,6 +23,8 @@ public class WorkItem : Entity
     public decimal ActualHours { get; set; }
 
     public Project? Project { get; set; }
-    public Person? Assignee { get; set; }
     public WorkItem? Parent { get; set; }
+
+    /// <summary>Atanan kişiler (boşsa otomatik plan bir kişi seçer). Birden çok kişi işi birlikte yapar (D32).</summary>
+    public List<WorkItemAssignment> Assignments { get; set; } = [];
 }

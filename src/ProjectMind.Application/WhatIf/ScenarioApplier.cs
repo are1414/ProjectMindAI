@@ -59,7 +59,12 @@ public static class ScenarioApplier
                 {
                     var person = FindPerson(people, c.PersonId);
                     people.Remove(person);
-                    activities = activities.Select(a => a.FixedAssigneeId == person.Id ? a with { FixedAssigneeId = null } : a).ToList();
+                    // Ekipten yalnız bu kişi düşer; başka atanan kalmayan iş otomatik atamaya döner.
+                    activities = activities
+                        .Select(a => a.FixedAssigneeIds.Contains(person.Id)
+                            ? a with { FixedAssigneeIds = a.FixedAssigneeIds.Where(id => id != person.Id).ToList() }
+                            : a)
+                        .ToList();
                     notes.Add($"{person.Name} ekipten çıkarıldı; işleri yeniden dağıtılır");
                     break;
                 }

@@ -46,11 +46,24 @@ internal sealed class WorkItemConfiguration : IEntityTypeConfiguration<WorkItem>
         b.Property(w => w.Status).HasConversion<string>().HasMaxLength(50);
         b.HasOne(w => w.Project).WithMany(p => p.WorkItems)
             .HasForeignKey(w => w.ProjectId).OnDelete(DeleteBehavior.Cascade);
-        b.HasOne(w => w.Assignee).WithMany()
-            .HasForeignKey(w => w.AssigneeId).OnDelete(DeleteBehavior.NoAction);
         // Alt işler servis tarafından (önce çocuklar) silinir; SQL Server'da kendine cascade yolu yok.
         b.HasOne(w => w.Parent).WithMany()
             .HasForeignKey(w => w.ParentId).OnDelete(DeleteBehavior.NoAction);
+    }
+}
+
+internal sealed class WorkItemAssignmentConfiguration : IEntityTypeConfiguration<WorkItemAssignment>
+{
+    public void Configure(EntityTypeBuilder<WorkItemAssignment> b)
+    {
+        b.HasKey(a => new { a.WorkItemId, a.PersonId });
+        b.HasOne(a => a.WorkItem).WithMany(w => w.Assignments)
+            .HasForeignKey(a => a.WorkItemId).OnDelete(DeleteBehavior.Cascade);
+        // Proje → kişiler ve proje → işler zaten cascade; ikinci cascade yolu SQL Server'da hata verir.
+        // Kişi silinirken atamaları servis siler (PersonService, ProjectService).
+        b.HasOne(a => a.Person).WithMany()
+            .HasForeignKey(a => a.PersonId).OnDelete(DeleteBehavior.NoAction);
+        b.HasIndex(a => a.PersonId);
     }
 }
 

@@ -7,7 +7,7 @@ public class WorkItemTreeTests
 {
     private static WorkItemResponse Item(int id, int? parent, decimal hours, int percent) => new(
         id, 1, $"İş {id}", null, WorkPhase.Development, Skill.Backend, Priority.Medium, hours,
-        null, parent, null, null, WorkItemStatus.NotStarted, percent, 0);
+        [], parent, null, null, WorkItemStatus.NotStarted, percent, 0);
 
     // 1 Backend (üst)
     //   2 Login API     10 saat, %100

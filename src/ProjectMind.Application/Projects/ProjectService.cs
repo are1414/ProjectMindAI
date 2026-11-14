@@ -40,6 +40,12 @@ public sealed class ProjectService(IAppDbContext db)
         var project = await FindAsync(id, ct);
         // Bağımlılıklar iş kayıtlarına NO ACTION ile bağlı; önce onları siliyoruz.
         await db.WorkItemDependencies.Where(d => d.ProjectId == id).ExecuteDeleteAsync(ct);
+        // Atamalar kişilere NO ACTION ile bağlı (D32); kişiler cascade ile silinmeden önce, ayrı kayıtla kaldırılır
+        // (bellekte izlenen atamalar da silinsin diye kayıtlar üzerinden; proje satırıyla aynı kayıtta silinirse
+        // veritabanı cascade'i onları önce silebilir).
+        db.WorkItemAssignments.RemoveRange(
+            await db.WorkItemAssignments.Where(a => a.WorkItem!.ProjectId == id).ToListAsync(ct));
+        await db.SaveChangesAsync(ct);
         // İşlerin kendi aralarındaki üst-alt bağlantısı NO ACTION; toplu silmeden önce koparılır.
         await db.WorkItems.Where(w => w.ProjectId == id && w.ParentId != null)
             .ExecuteUpdateAsync(u => u.SetProperty(w => w.ParentId, (int?)null), ct);

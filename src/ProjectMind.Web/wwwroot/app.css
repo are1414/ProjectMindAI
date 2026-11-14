@@ -160,6 +160,12 @@ a { color: var(--primary); text-decoration: none; }
 .cell-input-wide { width: 16rem; text-align: left; }
 .inline-error { margin: .4rem 0; padding: .4rem .6rem; background: #fff0f0; color: var(--danger); border-radius: 6px; }
 .hint { color: var(--muted); font-size: .75rem; margin: .35rem 0 0; }
+.col-assignees { position: relative; }
+.assign-picker { position: absolute; z-index: 20; top: 100%; left: 0; min-width: 15rem; padding: .5rem .65rem;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 6px 18px rgba(0, 0, 0, .12); }
+.assign-picker p { margin: 0 0 .35rem; }
+.assign-option { display: flex; align-items: center; gap: .4rem; padding: .15rem 0; cursor: pointer; white-space: nowrap; }
+.assign-actions { display: flex; gap: .4rem; margin-top: .45rem; }
 
 /* Sohbet kısayolları */
 .chat-shortcuts { display: flex; gap: .4rem; padding: .5rem 1rem 0; flex-wrap: wrap; }

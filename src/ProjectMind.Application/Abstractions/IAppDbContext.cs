@@ -9,6 +9,7 @@ public interface IAppDbContext
     DbSet<Person> People { get; }
     DbSet<WorkItem> WorkItems { get; }
     DbSet<WorkItemDependency> WorkItemDependencies { get; }
+    DbSet<WorkItemAssignment> WorkItemAssignments { get; }
     DbSet<ChatSession> ChatSessions { get; }
     DbSet<ChatMessage> ChatMessages { get; }
     DbSet<AiAction> AiActions { get; }

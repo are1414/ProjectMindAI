@@ -264,7 +264,7 @@ public sealed class DemoProjectSeeder(
                 Priority = t.Priority,
                 EstimatedHours = leafKeys.Contains(t.Key) ? t.Hours : LeafHours(all, leafKeys, t.Key),
                 ParentId = t.ParentKey is null ? null : ids[t.ParentKey],
-                AssigneeId = t.Assignee is null ? null : personIds[t.Assignee]
+                AssigneeIds = t.Assignee is null ? [] : [personIds[t.Assignee]]
             }, ct);
             ids[t.Key] = created.Id;
         }

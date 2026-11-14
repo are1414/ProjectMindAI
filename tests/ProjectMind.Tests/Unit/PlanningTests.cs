@@ -44,7 +44,7 @@ public class ResourceSchedulerTests
         new(id, $"Kişi {id}", skills, weekly, cost);
 
     private static PlanActivity Task(int id, decimal hours, Skill skill = Skill.Backend, params int[] preds) =>
-        new(id, $"İş {id}", hours, skill, Priority.Medium, null, preds);
+        new(id, $"İş {id}", hours, skill, Priority.Medium, [], preds);
 
     private static PlanResult Run(IReadOnlyList<PlanActivity> tasks, params PlanResource[] people) =>
         ResourceScheduler.Schedule(new PlanInput(Monday, 8, tasks, people));
@@ -67,7 +67,7 @@ public class ResourceSchedulerTests
         var r = Run([Task(1, 8), Task(2, 8)], Person(1, Skill.Backend), Person(2, Skill.Backend));
         Assert.Equal((0, 0), Slot(r, 1));
         Assert.Equal((0, 0), Slot(r, 2));
-        Assert.NotEqual(r.Activities[0].AssigneeId, r.Activities[1].AssigneeId);
+        Assert.NotEqual(r.Activities[0].AssigneeIds.Single(), r.Activities[1].AssigneeIds.Single());
     }
 
     [Fact]
@@ -97,7 +97,7 @@ public class ResourceSchedulerTests
     public void Missing_skill_is_planned_without_person_and_warned()
     {
         var r = Run([Task(1, 16, Skill.Test)], Person(1, Skill.Backend));
-        Assert.Null(r.Activities.Single().AssigneeId);
+        Assert.Empty(r.Activities.Single().AssigneeIds);
         Assert.Equal((0, 1), Slot(r, 1));
         Assert.Contains(r.Warnings, w => w.Contains("Test"));
     }
@@ -105,19 +105,19 @@ public class ResourceSchedulerTests
     [Fact]
     public void Fixed_assignee_is_respected()
     {
-        var tasks = new[] { new PlanActivity(1, "İş", 8, Skill.Backend, Priority.Medium, 2, []) };
+        var tasks = new[] { new PlanActivity(1, "İş", 8, Skill.Backend, Priority.Medium, [2], []) };
         var r = Run(tasks, Person(1, Skill.Backend), Person(2, Skill.Backend));
-        Assert.Equal(2, r.Activities.Single().AssigneeId);
+        Assert.Equal([2], r.Activities.Single().AssigneeIds);
     }
 
     [Fact]
     public void Fixed_assignee_with_zero_capacity_gets_its_own_warning()
     {
         // İş, kapasitesi 0 olan Kişi 2'ye sabit atanmış; Kişi 1 aynı beceriye sahip ama sabit atama korunur.
-        var tasks = new[] { new PlanActivity(1, "Ödeme", 16, Skill.Backend, Priority.Medium, 2, []) };
+        var tasks = new[] { new PlanActivity(1, "Ödeme", 16, Skill.Backend, Priority.Medium, [2], []) };
         var r = Run(tasks, Person(1, Skill.Backend), Person(2, Skill.Backend, weekly: 0));
 
-        Assert.Null(r.Activities.Single().AssigneeId);
+        Assert.Empty(r.Activities.Single().AssigneeIds);
         Assert.Equal((0, 1), Slot(r, 1));
         Assert.Contains(r.Warnings, w => w.Contains("'Ödeme' işine atanan Kişi 2") && w.Contains("kapasitesi 0"));
         Assert.DoesNotContain(r.Warnings, w => w.Contains("becerisine sahip kişi yok"));
@@ -131,6 +131,85 @@ public class ResourceSchedulerTests
         var load = r.Loads.Single();
         Assert.Equal(16, load.CapacityHours);
         Assert.Equal(100, load.UtilizationPercent);
+    }
+
+    private static PlanActivity TeamTask(int id, decimal hours, int[] assignees, Skill skill = Skill.Backend, params int[] preds) =>
+        new(id, $"İş {id}", hours, skill, Priority.Medium, assignees, preds);
+
+    private static Dictionary<int, decimal> HoursByPerson(PlanResult r, int id) =>
+        r.Activities.Single(a => a.Id == id).Allocations.ToDictionary(x => x.PersonId, x => x.Hours);
+
+    [Fact]
+    public void Team_members_work_on_the_same_task_together()
+    {
+        // 32 saat, iki kişi günde 8'er saat: gün 0'da 16, gün 1'de 16 → 2 gün; kişi başı 16 saat.
+        var r = Run([TeamTask(1, 32, [1, 2])], Person(1, Skill.Backend, cost: 100), Person(2, Skill.Backend, cost: 200));
+
+        Assert.Equal((0, 1), Slot(r, 1));
+        Assert.Equal([1, 2], r.Activities.Single().AssigneeIds);
+        Assert.Equal(new Dictionary<int, decimal> { [1] = 16, [2] = 16 }, HoursByPerson(r, 1));
+        Assert.Equal(16 * 100 + 16 * 200, r.PlannedCost);
+        Assert.All(r.Loads, l => Assert.Equal(16, l.AssignedHours));
+        Assert.Equal(2, r.DurationWorkdays);
+    }
+
+    [Fact]
+    public void Team_hours_follow_each_members_capacity()
+    {
+        // Günde 8 + 4 = 12 saat: 24 saatlik iş 2 gün; Kişi 1 16, Kişi 2 8 saat.
+        var r = Run([TeamTask(1, 24, [1, 2])], Person(1, Skill.Backend, weekly: 40), Person(2, Skill.Backend, weekly: 20));
+
+        Assert.Equal((0, 1), Slot(r, 1));
+        Assert.Equal(new Dictionary<int, decimal> { [1] = 16, [2] = 8 }, HoursByPerson(r, 1));
+    }
+
+    [Fact]
+    public void Busy_team_member_joins_when_free()
+    {
+        // İş 1 (8 s, Kişi 1) → İş 3 (8 s, Kişi 1) kritik zincir; İş 2 (12 s, Kişi 1 + 2) bolluklu.
+        // Sıra: İş 1 gün 0 (Kişi 1 dolu) → İş 2: gün 0 yalnız Kişi 2 (8 s), gün 1 Kişi 1 kalan 4 s → bitiş gün 1.
+        // İş 3: gün 1'de Kişi 1'in kalan 4 saati + gün 2'de 4 saat.
+        var r = Run([TeamTask(1, 8, [1]), TeamTask(2, 12, [1, 2]), TeamTask(3, 8, [1], Skill.Backend, 1)],
+            Person(1, Skill.Backend), Person(2, Skill.Backend));
+
+        Assert.Equal((0, 0), Slot(r, 1));
+        Assert.Equal((0, 1), Slot(r, 2));
+        Assert.Equal(new Dictionary<int, decimal> { [1] = 4, [2] = 8 }, HoursByPerson(r, 2));
+        Assert.Equal((1, 2), Slot(r, 3));
+    }
+
+    [Fact]
+    public void Team_member_without_skill_works_with_warning_and_zero_capacity_member_is_left_out()
+    {
+        var r = Run([TeamTask(1, 16, [1, 2])],
+            Person(1, Skill.Frontend), Person(2, Skill.Backend, weekly: 0), Person(3, Skill.Backend));
+
+        Assert.Equal([1], r.Activities.Single().AssigneeIds);   // Kişi 3 atanmamış; sabit ekip korunur
+        Assert.Equal((0, 1), Slot(r, 1));
+        Assert.Contains(r.Warnings, w => w.Contains("Kişi 1, 'Backend' becerisine sahip değil"));
+        Assert.Contains(r.Warnings, w => w.Contains("Kişi 2 kişisinin kapasitesi 0; iş onsuz planlandı"));
+        Assert.DoesNotContain(r.Warnings, w => w.Contains("becerisine sahip kişi yok"));
+    }
+
+    [Fact]
+    public void Team_with_no_capacity_is_planned_without_person()
+    {
+        var r = Run([TeamTask(1, 16, [1, 2])], Person(1, Skill.Backend, weekly: 0), Person(2, Skill.Backend, weekly: 0));
+
+        Assert.Empty(r.Activities.Single().AssigneeIds);
+        Assert.Equal((0, 1), Slot(r, 1));
+        Assert.Equal(2, r.Warnings.Count(w => w.Contains("kapasitesi 0; iş kişisiz planlandı")));
+    }
+
+    [Fact]
+    public void Automatic_assignment_still_picks_one_person_with_all_hours()
+    {
+        var r = Run([Task(1, 16)], Person(1, Skill.Backend), Person(2, Skill.Backend));
+
+        var a = r.Activities.Single();
+        Assert.Single(a.AssigneeIds);
+        Assert.Equal(16, a.Allocations.Single().Hours);
+        Assert.Equal((0, 1), Slot(r, 1));
     }
 
     [Fact]

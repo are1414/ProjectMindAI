@@ -16,7 +16,7 @@ public sealed class WorkItemService(IAppDbContext db, TimeProvider? clock = null
     public async Task<IReadOnlyList<WorkItemResponse>> ListAsync(int projectId, CancellationToken ct)
     {
         await EnsureProjectExistsAsync(projectId, ct);
-        var items = await db.WorkItems.AsNoTracking()
+        var items = await db.WorkItems.AsNoTracking().Include(w => w.Assignments)
             .Where(w => w.ProjectId == projectId).OrderBy(w => w.Id).ToListAsync(ct);
         return items.Select(WorkItemResponse.From).ToList();
     }
@@ -137,7 +137,7 @@ public sealed class WorkItemService(IAppDbContext db, TimeProvider? clock = null
             .ToDictionaryAsync(w => w.Id, w => w.ParentId, ct);
 
     private async Task<WorkItem> FindAsync(int projectId, int id, CancellationToken ct) =>
-        await db.WorkItems.FirstOrDefaultAsync(w => w.Id == id && w.ProjectId == projectId, ct)
+        await db.WorkItems.Include(w => w.Assignments).FirstOrDefaultAsync(w => w.Id == id && w.ProjectId == projectId, ct)
         ?? throw new NotFoundException("İş", id);
 
     private async Task EnsureProjectExistsAsync(int projectId, CancellationToken ct)
@@ -166,8 +166,9 @@ public sealed class WorkItemService(IAppDbContext db, TimeProvider? clock = null
         if (request.Status == WorkItemStatus.Done && request.PercentComplete != FullyComplete)
             throw new BusinessRuleException("Tamamlanan bir işin ilerlemesi %100 olmalıdır.");
 
-        if (request.AssigneeId is { } assigneeId &&
-            !await db.People.AnyAsync(p => p.Id == assigneeId && p.ProjectId == projectId, ct))
+        var assignees = request.AssigneeIds.Distinct().ToList();
+        if (assignees.Count > 0 &&
+            await db.People.CountAsync(p => assignees.Contains(p.Id) && p.ProjectId == projectId, ct) != assignees.Count)
             throw new BusinessRuleException("Atanan kişi bu projeye ait değil.");
     }
 
@@ -179,12 +180,21 @@ public sealed class WorkItemService(IAppDbContext db, TimeProvider? clock = null
         item.RequiredSkill = request.RequiredSkill;
         item.Priority = request.Priority;
         item.EstimatedHours = request.EstimatedHours;
-        item.AssigneeId = request.AssigneeId;
         item.ParentId = request.ParentId;
         item.PlannedStart = request.PlannedStart;
         item.PlannedEnd = request.PlannedEnd;
         item.Status = request.Status;
         item.PercentComplete = request.PercentComplete;
         item.ActualHours = request.ActualHours;
+        SyncAssignments(item, request.AssigneeIds);
+    }
+
+    /// <summary>Atama kümesini istekteki kişilerle eşitler: eksikler eklenir, listede olmayanlar silinir.</summary>
+    private static void SyncAssignments(WorkItem item, IReadOnlyCollection<int> personIds)
+    {
+        var wanted = personIds.ToHashSet();
+        item.Assignments.RemoveAll(a => !wanted.Contains(a.PersonId));
+        foreach (var id in wanted.Where(id => item.Assignments.All(a => a.PersonId != id)).Order())
+            item.Assignments.Add(new WorkItemAssignment { PersonId = id });
     }
 }

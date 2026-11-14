@@ -116,6 +116,8 @@
   - [x] Ölçüm rehberi hazırlandı (`docs/evaluation/OLCUM_REHBERI.md`: eval-v1, recall-v1, çok tohumlu RQ1; CSV ve rapordaki yeri)
 - [ ] 5–10 kişilik kullanıcı testi (SUS anketi) — form hazır, test oturumları yapılacak
   - [x] Kullanıcı testi protokolü hazırlandı (`docs/evaluation/KULLANICI_TESTI.md`: kurulum, onam, 5 görev, gözlem formu, analiz planı)
+- [x] (Kullanıcı isteği, 2026-11-15) Bir işe birden çok kişi atama: atananlar işi birlikte yapar (havuzlu çizelgeleme,
+  kişi başı saat → doluluk/maliyet/baseline ücreti); sohbet kartlarında `assigneeNames`, İşler tablosunda kişi seçimi (D32)
 
 ### FAZ 10 — Rapor ve sunum
 - [ ] Rapor bölümleri, sunum, demo videosu
@@ -162,3 +164,5 @@ docs/                          Plan, kararlar, ilerleme
 - RQ1 duyarlılık analizi: sentetik üretici parametrelerinin (gürültü, kapsam artışı, iyimserlik) sonuçlara etkisi (TEST_PAZAR)
 - RQ4 hibrit ek önerilerinin ilgililiğinin iki hakemle etiketlenmesi (Cohen κ); precision bugün alt sınır
 - Sentetik üreticiye haftalık kontrol noktaları (erken uyarı bugün yalnız %25/%50/%75)
+- Otomatik planlayıcının kimse atanmamış işi birden çok kişiye bölmesi (bugün tek kişi seçer; D32)
+- Görev içi iletişim yükü: aynı işte çalışan kişi sayısı arttıkça verim kaybı katsayısı (Brooks; bugün yok, D32)

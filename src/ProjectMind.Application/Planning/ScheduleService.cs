@@ -56,7 +56,7 @@ public sealed class ScheduleService(IAppDbContext db, ProjectOverviewService ove
     }
 
     /// <summary>
-    /// Planı işlere yazar (tarih + boş atamalar) ve baseline olarak dondurur. Bitti işlerin mevcut plan tarihleri
+    /// Planı işlere yazar (tarih + boş atamalar: kimse atanmamış işe planın seçtiği kişi) ve baseline olarak dondurur. Bitti işlerin mevcut plan tarihleri
     /// korunur (geçmiş Gantt kaybolmaz); başlamış bir işin plan başlangıcı yeni plandan önceyse korunur.
     /// </summary>
     public async Task<SchedulePreview> ApplyAsync(int projectId, CancellationToken ct)
@@ -66,7 +66,7 @@ public sealed class ScheduleService(IAppDbContext db, ProjectOverviewService ove
         if (plan.Activities.Count == 0)
             throw new BusinessRuleException("Planlanacak iş yok.");
 
-        var items = await db.WorkItems.Where(w => w.ProjectId == projectId).ToListAsync(ct);
+        var items = await db.WorkItems.Include(w => w.Assignments).Where(w => w.ProjectId == projectId).ToListAsync(ct);
         var byId = items.ToDictionary(w => w.Id);
         var original = items.ToDictionary(w => w.Id, w => (Start: w.PlannedStart, End: w.PlannedEnd));
         var fullHours = preview.Overview.WorkItems.ToDictionary(w => w.Id, w => w.EstimatedHours);
@@ -74,7 +74,8 @@ public sealed class ScheduleService(IAppDbContext db, ProjectOverviewService ove
         foreach (var a in plan.Activities)
         {
             var item = byId[a.Id];
-            item.AssigneeId ??= a.AssigneeId;
+            if (item.Assignments.Count == 0)
+                item.Assignments.AddRange(a.AssigneeIds.Select(id => new WorkItemAssignment { PersonId = id }));
             if (item.Status == WorkItemStatus.Done && item.PlannedStart is not null && item.PlannedEnd is not null)
                 continue;
             var started = fullHours[a.Id] > a.Hours;
@@ -94,8 +95,7 @@ public sealed class ScheduleService(IAppDbContext db, ProjectOverviewService ove
 
         var cost = preview.Overview.People.ToDictionary(p => p.Id, p => p.HourlyCost);
         var baselineItems = plan.Activities
-            .SelectMany(a => BaselineItemsFor(a, fullHours[a.Id], original[a.Id], plan.Start,
-                a.AssigneeId is { } p ? cost.GetValueOrDefault(p) : 0))
+            .SelectMany(a => BaselineItemsFor(a, fullHours[a.Id], original[a.Id], plan.Start, HourlyRate(a, cost)))
             .ToList();
         db.Baselines.Add(new Baseline
         {
@@ -108,6 +108,18 @@ public sealed class ScheduleService(IAppDbContext db, ProjectOverviewService ove
         });
         await db.SaveChangesAsync(ct);
         return preview with { LatestBaseline = await LatestBaselineAsync(projectId, ct) };
+    }
+
+    /// <summary>
+    /// İşin saatlik ücreti: kişilere ayrılan saatlerle ağırlıklı ortalama, Σ(saat × ücret) / Σ saat (D32). Süresiz işte
+    /// atananların ortalaması; kişisiz işte 0.
+    /// </summary>
+    public static decimal HourlyRate(ScheduledActivity a, IReadOnlyDictionary<int, decimal> cost)
+    {
+        var hours = a.Allocations.Sum(x => x.Hours);
+        if (hours > 0)
+            return a.Allocations.Sum(x => x.Hours * cost.GetValueOrDefault(x.PersonId)) / hours;
+        return a.AssigneeIds.Count == 0 ? 0 : a.AssigneeIds.Average(id => cost.GetValueOrDefault(id));
     }
 
     /// <summary>
@@ -139,7 +151,8 @@ public sealed class ScheduleService(IAppDbContext db, ProjectOverviewService ove
             PlannedStart = start,
             PlannedEnd = end,
             Hours = hours,
-            AssigneeId = a.AssigneeId,
+            // Şema tek kişiliktir (yalnız bilgi amaçlı, okunmaz): tek atanan varsa o, birden çok kişide boş (D32).
+            AssigneeId = a.AssigneeIds.Count == 1 ? a.AssigneeIds[0] : null,
             HourlyCost = hourlyCost
         };
 
@@ -173,7 +186,7 @@ public sealed class ScheduleService(IAppDbContext db, ProjectOverviewService ove
 
         var activities = leaves
             .Select(w => new PlanActivity(
-                w.Id, w.Name, RemainingHours(w), w.RequiredSkill, w.Priority, w.AssigneeId, predecessors[w.Id].ToList()))
+                w.Id, w.Name, RemainingHours(w), w.RequiredSkill, w.Priority, w.AssigneeIds, predecessors[w.Id].ToList()))
             .Concat(extra.Select(e => e.Activity with { Predecessors = [] }))
             .ToList();
 

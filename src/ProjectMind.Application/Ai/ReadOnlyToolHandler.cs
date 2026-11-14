@@ -98,7 +98,7 @@ public sealed class ReadOnlyToolHandler(
                     activities = p.Plan.Activities.Select(a => new
                     {
                         a.Name, start = a.Start, finish = a.Finish,
-                        assignee = a.AssigneeId is { } pid ? names.GetValueOrDefault(pid) : null,
+                        assignees = a.AssigneeIds.Count == 0 ? null : a.AssigneeIds.Select(id => names.GetValueOrDefault(id)).ToList(),
                         a.Hours, critical = a.IsCritical, a.SlackDays
                     }),
                     peopleUtilizationPercent = p.Plan.Loads.Select(l => new { l.Name, l.AssignedHours, l.UtilizationPercent }),

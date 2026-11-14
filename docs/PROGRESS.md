@@ -4,6 +4,47 @@ Her oturum sonunda en üste yeni kayıt eklenir. Format: yapılanlar · varsayı
 
 ---
 
+## 2026-11-15 (27) — Bir işe birden çok kişi atama (birlikte çalışma)
+
+Kapsam: Kullanıcı isteği; aktif faz (Faz 9) dışında, kullanıcı onayıyla PLAN'a ayrı madde olarak eklendi. Karar: D32.
+
+- **İnceleme sonucu (önceki durum)**: İşe yalnız tek kişi atanabiliyordu (`WorkItem.AssigneeId`). Atama yalnız sohbet
+  kartlarından (`assigneeName`) ve "Planı uygula"nın boş işlere kişi yazmasıyla yapılıyordu; İşler tablosu yalnız gösteriyordu.
+- **Veri**: `WorkItemAssignment` ara tablosu (iş, kişi; bileşik PK; iş → Cascade, kişi → NO ACTION). Migration
+  `AddWorkItemAssignments`: tablo oluşturulur → mevcut atamalar kopyalanır → `AssigneeId` kolonu silinir; Down tersini yapar
+  (en küçük id'li atanan). Yerel `ProjectMindAIDb`'de uygulandı: 22 atamalı işin 22'si kopyalandı; Down → Up gidiş-dönüşü de
+  22/22 doğrulandı.
+- **Servisler**: `WorkItemRequest/Response.AssigneeIds`; `WorkItemService` atama kümesini eşitler ve tüm kişilerin projeye ait
+  olduğunu doğrular; kişi silinince yalnız onun atamaları, proje silinmeden önce projenin atamaları (ayrı kayıtla) silinir;
+  `ProjectOverview.PersonNames`.
+- **Planlayıcı (`ResourceScheduler`)**: `PlanActivity.FixedAssigneeIds`, `ScheduledActivity.AssigneeIds` + `Allocations`
+  (kişi başı saat). Sabit ekipte havuzlu günlük yerleştirme (kişi id sırasıyla boş kapasite); otomatik atama yine tek kişi.
+  Doluluk ve maliyet ayrılan saatlerden. Ondalık kapasitede ε'dan küçük kalan son çalışana yazılır (kişi saatleri toplamı = efor).
+- **Planı kullananlar**: `ScheduleService.ApplyAsync` boş işe planın kişisini ekler, ekibi korur; baseline ücreti saat ağırlıklı
+  (`ScheduleService.HourlyRate`); what-if'te kişi çıkarılınca yalnız o kişi ekipten düşer; sağlık skorunda "kişisiz" =
+  atanansız.
+- **AI**: `assigneeNames` (dizi) her iki iş aracında; güncellemede tam liste; eski `assigneeName` bekleyen kartlar için
+  okunur (`AssigneeRequest.Names`). Kart metni "atanan: Ali, Ayşe" / "yok (atama kaldırılır)". Bağlam ve `preview_schedule`
+  çıktısında `assignees` listesi. İstem `chat-v10`.
+- **Arayüz**: İşler tablosunda yaprak işin "Atanan" hücresine tıklayınca kişi seçim kutusu (checkbox, "(beceri yok)" notu,
+  Kaydet/Vazgeç, Esc); Gantt ipucunda birlikte çalışanlar kişi başı saatle.
+- **Testler (+10)**: birlikte çalışma (32 s, 2 × 8 s/gün → 2 gün, 16/16 s, maliyet 4800), farklı kapasite (8 + 4 s/gün →
+  16/8 s), meşgul üyenin boşalınca katılması (4/8 s), beceri/kapasite uyarıları, kapasitesiz ekip, otomatik tek kişi; what-if
+  ekipten kişi çıkarma; servis (tekrar atma, yabancı kişi reddi, kişi/proje silme, boş liste); plan uygulama (ekip korunur,
+  baseline ücreti 150); AI kartları (iki kişi, temizleme, eski tek kişilik kart).
+- **Test**: `dotnet build` 0 uyarı/0 hata, `dotnet test` 323/323 yeşil (eski 313 testin beklenen değerleri değişmeden geçti —
+  demo belirlenimliliği ve RQ1 dahil). Uygulama yerelde açıldı (ana sayfa ve Ayarlar 200).
+
+**Varsayımlar**: Birlikte çalışanlar arasında iletişim yükü yok; aynı gün içinde kişiler id sırasıyla iş alır (sonuç
+belirlenimli); ekibin hiç saat ayıramayan üyesi o işin plan satırında atanan olarak görünmez (verideki atama korunur).
+
+**Bilinen sorunlar**: Kişi seçim kutusu tarayıcıda elle tıklanarak denenmedi (oturumda tarayıcı aracı yoktu); bileşen derleniyor
+ve kayıt yolu servis testleriyle doğrulandı. Kullanım kılavuzu belgesi henüz tek kişilik atamayı anlatıyor.
+
+**Sıradaki adım**: Kişi seçimini tarayıcıda denemek; kılavuzun atama paragrafını güncellemek; Faz 9 açık maddeleri.
+
+---
+
 ## 2026-11-14 (26) — Build onarımı: Pkcs güvenlik açığı + LocalSettings test izolasyonu
 
 Kapsam: Faz dışı bakım; kod değişmeden kırılan build'in onarımı. Yeni özellik yok.

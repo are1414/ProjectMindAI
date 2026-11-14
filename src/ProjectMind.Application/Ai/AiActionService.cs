@@ -258,7 +258,8 @@ public sealed class AiActionService(
             case AiTools.AddWorkItem:
             {
                 var p = Parse<AddWorkItemPayload>(input);
-                var assignee = string.IsNullOrWhiteSpace(p.AssigneeName) ? "" : $" · {p.AssigneeName}";
+                var assignees = AssigneeRequest.Names(p.AssigneeNames, p.AssigneeName) ?? [];
+                var assignee = assignees.Count == 0 ? "" : $" · {string.Join(", ", assignees)}";
                 var kind = string.IsNullOrWhiteSpace(p.ParentName) ? "İş ekle" : $"Alt iş ekle ({p.ParentName} altına)";
                 return $"{kind}: {p.Name} · {Format.Name(p.Phase)} · {Format.Name(p.RequiredSkill)} · " +
                        $"{Format.Number(p.EstimatedHours)} saat{assignee}";
@@ -271,7 +272,10 @@ public sealed class AiActionService(
                     ("ad", p.Name), ("açıklama", p.Description), ("faz", p.Phase is { } f ? Format.Name(f) : null),
                     ("beceri", p.RequiredSkill is { } r ? Format.Name(r) : null),
                     ("öncelik", p.Priority is { } pr ? Format.Name(pr) : null), ("efor", Num(p.EstimatedHours)),
-                    ("atanan", p.AssigneeName), ("durum", p.Status is { } st ? Format.Name(st) : null),
+                    ("atanan", AssigneeRequest.Names(p.AssigneeNames, p.AssigneeName) is { } names
+                        ? names.Count == 0 ? "yok (atama kaldırılır)" : string.Join(", ", names)
+                        : null),
+                    ("durum", p.Status is { } st ? Format.Name(st) : null),
                     ("ilerleme", p.PercentComplete is { } pc ? $"%{pc}" : null), ("harcanan saat", Num(p.ActualHours)),
                     ("planlanan başlangıç", Dt(p.PlannedStart)), ("planlanan bitiş", Dt(p.PlannedEnd)),
                     ("üst iş", p.ParentName is null ? null : p.ParentName.Trim().Length == 0 ? "yok (en üst seviye)" : p.ParentName));
@@ -394,7 +398,7 @@ public sealed class AiActionService(
                     RequiredSkill = p.RequiredSkill,
                     Priority = p.Priority ?? Priority.Medium,
                     EstimatedHours = p.EstimatedHours,
-                    AssigneeId = await ResolvePersonAsync(projectId, p.AssigneeName, ct),
+                    AssigneeIds = await ResolvePeopleAsync(projectId, AssigneeRequest.Names(p.AssigneeNames, p.AssigneeName) ?? [], ct),
                     ParentId = string.IsNullOrWhiteSpace(p.ParentName) ? null : await ResolveWorkItemAsync(projectId, p.ParentName, ct)
                 }, ct);
                 return "İş eklendi.";
@@ -409,8 +413,8 @@ public sealed class AiActionService(
                 r.RequiredSkill = p.RequiredSkill ?? r.RequiredSkill;
                 r.Priority = p.Priority ?? r.Priority;
                 r.EstimatedHours = p.EstimatedHours ?? r.EstimatedHours;
-                if (p.AssigneeName is not null)
-                    r.AssigneeId = await ResolvePersonAsync(projectId, p.AssigneeName, ct);
+                if (AssigneeRequest.Names(p.AssigneeNames, p.AssigneeName) is { } assigneeNames)
+                    r.AssigneeIds = await ResolvePeopleAsync(projectId, assigneeNames, ct);
                 r.Status = p.Status ?? r.Status;
                 r.PercentComplete = p.PercentComplete ?? r.PercentComplete;
                 r.ActualHours = p.ActualHours ?? r.ActualHours;
@@ -448,10 +452,16 @@ public sealed class AiActionService(
         }
     }
 
-    private async Task<int?> ResolvePersonAsync(int projectId, string? name, CancellationToken ct)
+    private async Task<List<int>> ResolvePeopleAsync(int projectId, IReadOnlyList<string> names, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(name))
-            return null;
+        var ids = new List<int>();
+        foreach (var name in names)
+            ids.Add(await ResolvePersonAsync(projectId, name, ct));
+        return ids.Distinct().ToList();
+    }
+
+    private async Task<int> ResolvePersonAsync(int projectId, string name, CancellationToken ct)
+    {
         var matches = await db.People.AsNoTracking()
             .Where(p => p.ProjectId == projectId && p.Name == name.Trim())
             .Select(p => p.Id).ToListAsync(ct);

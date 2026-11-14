@@ -118,7 +118,41 @@ else
                                 <span class="editable" @onclick="() => StartEdit(w.Id, Field.Hours, Format.Number(w.EstimatedHours))">@Format.Number(w.EstimatedHours)</span>
                             }
                         </td>
-                        <td>@(row.HasChildren ? "" : Overview.PersonName(w.AssigneeId))</td>
+                        <td class="col-assignees">
+                            @if (!row.HasChildren)
+                            {
+                                <span class="editable" @onclick="() => StartAssign(w)" title="Atamak için tıklayın">@Overview.PersonNames(w.AssigneeIds)</span>
+                                @if (_assigning == w.Id)
+                                {
+                                    <div class="assign-picker" @onkeydown="OnAssignKey">
+                                        @if (Overview.People.Count == 0)
+                                        {
+                                            <p class="muted small">Önce ekibe kişi ekleyin.</p>
+                                        }
+                                        else
+                                        {
+                                            <p class="muted small">Birden çok kişi seçilirse işi birlikte yaparlar.</p>
+                                            @foreach (var person in Overview.People)
+                                            {
+                                                var personId = person.Id;
+                                                <label class="assign-option">
+                                                    <input type="checkbox" checked="@_picked.Contains(personId)" @onchange="e => TogglePick(personId, e)" />
+                                                    @person.Name
+                                                    @if (!person.Skills.HasFlag(w.RequiredSkill))
+                                                    {
+                                                        <span class="muted small">(beceri yok)</span>
+                                                    }
+                                                </label>
+                                            }
+                                        }
+                                        <div class="assign-actions">
+                                            <button class="btn btn-sm btn-primary" disabled="@(_saving || Overview.People.Count == 0)" @onclick="() => SaveAssigneesAsync(w)">Kaydet</button>
+                                            <button class="btn btn-sm" @onclick="CancelAssign">Vazgeç</button>
+                                        </div>
+                                    </div>
+                                }
+                            }
+                        </td>
                         <td>
                             @if (!row.HasChildren)
                             {
@@ -143,7 +177,7 @@ else
                 }
             </tbody>
         </table>
-        <p class="hint">İş adına, efor saatine veya yüzdeye tıklayarak düzenleyin · Enter: kaydet · Esc: vazgeç</p>
+        <p class="hint">İş adına, efor saatine, yüzdeye veya atanan kişilere tıklayarak düzenleyin · Enter: kaydet · Esc: vazgeç</p>
     }
 
     <h2>Bağımlılıklar <span class="count">@Overview.Dependencies.Count</span></h2>
@@ -202,6 +236,8 @@ else
     // Açık olan üst işler; varsayılan: hepsi kapalı (sadece üst seviye görünür, sayfa kısa kalır).
     private readonly HashSet<int> _expanded = [];
     private (int Id, Field Field)? _editing;
+    private int? _assigning;                    // kişi seçimi açık olan iş
+    private readonly HashSet<int> _picked = [];
     private string _editValue = "";
     private string? _error;
     private bool _saving;
@@ -240,6 +276,7 @@ else
     private void StartEdit(int id, Field field, string value)
     {
         _error = null;
+        _assigning = null;
         _editing = (id, field);
         _editValue = value;
     }
@@ -298,7 +335,61 @@ else
     }
 
     private static bool Changed(WorkItemResponse item, WorkItemRequest r) =>
-        r.Name != item.Name || r.EstimatedHours != item.EstimatedHours || r.PercentComplete != item.PercentComplete;
+        r.Name != item.Name || r.EstimatedHours != item.EstimatedHours || r.PercentComplete != item.PercentComplete
+        || !r.AssigneeIds.Order().SequenceEqual(item.AssigneeIds);
+
+    private void StartAssign(WorkItemResponse item)
+    {
+        _error = null;
+        _editing = null;
+        _assigning = item.Id;
+        _picked.Clear();
+        _picked.UnionWith(item.AssigneeIds);
+    }
+
+    private void TogglePick(int personId, ChangeEventArgs e)
+    {
+        if (e.Value is true)
+            _picked.Add(personId);
+        else
+            _picked.Remove(personId);
+    }
+
+    private void CancelAssign() => _assigning = null;
+
+    private void OnAssignKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+            _assigning = null;
+    }
+
+    /// <summary>Seçilen kişileri işe atar (birden çok kişi işi birlikte yapar, D32).</summary>
+    private async Task SaveAssigneesAsync(WorkItemResponse item)
+    {
+        if (_saving)
+            return;
+        _saving = true;
+        try
+        {
+            var request = WorkItemRequest.From(item);
+            request.AssigneeIds = _picked.Order().ToList();
+            if (Changed(item, request))
+            {
+                await Scope.RunAsync<WorkItemService, WorkItemResponse>(
+                    s => s.UpdateAsync(item.ProjectId, item.Id, request, CancellationToken.None));
+                await OnDataChanged.InvokeAsync();
+            }
+            _assigning = null;
+        }
+        catch (BusinessRuleException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
 
     private static decimal ParseNumber(string value, string label) =>
         decimal.TryParse(value.Replace(',', '.'), System.Globalization.NumberStyles.Number,

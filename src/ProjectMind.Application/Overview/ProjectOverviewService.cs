@@ -18,6 +18,10 @@ public sealed record ProjectOverview(
 
     public string PersonName(int? id) => People.FirstOrDefault(p => p.Id == id)?.Name ?? "—";
 
+    /// <summary>Atanan kişilerin adları ("Ali, Ayşe"); kimse yoksa "—".</summary>
+    public string PersonNames(IReadOnlyCollection<int> ids) =>
+        ids.Count == 0 ? "—" : string.Join(", ", ids.Select(id => PersonName(id)));
+
     public string WorkItemName(int id) => WorkItems.FirstOrDefault(w => w.Id == id)?.Name ?? $"#{id}";
 }
 
