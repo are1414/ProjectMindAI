@@ -34,8 +34,11 @@ public sealed record PlanInput(
 /// <summary>Bir kişinin bir işe ayrılan saati.</summary>
 public sealed record ActivityAllocation(int PersonId, decimal Hours);
 
-/// <param name="AssigneeIds">İşi yapan kişiler (kişi id sırasıyla); boşsa iş kişisiz planlandı.</param>
-/// <param name="Allocations">Kişi başına ayrılan saat (doluluk ve maliyet bundan hesaplanır).</param>
+/// <param name="AssigneeIds">
+/// İşin kişileri (kişi id sırasıyla): sabit atamada girdideki tüm atananlar (saat alamayan üye de), otomatik atamada
+/// seçilen kişi; boşsa iş kişisiz planlandı.
+/// </param>
+/// <param name="Allocations">Her kişiye ayrılan saat, 0 olabilir (doluluk ve maliyet bundan hesaplanır).</param>
 public sealed record ScheduledActivity(
     int Id, string Name, int StartDay, int FinishDay, DateOnly Start, DateOnly Finish, IReadOnlyList<int> AssigneeIds,
     decimal Hours, bool IsCritical, decimal SlackDays, IReadOnlyList<ActivityAllocation> Allocations);
@@ -57,8 +60,9 @@ public sealed record PlanResult(
 /// Kaynak kısıtlı seri çizelgeleme (Serial Schedule Generation Scheme):
 /// öncülleri planlanmış işler arasından en küçük CPM geç başlangıcı (LS) olan seçilir (eşitlikte yüksek öncelik, sonra id);
 /// gereken beceriye sahip kişiler arasından işi en erken bitirecek olana günlük kapasitesi aşılmadan yerleştirilir.
-/// İşe sabit atanmış kişiler varsa iş yalnız onlara verilir; birden çok kişi işi birlikte yapar (D32): her gün kişi id
-/// sırasıyla o günkü boş kapasitesi kadar iş alır, iş kalan efor bitince biter.
+/// İşe sabit atanmış kişiler varsa iş yalnız onlara verilir; birden çok kişi işi birlikte yapar (D32): her gün herkes o
+/// günkü boş kapasitesi kadar iş alır; işin bittiği gün kalan saat boş kapasiteyle orantılı bölünür. İşin süresi boyunca
+/// hiç boş saati olmayan üye işte 0 saatle görünür ve uyarı verilir.
 /// Varsayımlar: gün hassasiyeti; bağımlı iş, öncülü bittikten sonraki iş günü başlar; bir kişi aynı gün birden fazla
 /// bağımsız işe kalan kapasitesi kadar çalışabilir; uygun kişi yoksa iş, günde HoursPerDay saatle kişisiz planlanır;
 /// aynı iş içindeki iletişim yükü (Brooks) modellenmez.
@@ -92,7 +96,7 @@ public static class ResourceScheduler
 
             var earliest = next.Predecessors.Select(p => ReadyDay(scheduled[p], activities[p].Hours)).DefaultIfEmpty(0).Max();
 
-            var (team, candidates, fixedUnavailable) = Candidates(next, input.People, warnings);
+            var (team, assigned, candidates, fixedUnavailable) = Candidates(next, input.People, warnings);
             if (candidates.Count == 0)
             {
                 if (!fixedUnavailable)
@@ -116,6 +120,17 @@ public static class ResourceScheduler
             var allocations = Allocate(next.Hours, slot.Start, crew, used);
             foreach (var a in allocations)
                 assignedHours[a.PersonId] += a.Hours;
+
+            if (team)
+            {
+                // Saat alamayan üye de (başka işlerle dolu ya da kapasitesi 0) işte 0 saatle görünür; atama veride durur.
+                foreach (var a in allocations.Where(a => a.Hours == 0 && next.Hours > Epsilon))
+                    warnings.Add($"'{next.Name}' işine atanan {crew.Single(p => p.Id == a.PersonId).Name}, işin " +
+                                 "planlandığı günlerde başka işlerle dolu; iş onsuz planlandı (önceliği veya atamayı gözden geçirin).");
+                allocations = assigned
+                    .Select(p => allocations.SingleOrDefault(a => a.PersonId == p.Id) ?? new ActivityAllocation(p.Id, 0))
+                    .ToList();
+            }
             scheduled[next.Id] = (slot.Start, slot.Finish, allocations);
         }
 
@@ -157,17 +172,18 @@ public static class ResourceScheduler
         hours <= Epsilon ? slot.Finish : slot.Finish + 1;
 
     /// <summary>
-    /// Aday kişiler. Sabit atamada (Team = true) yalnız atananlar: becerisi uymayan için uyarı verilir ama ekipte kalır;
-    /// kapasitesi 0 olan uyarıyla dışarıda kalır. Hiçbiri çalışamıyorsa iş kişisiz planlanır ve bunun nedeni ayrı uyarıyla
-    /// bildirilir (FixedUnavailable = true; "beceriye sahip kişi yok" uyarısı verilmez). Girdide olmayan (ör. senaryoda
-    /// çıkarılmış) kişi yok sayılır; sabit atananların hiçbiri girdide yoksa otomatik atamaya dönülür.
+    /// Aday kişiler. Sabit atamada (Team = true) yalnız atananlar (Assigned: girdide bulunan tüm atananlar): becerisi
+    /// uymayan için uyarı verilir ama ekipte kalır; kapasitesi 0 olan uyarıyla çalışan ekibin (People) dışında kalır.
+    /// Hiçbiri çalışamıyorsa iş kişisiz planlanır ve bunun nedeni ayrı uyarıyla bildirilir (FixedUnavailable = true;
+    /// "beceriye sahip kişi yok" uyarısı verilmez). Girdide olmayan (ör. senaryoda çıkarılmış) kişi yok sayılır; sabit
+    /// atananların hiçbiri girdide yoksa otomatik atamaya dönülür.
     /// </summary>
-    private static (bool Team, List<PlanResource> People, bool FixedUnavailable) Candidates(
+    private static (bool Team, List<PlanResource> Assigned, List<PlanResource> People, bool FixedUnavailable) Candidates(
         PlanActivity activity, IReadOnlyList<PlanResource> people, List<string> warnings)
     {
         var assigned = people.Where(p => activity.FixedAssigneeIds.Contains(p.Id)).OrderBy(p => p.Id).ToList();
         if (assigned.Count == 0)
-            return (false, people.Where(p => p.Skills.HasFlag(activity.Skill) && p.DailyCapacity > 0).ToList(), false);
+            return (false, [], people.Where(p => p.Skills.HasFlag(activity.Skill) && p.DailyCapacity > 0).ToList(), false);
 
         foreach (var person in assigned.Where(p => !p.Skills.HasFlag(activity.Skill)))
             warnings.Add($"'{activity.Name}' işine atanan {person.Name}, '{Format(activity.Skill)}' becerisine sahip değil.");
@@ -179,13 +195,37 @@ public static class ResourceScheduler
                 ? $"'{activity.Name}' işine atanan {person.Name} kişisinin kapasitesi 0; iş kişisiz planlandı " +
                   "(kapasite verin veya atamayı kaldırın)."
                 : $"'{activity.Name}' işine atanan {person.Name} kişisinin kapasitesi 0; iş onsuz planlandı.");
-        return (true, team, team.Count == 0);
+        return (true, assigned, team, team.Count == 0);
     }
 
     /// <summary>
-    /// Ekibin (bir veya daha çok kişi) işi nerede başlayıp bitireceği: her gün kişiler id sırasıyla o günkü boş
-    /// kapasitesi kadar iş alır. Veri değişmez.
+    /// Ekibin bir günde alacağı saat: o günkü toplam boş kapasite kalan işi karşılamıyorsa herkes boş kapasitesi kadar;
+    /// karşılıyorsa (işin son günü) kalan saat boş kapasiteyle orantılı bölünür, yuvarlama farkı son kişiye yazılır
+    /// (toplam = kalan). Boş kapasitesi ε'dan küçük olan o gün çalışmaz. Tek kişide eski yerleştirmeyle aynıdır.
     /// </summary>
+    private static List<(PlanResource Person, decimal Hours)> DayShares(
+        decimal remaining, int day, IReadOnlyList<PlanResource> crew, Dictionary<int, Dictionary<int, decimal>> used)
+    {
+        var free = crew
+            .Select(p => (Person: p, Hours: p.CapacityOn(day) - used[p.Id].GetValueOrDefault(day)))
+            .Where(x => x.Hours > Epsilon)
+            .ToList();
+        var totalFree = free.Sum(x => x.Hours);
+        if (totalFree <= remaining)
+            return free;
+
+        var shares = new List<(PlanResource Person, decimal Hours)>(free.Count);
+        var given = 0m;
+        for (var i = 0; i < free.Count; i++)
+        {
+            var share = i == free.Count - 1 ? remaining - given : remaining * free[i].Hours / totalFree;
+            shares.Add((free[i].Person, share));
+            given += share;
+        }
+        return shares;
+    }
+
+    /// <summary>Ekibin (bir veya daha çok kişi) işi nerede başlayıp bitireceği (<see cref="DayShares"/>). Veri değişmez.</summary>
     private static (int Start, int Finish) Simulate(
         decimal hours, int earliest, IReadOnlyList<PlanResource> crew, Dictionary<int, Dictionary<int, decimal>> used)
     {
@@ -196,20 +236,20 @@ public static class ResourceScheduler
         int? start = null;
         for (var day = earliest; ; day++)
         {
-            foreach (var person in crew)
-            {
-                var free = person.CapacityOn(day) - used[person.Id].GetValueOrDefault(day);
-                if (free <= Epsilon)
-                    continue;
-                start ??= day;
-                remaining -= Math.Min(free, remaining);
-                if (remaining <= Epsilon)
-                    return (start.Value, day);
-            }
+            var shares = DayShares(remaining, day, crew, used);
+            if (shares.Count == 0)
+                continue;
+            start ??= day;
+            remaining -= shares.Sum(s => s.Hours);
+            if (remaining <= Epsilon)
+                return (start.Value, day);
         }
     }
 
-    /// <summary><see cref="Simulate"/> ile aynı yerleştirmeyi kapasiteye yazar; kişi başına ayrılan saati döndürür.</summary>
+    /// <summary>
+    /// <see cref="Simulate"/> ile aynı yerleştirmeyi kapasiteye yazar; ekipteki her kişiye ayrılan saati (0 olabilir)
+    /// kişi id sırasıyla döndürür.
+    /// </summary>
     private static List<ActivityAllocation> Allocate(
         decimal hours, int start, IReadOnlyList<PlanResource> crew, Dictionary<int, Dictionary<int, decimal>> used)
     {
@@ -217,16 +257,11 @@ public static class ResourceScheduler
         var remaining = hours;
         for (var day = start; remaining > Epsilon; day++)
         {
-            foreach (var person in crew)
+            foreach (var (person, share) in DayShares(remaining, day, crew, used))
             {
-                var take = Math.Min(person.CapacityOn(day) - used[person.Id].GetValueOrDefault(day), remaining);
-                if (take <= Epsilon)
-                    continue;
-                used[person.Id][day] = used[person.Id].GetValueOrDefault(day) + take;
-                taken[person.Id] += take;
-                remaining -= take;
-                if (remaining <= Epsilon)
-                    break;
+                used[person.Id][day] = used[person.Id].GetValueOrDefault(day) + share;
+                taken[person.Id] += share;
+                remaining -= share;
             }
         }
 
@@ -234,9 +269,7 @@ public static class ResourceScheduler
         if (remaining > 0 && crew.LastOrDefault(p => taken[p.Id] > 0) is { } last)
             taken[last.Id] += remaining;
 
-        // Süresiz iş (0 saat) de atananlarıyla görünür; ayrılan saati 0'dır.
-        return crew.Where(p => taken[p.Id] > 0 || hours <= Epsilon)
-            .Select(p => new ActivityAllocation(p.Id, taken[p.Id])).ToList();
+        return crew.Select(p => new ActivityAllocation(p.Id, taken[p.Id])).ToList();
     }
 
     private static string Format(Skill skill) => Common.Format.Name(skill);

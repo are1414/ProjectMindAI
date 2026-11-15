@@ -190,10 +190,12 @@ else
             }
             else if (planned.TryGetValue(row.Item.Id, out var a))
             {
-                // Birlikte çalışan kişilerde kişi başı saat de gösterilir (D32).
+                // Birlikte çalışan kişilerde kişi başı saat de gösterilir; saat alamayan üye "katılamadı" ile görünür (D32).
                 var who = a.Allocations.Count == 0 ? "kişi yok"
-                    : a.Allocations.Count == 1 ? people.GetValueOrDefault(a.Allocations[0].PersonId) ?? "?"
-                    : string.Join(", ", a.Allocations.Select(x => $"{people.GetValueOrDefault(x.PersonId) ?? "?"} {Format.Number(x.Hours)} s"));
+                    : a.Allocations.Count == 1 || a.Hours <= 0
+                        ? string.Join(", ", a.Allocations.Select(x => people.GetValueOrDefault(x.PersonId) ?? "?"))
+                        : string.Join(", ", a.Allocations.Select(x => $"{people.GetValueOrDefault(x.PersonId) ?? "?"} " +
+                            (x.Hours > 0 ? $"{Format.Number(x.Hours)} s" : "(katılamadı)")));
                 var css = a.AssigneeIds.Count == 0 ? "bar-unassigned" : a.IsCritical ? "bar-critical" : "bar-normal";
                 yield return new GanttRow(row.Code, row.Item.Name, row.Depth, false, a.StartDay, a.FinishDay, css,
                     $"{Format.Date(a.Start)} → {Format.Date(a.Finish)} · {Format.Number(a.Hours)} saat · {who}" +

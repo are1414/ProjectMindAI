@@ -118,6 +118,8 @@
   - [x] Kullanıcı testi protokolü hazırlandı (`docs/evaluation/KULLANICI_TESTI.md`: kurulum, onam, 5 görev, gözlem formu, analiz planı)
 - [x] (Kullanıcı isteği, 2026-11-15) Bir işe birden çok kişi atama: atananlar işi birlikte yapar (havuzlu çizelgeleme,
   kişi başı saat → doluluk/maliyet/baseline ücreti); sohbet kartlarında `assigneeNames`, İşler tablosunda kişi seçimi (D32)
+- [x] (Kullanıcı isteği, 2026-11-15) Çoklu atama düzeltmesi: işin son günü kalan saat boş kapasiteyle orantılı paylaşılır;
+  saat alamayan üye planda 0 saatle görünür ve uyarı verilir; kullanım kılavuzunun atama bölümleri güncellendi (D32)
 
 ### FAZ 10 — Rapor ve sunum
 - [ ] Rapor bölümleri, sunum, demo videosu

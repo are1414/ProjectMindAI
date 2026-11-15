@@ -167,24 +167,56 @@ public class ResourceSchedulerTests
     public void Busy_team_member_joins_when_free()
     {
         // İş 1 (8 s, Kişi 1) → İş 3 (8 s, Kişi 1) kritik zincir; İş 2 (12 s, Kişi 1 + 2) bolluklu.
-        // Sıra: İş 1 gün 0 (Kişi 1 dolu) → İş 2: gün 0 yalnız Kişi 2 (8 s), gün 1 Kişi 1 kalan 4 s → bitiş gün 1.
-        // İş 3: gün 1'de Kişi 1'in kalan 4 saati + gün 2'de 4 saat.
+        // Sıra: İş 1 gün 0 (Kişi 1 dolu) → İş 2: gün 0 yalnız Kişi 2 (8 s); gün 1 kalan 4 s, ikisi de 8 s boş →
+        // 8:8 orantıyla 2 + 2 s → bitiş gün 1; İş 2'de Kişi 1 2 s, Kişi 2 10 s.
+        // İş 3: gün 1'de Kişi 1'in kalan 6 saati + gün 2'de 2 saat.
         var r = Run([TeamTask(1, 8, [1]), TeamTask(2, 12, [1, 2]), TeamTask(3, 8, [1], Skill.Backend, 1)],
             Person(1, Skill.Backend), Person(2, Skill.Backend));
 
         Assert.Equal((0, 0), Slot(r, 1));
         Assert.Equal((0, 1), Slot(r, 2));
-        Assert.Equal(new Dictionary<int, decimal> { [1] = 4, [2] = 8 }, HoursByPerson(r, 2));
+        Assert.Equal(new Dictionary<int, decimal> { [1] = 2, [2] = 10 }, HoursByPerson(r, 2));
         Assert.Equal((1, 2), Slot(r, 3));
     }
 
     [Fact]
-    public void Team_member_without_skill_works_with_warning_and_zero_capacity_member_is_left_out()
+    public void Short_team_task_is_shared_on_its_last_day_by_free_capacity()
+    {
+        // 8 s, ikisi de günde 8 s boş: gün 0'da 8:8 orantıyla 4 + 4 s (eskiden Kişi 1 tek başına 8 s alıyordu).
+        var even = Run([TeamTask(1, 8, [1, 2])], Person(1, Skill.Backend, cost: 100), Person(2, Skill.Backend, cost: 200));
+        Assert.Equal((0, 0), Slot(even, 1));
+        Assert.Equal(new Dictionary<int, decimal> { [1] = 4, [2] = 4 }, HoursByPerson(even, 1));
+        Assert.Equal(4 * 100 + 4 * 200, even.PlannedCost);
+
+        // 6 s, günde 8 ve 4 s boş: 8:4 orantıyla 6 × 8/12 = 4 ve 6 × 4/12 = 2 s.
+        var uneven = Run([TeamTask(1, 6, [1, 2])], Person(1, Skill.Backend, weekly: 40), Person(2, Skill.Backend, weekly: 20));
+        Assert.Equal((0, 0), Slot(uneven, 1));
+        Assert.Equal(new Dictionary<int, decimal> { [1] = 4, [2] = 2 }, HoursByPerson(uneven, 1));
+    }
+
+    [Fact]
+    public void Fully_busy_team_member_stays_on_the_task_with_zero_hours_and_warning()
+    {
+        // İş 1 (16 s, Kişi 1) önce planlanır (eşit LS ve öncelik, küçük id): Kişi 1 gün 0–1 dolu.
+        // İş 2 (16 s, Kişi 1 + 2): Kişi 1'in bu günlerde boş saati yok → Kişi 2 gün 0–1 8'er saat; Kişi 1 0 saatle görünür.
+        var r = Run([TeamTask(1, 16, [1]), TeamTask(2, 16, [1, 2])], Person(1, Skill.Backend), Person(2, Skill.Backend));
+
+        var task = r.Activities.Single(a => a.Id == 2);
+        Assert.Equal((0, 1), Slot(r, 2));
+        Assert.Equal([1, 2], task.AssigneeIds);
+        Assert.Equal(new Dictionary<int, decimal> { [1] = 0, [2] = 16 }, HoursByPerson(r, 2));
+        Assert.Contains(r.Warnings, w => w.Contains("'İş 2' işine atanan Kişi 1") && w.Contains("başka işlerle dolu"));
+        Assert.All(r.Loads, l => Assert.Equal(16, l.AssignedHours));
+    }
+
+    [Fact]
+    public void Team_member_without_skill_works_with_warning_and_zero_capacity_member_gets_no_hours()
     {
         var r = Run([TeamTask(1, 16, [1, 2])],
             Person(1, Skill.Frontend), Person(2, Skill.Backend, weekly: 0), Person(3, Skill.Backend));
 
-        Assert.Equal([1], r.Activities.Single().AssigneeIds);   // Kişi 3 atanmamış; sabit ekip korunur
+        Assert.Equal([1, 2], r.Activities.Single().AssigneeIds);   // Kişi 3 atanmamış; sabit ekip korunur
+        Assert.Equal(new Dictionary<int, decimal> { [1] = 16, [2] = 0 }, HoursByPerson(r, 1));
         Assert.Equal((0, 1), Slot(r, 1));
         Assert.Contains(r.Warnings, w => w.Contains("Kişi 1, 'Backend' becerisine sahip değil"));
         Assert.Contains(r.Warnings, w => w.Contains("Kişi 2 kişisinin kapasitesi 0; iş onsuz planlandı"));

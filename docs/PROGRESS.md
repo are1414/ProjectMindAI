@@ -4,6 +4,40 @@ Her oturum sonunda en üste yeni kayıt eklenir. Format: yapılanlar · varsayı
 
 ---
 
+## 2026-11-15 (28) — Çoklu atama düzeltmesi: son gün paylaşımı, görünmeyen üye, kılavuz
+
+Kapsam: Kullanıcı isteği (kayıt 27'nin bilinen sorunları); aktif faz (Faz 9) dışında, PLAN'a ayrı madde. Karar: D32 güncellendi.
+
+- **Sorun**: Ekipte her gün kişiler id sırasıyla boş kapasitesi kadar iş alıyordu. İşin son günü kalanı ilk kişi bitirdiği
+  için kısa işte (ör. 8 s, iki kişi × 8 s/gün) ikinci kişi hiç saat almıyordu. Saat alamayan üye (başka işlerle dolu ya da
+  kapasitesi 0) ayrıca plan satırından düşüyordu; atama veride kaldığı hâlde Gantt'ta görünmüyordu.
+- **Planlayıcı (`ResourceScheduler`)**: Günlük paylaşım tek yardımcıda (`DayShares`). Toplam boş kapasite kalan işi
+  karşılamıyorsa herkes boş kapasitesi kadar alır; karşılıyorsa kalan saat boş kapasiteyle orantılı bölünür, yuvarlama farkı
+  son kişiye yazılır (toplam = efor). Başlangıç ve bitiş günleri değişmez; yalnız son günün kişi başı dağılımı değişir. Tek
+  kişide sonuç eskisiyle birebir aynı.
+- **Görünürlük**: Sabit ekipte `AssigneeIds`/`Allocations` girdideki tüm atananları içerir, saat alamayan üye 0 saatle.
+  İşin süresi boyunca boş saati olmayan üye için yeni uyarı: "… işin planlandığı günlerde başka işlerle dolu; iş onsuz
+  planlandı (önceliği veya atamayı gözden geçirin)." Gantt ipucunda bu üye "(katılamadı)" ile görünür. Ekipte kimse
+  çalışamıyorsa iş eskisi gibi kişisiz (`AssigneeIds` boş, sağlık skorunda kişisiz).
+- **Kılavuz** (Claude Docs belgesi): iş bilgileri paragrafı (birden çok kişi), İşler sekmesine "Atanan hücresinden kişi
+  seçimi" maddesi, planlama kurallarına "Birlikte çalışma" maddesi (orantılı paylaşım, ipucu, katılamadı uyarısı), "Planı
+  uygula" adımı (yalnız kimse atanmamış işler doldurulur, atamalar korunur).
+- **Testler**: +2 (kısa ekip işinin aynı gün paylaşımı: 8 s → 4/4 s ve 6 s, 8:4 boş → 4/2 s; tamamen dolu üyenin 0 saatle
+  görünmesi ve uyarı). Güncellenen 2: meşgul üye testi (İş 2'de Kişi 1 2 s, Kişi 2 10 s; İş 3 gün 1–2), kapasitesi 0 olan
+  üye artık 0 saatle ekipte.
+- **Test**: `dotnet build` 0 uyarı/0 hata, `dotnet test` 325/325 yeşil (demo belirlenimliliği ve RQ1 değişmeden).
+
+**Varsayımlar**: Son günde kişiler, o gün boş saatleriyle orantılı çalışır (herkes işin bittiği ana kadar kendi
+uygunluğu oranında katkı verir). Tamamen dolu üye için işi geciktirip onu beklemek yerine iş diğerleriyle bitirilir;
+proje yöneticisi uyarıdan önceliği veya atamayı değiştirebilir.
+
+**Bilinen sorunlar**: Kişi seçim kutusu ve "katılamadı" ipucu tarayıcıda elle denenmedi (oturumda tarayıcı aracı yok);
+bileşenler derleniyor, hesap birim testleriyle doğrulandı.
+
+**Sıradaki adım**: Kişi seçimini ve Gantt ipucunu tarayıcıda denemek; Faz 9 açık maddeleri.
+
+---
+
 ## 2026-11-15 (27) — Bir işe birden çok kişi atama (birlikte çalışma)
 
 Kapsam: Kullanıcı isteği; aktif faz (Faz 9) dışında, kullanıcı onayıyla PLAN'a ayrı madde olarak eklendi. Karar: D32.
