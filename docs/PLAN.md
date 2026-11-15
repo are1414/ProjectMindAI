@@ -120,6 +120,8 @@
   kişi başı saat → doluluk/maliyet/baseline ücreti); sohbet kartlarında `assigneeNames`, İşler tablosunda kişi seçimi (D32)
 - [x] (Kullanıcı isteği, 2026-11-15) Çoklu atama düzeltmesi: işin son günü kalan saat boş kapasiteyle orantılı paylaşılır;
   saat alamayan üye planda 0 saatle görünür ve uyarı verilir; kullanım kılavuzunun atama bölümleri güncellendi (D32)
+- [x] (Kullanıcı isteği, 2026-11-15) Elle yönetim: proje oluştur / düzenle, iş ekle / alt iş / düzenle (durum, harcanan
+  saat dahil) / sil, kişi ekle / düzenle / sil, bağımlılık ekle / kaldır — sohbetsiz, açılır pencere formlarıyla (D33)
 
 ### FAZ 10 — Rapor ve sunum
 - [ ] Rapor bölümleri, sunum, demo videosu
@@ -168,3 +170,5 @@ docs/                          Plan, kararlar, ilerleme
 - Sentetik üreticiye haftalık kontrol noktaları (erken uyarı bugün yalnız %25/%50/%75)
 - Otomatik planlayıcının kimse atanmamış işi birden çok kişiye bölmesi (bugün tek kişi seçer; D32)
 - Görev içi iletişim yükü: aynı işte çalışan kişi sayısı arttıkça verim kaybı katsayısı (Brooks; bugün yok, D32)
+- Eksik iş kontrolünü (kural katmanı) sohbetsiz çalıştıran düğme ve önerileri tek tıkla ekleme (D33)
+- İşler tablosunda Durum hücresinden hızlı durum seçimi (bugün Düzenle penceresinden; D33)

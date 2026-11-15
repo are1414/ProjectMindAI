@@ -1,0 +1,135 @@
+@* Ekip sekmesi: kişi listesi ve elle yönetim (kişi ekle / düzenle / sil, D33). *@
+@inject AppScope Scope
+@inject IJSRuntime JS
+
+<div class="section-head">
+    <h2>Ekip <span class="count">@Overview.People.Count</span></h2>
+    <div class="section-tools">
+        <button class="btn btn-sm btn-primary" @onclick="OpenCreate">+ Kişi ekle</button>
+    </div>
+</div>
+@if (_error is not null)
+{
+    <div class="inline-error">@_error</div>
+}
+@if (Overview.People.Count == 0)
+{
+    <p class="muted">Henüz kişi yok. <strong>+ Kişi ekle</strong> ile ekleyin ya da sohbette ekip üyelerini, becerilerini ve haftalık saatlerini yazın.</p>
+}
+else
+{
+    <table class="table">
+        <thead><tr><th>Ad</th><th>Beceriler</th><th class="num">Kapasite (s/hafta)</th><th class="num">Saatlik maliyet</th><th class="col-actions"></th></tr></thead>
+        <tbody>
+            @foreach (var person in Overview.People)
+            {
+                <tr>
+                    <td>@person.Name</td>
+                    <td>@Format.Flags(person.Skills)</td>
+                    <td class="num">@Format.Number(person.WeeklyCapacityHours)</td>
+                    <td class="num">@Format.Money(person.HourlyCost, Overview.Project.Currency)</td>
+                    <td class="col-actions">
+                        <button class="btn btn-xs" @onclick="() => OpenEdit(person)">Düzenle</button>
+                        <button class="btn btn-xs btn-danger" @onclick="() => DeleteAsync(person)">Sil</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (_form is not null)
+{
+    <Modal Title="@_formTitle" OnClose="CloseForm">
+        <PersonForm Model="_form" Currency="@Overview.Project.Currency" Error="_formError" Saving="_saving"
+                    OnSubmit="SaveFormAsync" OnCancel="CloseForm" />
+    </Modal>
+}
+
+@code {
+    [Parameter, EditorRequired] public ProjectOverview Overview { get; set; } = default!;
+    [Parameter] public EventCallback OnDataChanged { get; set; }
+
+    private PersonRequest? _form;
+    private int? _formPersonId;
+    private string _formTitle = "";
+    private string? _formError;
+    private string? _error;
+    private bool _saving;
+
+    private void OpenCreate()
+    {
+        _error = _formError = null;
+        _form = new PersonRequest();
+        _formPersonId = null;
+        _formTitle = "Yeni kişi";
+    }
+
+    private void OpenEdit(PersonResponse person)
+    {
+        _error = _formError = null;
+        _form = PersonRequest.From(person);
+        _formPersonId = person.Id;
+        _formTitle = $"Kişiyi düzenle: {person.Name}";
+    }
+
+    private void CloseForm()
+    {
+        _form = null;
+        _formError = null;
+    }
+
+    private async Task SaveFormAsync()
+    {
+        if (_form is not { } request || _saving)
+            return;
+        _saving = true;
+        _formError = null;
+        try
+        {
+            var projectId = Overview.Project.Id;
+            if (_formPersonId is { } id)
+                await Scope.RunAsync<PersonService, PersonResponse>(s => s.UpdateAsync(projectId, id, request, CancellationToken.None));
+            else
+                await Scope.RunAsync<PersonService, PersonResponse>(s => s.CreateAsync(projectId, request, CancellationToken.None));
+            _form = null;
+            await OnDataChanged.InvokeAsync();
+        }
+        catch (Exception ex) when (ex is BusinessRuleException or NotFoundException)
+        {
+            _formError = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    /// <summary>Kişi silinince işler kalır; yalnız kişinin atamaları kaldırılır (D32). Onay metni etkilenen iş sayısını söyler.</summary>
+    private async Task DeleteAsync(PersonResponse person)
+    {
+        if (_saving)
+            return;
+        _error = null;
+        var assigned = Overview.WorkItems.Count(w => w.AssigneeIds.Contains(person.Id));
+        var message = assigned > 0
+            ? $"'{person.Name}' silinecek; {assigned} işteki ataması kaldırılır (işler silinmez). Emin misiniz?"
+            : $"'{person.Name}' silinecek. Emin misiniz?";
+        if (!await JS.InvokeAsync<bool>("confirm", message))
+            return;
+        _saving = true;
+        try
+        {
+            await Scope.RunAsync<PersonService>(s => s.DeleteAsync(Overview.Project.Id, person.Id, CancellationToken.None));
+            await OnDataChanged.InvokeAsync();
+        }
+        catch (Exception ex) when (ex is BusinessRuleException or NotFoundException)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

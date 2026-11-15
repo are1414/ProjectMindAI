@@ -175,4 +175,25 @@ public class AiActionServiceTests : ServiceTestBase
         await Assert.ThrowsAsync<BusinessRuleException>(() => _actions.ApplyAsync(proposal.Id, _ct));
         Assert.Empty(Db.Projects);
     }
+
+    /// <summary>Proje formu modeli çağırmaz; çağrılırsa test hata verir.</summary>
+    private sealed class UnusedModel : ChatOnlyModel
+    {
+        public override Task<ChatTurnResult> CompleteTurnAsync(ChatTurnRequest request, IChatToolExecutor tools, CancellationToken ct) =>
+            throw new InvalidOperationException("Model çağrılmamalıydı.");
+    }
+
+    [Fact]
+    public async Task Pending_create_project_card_fails_after_project_was_created_with_the_form()
+    {
+        var proposal = await Propose(AiTools.CreateProject, Project);
+        var manual = await NewChatService(new UnusedModel()).SaveProjectAsync(_sessionId, NewProject(), _ct);
+
+        var result = await _actions.ApplyAsync(proposal.Id, _ct);
+
+        Assert.Equal(AiActionStatus.Failed, result.Status);
+        Assert.Equal("Bu sohbet zaten bir projeye bağlı.", result.ResultMessage);
+        Assert.Equal(manual.Id, Assert.Single(Db.Projects).Id);   // ikinci proje oluşmadı
+        Assert.Equal(manual.Id, (await Db.ChatSessions.AsNoTracking().SingleAsync(s => s.Id == _sessionId)).ProjectId);
+    }
 }

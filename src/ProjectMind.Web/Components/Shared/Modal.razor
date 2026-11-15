@@ -1,0 +1,23 @@
+@* Elle yönetim formlarının açılır penceresi (D33). Esc veya × kapatır; arka plana tıklamak kapatmaz (yazılan veri
+   yanlışlıkla kaybolmasın). *@
+<div class="modal-backdrop">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="@Title" @onkeydown="OnKeyAsync">
+        <div class="modal-head">
+            <h3>@Title</h3>
+            <button type="button" class="modal-close" @onclick="OnClose" aria-label="Kapat">×</button>
+        </div>
+        @ChildContent
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private async Task OnKeyAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+            await OnClose.InvokeAsync();
+    }
+}

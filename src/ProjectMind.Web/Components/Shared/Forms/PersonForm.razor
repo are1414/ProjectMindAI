@@ -1,0 +1,54 @@
+@* Ekip üyesi formu (elle ekleme / düzenleme, D33). Kayıt üst bileşende PersonService ile yapılır. *@
+<EditForm Model="Model" OnValidSubmit="SubmitAsync">
+    <div class="form-grid">
+        <label class="form-field form-wide">Ad soyad
+            <InputText @bind-Value="Model.Name" />
+        </label>
+        <div class="form-field form-wide">Beceriler
+            <div class="check-list">
+                @foreach (var skill in Skills)
+                {
+                    <label>
+                        <input type="checkbox" checked="@Model.Skills.Contains(skill)" @onchange="e => Toggle(skill, e)" />
+                        @Format.Name(skill)
+                    </label>
+                }
+            </div>
+        </div>
+        <label class="form-field">Haftalık kapasite (saat)
+            <InputNumber @bind-Value="Model.WeeklyCapacityHours" min="0" max="168"
+                         ParsingErrorMessage="Haftalık kapasite için geçerli bir sayı girin." />
+        </label>
+        <label class="form-field">Saatlik maliyet (@Currency)
+            <InputNumber @bind-Value="Model.HourlyCost" min="0" ParsingErrorMessage="Saatlik maliyet için geçerli bir sayı girin." />
+        </label>
+    </div>
+    <FormActions Errors="_errors" Error="Error" Saving="Saving" OnCancel="OnCancel" />
+</EditForm>
+
+@code {
+    private static readonly Skill[] Skills = Enum.GetValues<Skill>().Where(s => s != Skill.None).ToArray();
+
+    [Parameter, EditorRequired] public PersonRequest Model { get; set; } = default!;
+    [Parameter] public string Currency { get; set; } = "";
+    [Parameter] public string? Error { get; set; }
+    [Parameter] public bool Saving { get; set; }
+    [Parameter] public EventCallback OnSubmit { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private IReadOnlyList<string> _errors = [];
+
+    private void Toggle(Skill skill, ChangeEventArgs e)
+    {
+        Model.Skills.Remove(skill);
+        if (e.Value is true)
+            Model.Skills.Add(skill);
+    }
+
+    private async Task SubmitAsync()
+    {
+        _errors = RequestValidation.Errors(Model);
+        if (_errors.Count == 0)
+            await OnSubmit.InvokeAsync();
+    }
+}

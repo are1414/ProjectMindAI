@@ -6,10 +6,11 @@ namespace ProjectMind.Application.Projects;
 
 public sealed class ProjectRequest
 {
-    [Display(Name = "Proje adı"), Required(ErrorMessage = "Proje adı zorunludur."), StringLength(200)]
+    [Display(Name = "Proje adı"), Required(ErrorMessage = "Proje adı zorunludur."),
+     StringLength(200, ErrorMessage = "Proje adı en fazla 200 karakter olabilir.")]
     public string Name { get; set; } = "";
 
-    [Display(Name = "Açıklama"), StringLength(2000)]
+    [Display(Name = "Açıklama"), StringLength(2000, ErrorMessage = "Açıklama en fazla 2000 karakter olabilir.")]
     public string? Description { get; set; }
 
     [Display(Name = "Proje tipi")]
@@ -24,13 +25,14 @@ public sealed class ProjectRequest
     [Display(Name = "Hedef bitiş tarihi")]
     public DateOnly TargetEndDate { get; set; }
 
-    [Display(Name = "Bütçe"), Range(0, double.MaxValue)]
+    [Display(Name = "Bütçe"), Range(0, double.MaxValue, ErrorMessage = "Bütçe negatif olamaz.")]
     public decimal Budget { get; set; }
 
-    [Display(Name = "Para birimi"), Required, StringLength(3, MinimumLength = 3)]
+    [Display(Name = "Para birimi"), Required(ErrorMessage = "Para birimi zorunludur."),
+     StringLength(3, MinimumLength = 3, ErrorMessage = "Para birimi 3 harfli kod olmalı (ör. TRY).")]
     public string Currency { get; set; } = "TRY";
 
-    [Display(Name = "Günlük çalışma saati"), Range(1, 24)]
+    [Display(Name = "Günlük çalışma saati"), Range(1, 24, ErrorMessage = "Günlük çalışma saati 1 ile 24 arasında olmalı.")]
     public decimal HoursPerDay { get; set; } = 8;
 
     public static ProjectRequest From(ProjectResponse p) => new()

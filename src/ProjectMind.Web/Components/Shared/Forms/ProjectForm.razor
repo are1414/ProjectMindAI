@@ -1,0 +1,61 @@
+@* Proje bilgileri formu (elle oluşturma / düzenleme, D33). Kayıt üst bileşende ChatService.SaveProjectAsync ile yapılır. *@
+<EditForm Model="Model" OnValidSubmit="SubmitAsync">
+    <div class="form-grid">
+        <label class="form-field form-wide">Proje adı
+            <InputText @bind-Value="Model.Name" />
+        </label>
+        <label class="form-field form-wide">Açıklama
+            <InputTextArea @bind-Value="Model.Description" rows="2" />
+        </label>
+        <label class="form-field">Proje tipi
+            <InputSelect @bind-Value="Model.Type">
+                @foreach (var type in Enum.GetValues<ProjectType>())
+                {
+                    <option value="@type">@Format.Name(type)</option>
+                }
+            </InputSelect>
+        </label>
+        <label class="form-field">Durum
+            <InputSelect @bind-Value="Model.Status">
+                @foreach (var status in Enum.GetValues<ProjectStatus>())
+                {
+                    <option value="@status">@Format.Name(status)</option>
+                }
+            </InputSelect>
+        </label>
+        <label class="form-field">Başlangıç tarihi
+            <InputDate @bind-Value="Model.StartDate" ParsingErrorMessage="Başlangıç için geçerli bir tarih girin." />
+        </label>
+        <label class="form-field">Hedef bitiş tarihi
+            <InputDate @bind-Value="Model.TargetEndDate" ParsingErrorMessage="Hedef bitiş için geçerli bir tarih girin." />
+        </label>
+        <label class="form-field">Bütçe
+            <InputNumber @bind-Value="Model.Budget" min="0" ParsingErrorMessage="Bütçe için geçerli bir sayı girin." />
+        </label>
+        <label class="form-field">Para birimi
+            <InputText @bind-Value="Model.Currency" maxlength="3" />
+        </label>
+        <label class="form-field">Günlük çalışma saati
+            <InputNumber @bind-Value="Model.HoursPerDay" min="1" max="24" step="0.5"
+                         ParsingErrorMessage="Günlük çalışma saati için geçerli bir sayı girin." />
+        </label>
+    </div>
+    <FormActions Errors="_errors" Error="Error" Saving="Saving" OnCancel="OnCancel" />
+</EditForm>
+
+@code {
+    [Parameter, EditorRequired] public ProjectRequest Model { get; set; } = default!;
+    [Parameter] public string? Error { get; set; }
+    [Parameter] public bool Saving { get; set; }
+    [Parameter] public EventCallback OnSubmit { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private IReadOnlyList<string> _errors = [];
+
+    private async Task SubmitAsync()
+    {
+        _errors = RequestValidation.Errors(Model);
+        if (_errors.Count == 0)
+            await OnSubmit.InvokeAsync();
+    }
+}

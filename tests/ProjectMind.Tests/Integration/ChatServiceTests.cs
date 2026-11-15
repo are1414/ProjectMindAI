@@ -1,6 +1,8 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using ProjectMind.Application.Ai;
+using ProjectMind.Application.Common;
+using ProjectMind.Application.Projects;
 using ProjectMind.Domain.Enums;
 
 namespace ProjectMind.Tests.Integration;
@@ -285,5 +287,43 @@ public class ChatServiceTests : ServiceTestBase
         await chat.DeleteSessionAsync(session.Id, deleteProject: true, _ct);
         Assert.Equal(afterClear, Assert.Single(await NewActionService().GetAcceptanceBySourceAsync(_ct)));
         Assert.Empty(Db.ChatSessions);
+    }
+
+    [Fact]
+    public async Task Project_form_creates_and_links_project_then_updates_the_same_project()
+    {
+        var chat = NewChatService(new FailingModel());   // form yolu modeli çağırmaz
+        var session = await chat.CreateSessionAsync(_ct);
+
+        var created = await chat.SaveProjectAsync(session.Id, NewProject(), _ct);
+
+        var linked = await chat.GetSessionAsync(session.Id, _ct);
+        Assert.Equal(created.Id, linked.ProjectId);
+        Assert.Equal("Mobile Banking Modernization", linked.Title);
+
+        var update = ProjectRequest.From(created);
+        update.Name = "Mobil Bankacılık";
+        update.Budget = 9_000_000;
+        var updated = await chat.SaveProjectAsync(session.Id, update, _ct);
+
+        Assert.Equal(created.Id, updated.Id);   // bağlı sohbette yeni proje oluşmaz
+        Assert.Single(Db.Projects);
+        Assert.Equal(9_000_000, updated.Budget);
+        Assert.Equal("Mobil Bankacılık", (await chat.GetSessionAsync(session.Id, _ct)).Title);
+    }
+
+    [Fact]
+    public async Task Project_form_reports_missing_session_and_invalid_dates_without_linking()
+    {
+        var chat = NewChatService(new FailingModel());
+        await Assert.ThrowsAsync<NotFoundException>(() => chat.SaveProjectAsync(999, NewProject(), _ct));
+
+        var session = await chat.CreateSessionAsync(_ct);
+        var request = NewProject();
+        request.TargetEndDate = request.StartDate.AddDays(-1);
+
+        await Assert.ThrowsAsync<BusinessRuleException>(() => chat.SaveProjectAsync(session.Id, request, _ct));
+        Assert.Null((await chat.GetSessionAsync(session.Id, _ct)).ProjectId);
+        Assert.Empty(Db.Projects);
     }
 }

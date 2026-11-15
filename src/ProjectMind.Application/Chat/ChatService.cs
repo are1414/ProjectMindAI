@@ -75,6 +75,23 @@ public sealed class ChatService(
     }
 
     /// <summary>
+    /// Proje formunun kaydı (elle yönetim, D33): sohbet bir projeye bağlı değilse proje oluşturulur ve sohbete bağlanır,
+    /// bağlıysa o proje güncellenir. Sohbet başlığı proje adı olur (create_project / update_project kartlarıyla aynı).
+    /// </summary>
+    public async Task<ProjectResponse> SaveProjectAsync(int sessionId, ProjectRequest request, CancellationToken ct)
+    {
+        var session = await db.ChatSessions.FirstOrDefaultAsync(s => s.Id == sessionId, ct)
+            ?? throw new NotFoundException("Sohbet", sessionId);
+        var project = session.ProjectId is { } projectId
+            ? await projects.UpdateAsync(projectId, request, ct)
+            : await projects.CreateAsync(request, ct);
+        session.ProjectId = project.Id;
+        session.Title = project.Name;
+        await db.SaveChangesAsync(ct);
+        return project;
+    }
+
+    /// <summary>
     /// Sohbeti siler (mesajlar ve bekleyen AI önerileri dahil; karara bağlanmış öneriler sohbetsiz kalır). deleteProject true ise bağlı proje ve tüm verisi de silinir.
     /// Projeye bağlı bir sohbet, proje silinmeden kaldırılamaz (proje listede görünmez olurdu); onun için ClearHistoryAsync.
     /// </summary>

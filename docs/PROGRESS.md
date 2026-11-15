@@ -4,6 +4,59 @@ Her oturum sonunda en üste yeni kayıt eklenir. Format: yapılanlar · varsayı
 
 ---
 
+## 2026-11-15 (29) — Elle yönetim: proje, iş, kişi ve bağımlılık formları
+
+Kapsam: Kullanıcı isteği ("yalnız AI değil elle de yönetim olsun"); aktif faz (Faz 9) dışında, kullanıcı onayıyla PLAN'a
+ayrı madde. Karar: D33 (D17'yi genişletir).
+
+- **İnceleme sonucu (önceki durum)**: Elle yalnız İşler tablosunda ad, efor, yüzde ve atanan düzenlenebiliyordu. Proje,
+  iş ekleme/silme, işin diğer alanları, kişiler ve bağımlılıklar yalnız sohbetten (AI kartları) yönetiliyordu. Servislerin
+  hepsi (Create/Update/Delete) hazır ve test edilmişti; eksik olan arayüzdü.
+- **Arayüz**:
+  - `Modal` (Esc / ×; arka plana tıklamak kapatmaz).
+  - `Forms/ProjectForm`, `WorkItemForm`, `PersonForm`, `FormActions` (Blazor `EditForm`; doğrulama ve servis hataları
+    pencerede).
+  - `WorkPanel`: İşler + Bağımlılıklar ProjectPanel'den olduğu gibi taşındı. Eklenenler:
+    - **+ İş ekle**
+    - Satırda **Düzenle / + Alt iş / Sil**
+    - Bağımlılık ekleme satırı ve **Kaldır**
+  - `TeamPanel`: **+ Kişi ekle**; satırda **Düzenle / Sil**.
+  - `ProjectPanel`: başlıkta **Düzenle**, boş ekranda **Projeyi elle oluştur**. `SessionId` parametresini Workspace geçirir.
+- **İş formu**:
+  - Genel alanlar: ad, açıklama, faz, tek beceri, öncelik, üst iş. Üst iş listesinde işin kendisi ve alt işleri yok.
+  - Yaprak işte ek alanlar: efor, durum, %, harcanan saat ve atananlar (elle durum girişi). "Bitti" seçilince % 100 olur.
+  - Üst işte efor ve ilerleme alt işlerden hesaplandığı için bu alanlar gösterilmez ve doğrulanmaz.
+- **Silme onayı**:
+  - İş: `PreviewDeleteAsync` ile metin değişir: siliniyor ya da baseline'daki ilerleme yüzünden İptal'e alınıyor (D27).
+  - Kişi: atandığı iş sayısı söylenir.
+- **Application**:
+  - `ChatService.SaveProjectAsync`: sohbet bağlı değilse proje oluşturup bağlar, bağlıysa günceller; başlık proje adı olur.
+  - `AiActionService`: sohbet bu arada bağlandıysa create_project kartı uygulanınca "Bu sohbet zaten bir projeye bağlı."
+    hatası verir (ikinci proje ve yetim proje oluşmaz).
+  - `RequestValidation`: DataAnnotations, gizli alan atlama.
+  - DTO `Range`/`StringLength`/`Required` kurallarına Türkçe mesajlar.
+- **Testler (+7)**:
+  - Proje formu: oluşturup bağlama, aynı projeyi güncelleme ve başlık; olmayan sohbet ve geçersiz tarihte bağlamama.
+  - Elle oluşturmadan sonra bekleyen create_project kartının hata vermesi.
+  - Bağımlılığın yalnız kendi projesinde silinmesi (bu yol önceden test edilmiyordu).
+  - `RequestValidation`: Türkçe mesajlar, üst işte gizli alanın atlanması, para birimi ve kapasite.
+- **Test**: `dotnet build` 0 uyarı / 0 hata, `dotnet test` 332/332 yeşil. Kullanıcının Visual Studio'da açık uygulaması Web
+  çıktısını kilitlediği için derleme ayrı `--artifacts-path` ile yapıldı. Bu derlemeyle uygulama 5199 portunda açıldı:
+  ana sayfa, `/settings`, `/chat/1` ve `app.css` 200 döndü; yeni stiller yüklendi.
+- **Paket**: yeni paket yok (yerleşik `EditForm`, `InputSelect`, `InputNumber`, `InputDate`).
+
+**Varsayımlar**:
+- Elle yapılan değişiklikler AI önerisi olmadığından loglanmaz ve kabul oranına girmez.
+- Elle oluşturulan projenin varsayılanları: bugün başlar, 3 ay sürer (form içinde değiştirilebilir), tipi "Diğer".
+- Planlanan tarihler formda yok; "Planı uygula" yazar, mevcut değerler korunur.
+
+**Bilinen sorunlar**: Formlar tarayıcıda elle tıklanarak denenmedi (oturumda tarayıcı aracı yok, sayfalar ön render
+edilmediği için HTTP ile bileşen çıktısı görülemiyor). Derleme ve servis testleri temiz. Kullanıcıya tıklama listesi verildi.
+
+**Sıradaki adım**: Uygulamayı yeniden başlatıp formları denemek (liste PROGRESS 29 / oturum raporu); Faz 9 açık maddeleri.
+
+---
+
 ## 2026-11-15 (28) — Çoklu atama düzeltmesi: son gün paylaşımı, görünmeyen üye, kılavuz
 
 Kapsam: Kullanıcı isteği (kayıt 27'nin bilinen sorunları); aktif faz (Faz 9) dışında, PLAN'a ayrı madde. Karar: D32 güncellendi.

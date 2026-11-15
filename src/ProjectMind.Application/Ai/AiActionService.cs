@@ -327,6 +327,9 @@ public sealed class AiActionService(
 
         if (action.ToolName == AiTools.CreateProject)
         {
+            // Sohbet öneriden sonra (ör. proje formuyla, D33) bir projeye bağlandıysa ikinci proje oluşturulmaz.
+            if (session.ProjectId is not null)
+                throw new BusinessRuleException("Bu sohbet zaten bir projeye bağlı.");
             var p = Parse<CreateProjectPayload>(input);
             var created = await projects.CreateAsync(new ProjectRequest
             {

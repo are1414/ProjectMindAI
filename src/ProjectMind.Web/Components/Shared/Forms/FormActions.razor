@@ -1,0 +1,31 @@
+@* Formların ortak alt kısmı: doğrulama ve servis hataları, Kaydet / Vazgeç. *@
+<ValidationSummary />
+@if (Errors.Count > 0 || Error is not null)
+{
+    <ul class="form-errors">
+        @foreach (var message in Errors)
+        {
+            <li>@message</li>
+        }
+        @if (Error is not null)
+        {
+            <li>@Error</li>
+        }
+    </ul>
+}
+<div class="modal-actions">
+    <button type="submit" class="btn btn-primary" disabled="@Saving">@(Saving ? "Kaydediliyor…" : SubmitText)</button>
+    <button type="button" class="btn" @onclick="OnCancel">Vazgeç</button>
+</div>
+
+@code {
+    /// <summary>Formun kendi doğrulama mesajları (<see cref="RequestValidation"/>).</summary>
+    [Parameter] public IReadOnlyList<string> Errors { get; set; } = [];
+
+    /// <summary>Servisin iş kuralı mesajı (BusinessRuleException).</summary>
+    [Parameter] public string? Error { get; set; }
+
+    [Parameter] public bool Saving { get; set; }
+    [Parameter] public string SubmitText { get; set; } = "Kaydet";
+    [Parameter] public EventCallback OnCancel { get; set; }
+}

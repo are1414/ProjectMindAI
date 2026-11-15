@@ -1,0 +1,524 @@
+@* İşler sekmesi: WBS ağacı, hücre içi düzenleme ve elle yönetim (iş ekle / alt iş / düzenle / sil, bağımlılıklar; D33). *@
+@inject AppScope Scope
+@inject IJSRuntime JS
+
+<div class="section-head">
+    <h2>İşler <span class="count">@Overview.WorkItems.Count</span></h2>
+    <div class="section-tools">
+        @if (Overview.WorkItems.Any(w => w.ParentId is not null))
+        {
+            <button class="btn btn-sm" @onclick="ExpandAll">Tümünü aç</button>
+            <button class="btn btn-sm" @onclick="CollapseAll">Tümünü kapat</button>
+        }
+        <button class="btn btn-sm btn-primary" @onclick="() => OpenCreate(null)">+ İş ekle</button>
+    </div>
+</div>
+@if (_error is not null)
+{
+    <div class="inline-error">@_error</div>
+}
+@if (Overview.WorkItems.Count == 0)
+{
+    <p class="muted">Henüz iş yok. <strong>+ İş ekle</strong> ile ekleyin ya da sohbette yapılacak işleri anlatın. İşler alt işlere bölünebilir: "Backend işinin altına Login API ekle".</p>
+}
+else
+{
+    <table class="table table-compact">
+        <thead>
+            <tr><th class="col-wbs">WBS</th><th>İş</th><th>Beceri</th><th>Öncelik</th><th class="num">Efor (s)</th><th>Atanan</th><th>Durum</th><th class="num">%</th><th class="col-actions"></th></tr>
+        </thead>
+        <tbody>
+            @foreach (var row in VisibleRows())
+            {
+                var w = row.Item;
+                <tr class="@(row.HasChildren ? "row-parent" : "")" title="@Format.Name(w.Phase)">
+                    <td class="col-wbs muted">@row.Code</td>
+                    <td>
+                        <span class="tree-name" style="padding-left:@(row.Depth * 1.1)rem">
+                            @if (row.HasChildren)
+                            {
+                                <button class="tree-toggle" @onclick="() => Toggle(w.Id)" title="@(IsExpanded(w.Id) ? "Daralt" : "Genişlet")">@(IsExpanded(w.Id) ? "−" : "+")</button>
+                            }
+                            else
+                            {
+                                <span class="tree-toggle-space"></span>
+                            }
+                            @if (IsEditing(w.Id, Field.Name))
+                            {
+                                <input class="cell-input cell-input-wide" @bind="_editValue" @bind:event="oninput" @onkeydown="e => OnKeyAsync(e, w)" @onfocusout="() => SaveAsync(w)" autofocus />
+                            }
+                            else
+                            {
+                                <span class="editable" @onclick="() => StartEdit(w.Id, Field.Name, w.Name)" title="Düzenlemek için tıklayın">@w.Name</span>
+                            }
+                        </span>
+                    </td>
+                    <td>@Format.Name(w.RequiredSkill)</td>
+                    <td>@Format.Name(w.Priority)</td>
+                    <td class="num">
+                        @if (row.HasChildren)
+                        {
+                            <span title="Alt işlerin toplamı">@Format.Number(row.RollupHours)</span>
+                        }
+                        else if (IsEditing(w.Id, Field.Hours))
+                        {
+                            <input class="cell-input" @bind="_editValue" @bind:event="oninput" @onkeydown="e => OnKeyAsync(e, w)" @onfocusout="() => SaveAsync(w)" autofocus />
+                        }
+                        else
+                        {
+                            <span class="editable" @onclick="() => StartEdit(w.Id, Field.Hours, Format.Number(w.EstimatedHours))">@Format.Number(w.EstimatedHours)</span>
+                        }
+                    </td>
+                    <td class="col-assignees">
+                        @if (!row.HasChildren)
+                        {
+                            <span class="editable" @onclick="() => StartAssign(w)" title="Atamak için tıklayın">@Overview.PersonNames(w.AssigneeIds)</span>
+                            @if (_assigning == w.Id)
+                            {
+                                <div class="assign-picker" @onkeydown="OnAssignKey">
+                                    @if (Overview.People.Count == 0)
+                                    {
+                                        <p class="muted small">Önce ekibe kişi ekleyin.</p>
+                                    }
+                                    else
+                                    {
+                                        <p class="muted small">Birden çok kişi seçilirse işi birlikte yaparlar.</p>
+                                        @foreach (var person in Overview.People)
+                                        {
+                                            var personId = person.Id;
+                                            <label class="assign-option">
+                                                <input type="checkbox" checked="@_picked.Contains(personId)" @onchange="e => TogglePick(personId, e)" />
+                                                @person.Name
+                                                @if (!person.Skills.HasFlag(w.RequiredSkill))
+                                                {
+                                                    <span class="muted small">(beceri yok)</span>
+                                                }
+                                            </label>
+                                        }
+                                    }
+                                    <div class="assign-actions">
+                                        <button class="btn btn-sm btn-primary" disabled="@(_saving || Overview.People.Count == 0)" @onclick="() => SaveAssigneesAsync(w)">Kaydet</button>
+                                        <button class="btn btn-sm" @onclick="CancelAssign">Vazgeç</button>
+                                    </div>
+                                </div>
+                            }
+                        }
+                    </td>
+                    <td>
+                        @if (!row.HasChildren)
+                        {
+                            <span class="status status-@w.Status.ToString().ToLowerInvariant()">@Format.Name(w.Status)</span>
+                        }
+                    </td>
+                    <td class="num">
+                        @if (row.HasChildren)
+                        {
+                            <span title="Alt işlerin efora göre ağırlıklı ortalaması">@Format.Number(row.RollupPercent)</span>
+                        }
+                        else if (IsEditing(w.Id, Field.Percent))
+                        {
+                            <input class="cell-input" @bind="_editValue" @bind:event="oninput" @onkeydown="e => OnKeyAsync(e, w)" @onfocusout="() => SaveAsync(w)" autofocus />
+                        }
+                        else
+                        {
+                            <span class="editable" @onclick="() => StartEdit(w.Id, Field.Percent, w.PercentComplete.ToString())">@w.PercentComplete</span>
+                        }
+                    </td>
+                    <td class="col-actions">
+                        <button class="btn btn-xs" @onclick="() => OpenEdit(row)" title="Tüm alanları düzenle (durum, harcanan saat…)">Düzenle</button>
+                        <button class="btn btn-xs" @onclick="() => OpenCreate(w)" title="Bu işin altına alt iş ekle">+ Alt iş</button>
+                        <button class="btn btn-xs btn-danger" @onclick="() => DeleteAsync(row)" title="İşi sil">Sil</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+    <p class="hint">İş adına, efor saatine, yüzdeye veya atanan kişilere tıklayarak düzenleyin · Enter: kaydet · Esc: vazgeç · Diğer alanlar için <strong>Düzenle</strong></p>
+}
+
+<h2>Bağımlılıklar <span class="count">@Overview.Dependencies.Count</span></h2>
+@if (_depError is not null)
+{
+    <div class="inline-error">@_depError</div>
+}
+@if (Overview.Dependencies.Count == 0)
+{
+    <p class="muted">Bağımlılık yok. Aşağıdan ekleyin ya da sohbette yazın. Örn: "Backend bitmeden test başlamasın."</p>
+}
+else
+{
+    <ul class="deps">
+        @foreach (var d in Overview.Dependencies)
+        {
+            var dependencyId = d.Id;
+            <li>
+                @Overview.WorkItemName(d.PredecessorId) <span class="muted">→</span> @Overview.WorkItemName(d.SuccessorId)
+                <button class="btn btn-xs" disabled="@_saving" @onclick="() => RemoveDependencyAsync(dependencyId)" title="Bağımlılığı kaldır">Kaldır</button>
+            </li>
+        }
+    </ul>
+}
+@if (Overview.WorkItems.Count >= MinItemsForDependency)
+{
+    <div class="dep-add">
+        <select @bind="_depFrom" aria-label="Önce bitmesi gereken iş">
+            <option value="">Önce bitmesi gereken iş…</option>
+            @foreach (var row in Overview.WorkItemTreeRows)
+            {
+                <option value="@row.Item.Id">@($"{row.Code} {row.Item.Name}")</option>
+            }
+        </select>
+        <span class="muted">→</span>
+        <select @bind="_depTo" aria-label="Sonra başlayacak iş">
+            <option value="">Sonra başlayacak iş…</option>
+            @foreach (var row in Overview.WorkItemTreeRows)
+            {
+                <option value="@row.Item.Id">@($"{row.Code} {row.Item.Name}")</option>
+            }
+        </select>
+        <button class="btn btn-sm" disabled="@(_saving || _depFrom is null || _depTo is null)" @onclick="AddDependencyAsync">Bağımlılık ekle</button>
+    </div>
+}
+
+@if (_form is not null)
+{
+    <Modal Title="@_formTitle" OnClose="CloseForm">
+        <WorkItemForm Model="_form" Overview="Overview" ItemId="_formItemId" IsParent="_formIsParent"
+                      Error="_formError" Saving="_saving" OnSubmit="SaveFormAsync" OnCancel="CloseForm" />
+    </Modal>
+}
+
+@code {
+    [Parameter, EditorRequired] public ProjectOverview Overview { get; set; } = default!;
+    [Parameter] public EventCallback OnDataChanged { get; set; }
+
+    private const int MinItemsForDependency = 2;
+
+    private enum Field { Name, Hours, Percent }
+
+    // Açık olan üst işler; varsayılan: hepsi kapalı (sadece üst seviye görünür, sayfa kısa kalır).
+    private readonly HashSet<int> _expanded = [];
+    private (int Id, Field Field)? _editing;
+    private int? _assigning;                    // kişi seçimi açık olan iş
+    private readonly HashSet<int> _picked = [];
+    private string _editValue = "";
+    private string? _error;
+    private bool _saving;
+
+    // Elle yönetim formu (D33)
+    private WorkItemRequest? _form;
+    private int? _formItemId;
+    private bool _formIsParent;
+    private string _formTitle = "";
+    private string? _formError;
+
+    // Bağımlılık ekleme
+    private int? _depFrom;
+    private int? _depTo;
+    private string? _depError;
+
+    private bool IsExpanded(int id) => _expanded.Contains(id);
+
+    private void Toggle(int id)
+    {
+        if (!_expanded.Remove(id))
+            _expanded.Add(id);
+    }
+
+    private void ExpandAll()
+    {
+        foreach (var row in Overview.WorkItemTreeRows.Where(r => r.HasChildren))
+            _expanded.Add(row.Item.Id);
+    }
+
+    private void CollapseAll() => _expanded.Clear();
+
+    /// <summary>Kapalı bir üst işin altındaki satırlar gizlenir.</summary>
+    private IEnumerable<WorkItemTreeRow> VisibleRows()
+    {
+        int? hiddenBelow = null;
+        foreach (var row in Overview.WorkItemTreeRows)
+        {
+            if (hiddenBelow is { } depth && row.Depth > depth)
+                continue;
+            hiddenBelow = row.HasChildren && !IsExpanded(row.Item.Id) ? row.Depth : null;
+            yield return row;
+        }
+    }
+
+    private bool IsEditing(int id, Field field) => _editing == (id, field);
+
+    private void StartEdit(int id, Field field, string value)
+    {
+        _error = null;
+        _assigning = null;
+        _editing = (id, field);
+        _editValue = value;
+    }
+
+    private async Task OnKeyAsync(KeyboardEventArgs e, WorkItemResponse item)
+    {
+        if (e.Key == "Escape")
+            _editing = null;
+        else if (e.Key == "Enter")
+            await SaveAsync(item);
+    }
+
+    private async Task SaveAsync(WorkItemResponse item)
+    {
+        if (_editing is not { } editing || editing.Id != item.Id || _saving)
+            return;
+        _saving = true;
+        try
+        {
+            var request = WorkItemRequest.From(item);
+            var value = _editValue.Trim();
+            switch (editing.Field)
+            {
+                case Field.Name:
+                    if (value.Length == 0)
+                        throw new BusinessRuleException("İş adı boş olamaz.");
+                    request.Name = value;
+                    break;
+                case Field.Hours:
+                    request.EstimatedHours = ParseNumber(value, "Efor");
+                    break;
+                case Field.Percent:
+                    var percent = ParseNumber(value, "Yüzde");
+                    if (percent is < 0 or > 100)
+                        throw new BusinessRuleException("Yüzde 0 ile 100 arasında olmalı.");
+                    request.PercentComplete = (int)Math.Round(percent);
+                    break;
+            }
+
+            if (Changed(item, request))
+            {
+                await Scope.RunAsync<WorkItemService, WorkItemResponse>(
+                    s => s.UpdateAsync(item.ProjectId, item.Id, request, CancellationToken.None));
+                await OnDataChanged.InvokeAsync();
+            }
+            _editing = null;
+        }
+        catch (BusinessRuleException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private static bool Changed(WorkItemResponse item, WorkItemRequest r) =>
+        r.Name != item.Name || r.EstimatedHours != item.EstimatedHours || r.PercentComplete != item.PercentComplete
+        || !r.AssigneeIds.Order().SequenceEqual(item.AssigneeIds);
+
+    private void StartAssign(WorkItemResponse item)
+    {
+        _error = null;
+        _editing = null;
+        _assigning = item.Id;
+        _picked.Clear();
+        _picked.UnionWith(item.AssigneeIds);
+    }
+
+    private void TogglePick(int personId, ChangeEventArgs e)
+    {
+        if (e.Value is true)
+            _picked.Add(personId);
+        else
+            _picked.Remove(personId);
+    }
+
+    private void CancelAssign() => _assigning = null;
+
+    private void OnAssignKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+            _assigning = null;
+    }
+
+    /// <summary>Seçilen kişileri işe atar (birden çok kişi işi birlikte yapar, D32).</summary>
+    private async Task SaveAssigneesAsync(WorkItemResponse item)
+    {
+        if (_saving)
+            return;
+        _saving = true;
+        try
+        {
+            var request = WorkItemRequest.From(item);
+            request.AssigneeIds = _picked.Order().ToList();
+            if (Changed(item, request))
+            {
+                await Scope.RunAsync<WorkItemService, WorkItemResponse>(
+                    s => s.UpdateAsync(item.ProjectId, item.Id, request, CancellationToken.None));
+                await OnDataChanged.InvokeAsync();
+            }
+            _assigning = null;
+        }
+        catch (BusinessRuleException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    // ---- Elle yönetim: iş formu ve silme (D33) ----
+
+    /// <summary>Yeni iş formu; parent verilirse alt iş olarak (fazı ve becerisi üst işten gelir).</summary>
+    private void OpenCreate(WorkItemResponse? parent)
+    {
+        CloseInlineEditors();
+        _form = new WorkItemRequest { ParentId = parent?.Id };
+        if (parent is not null)
+        {
+            _form.Phase = parent.Phase;
+            _form.RequiredSkill = parent.RequiredSkill;
+        }
+        _formItemId = null;
+        _formIsParent = false;
+        _formTitle = parent is null ? "Yeni iş" : $"Alt iş ekle: {parent.Name}";
+    }
+
+    private void OpenEdit(WorkItemTreeRow row)
+    {
+        CloseInlineEditors();
+        _form = WorkItemRequest.From(row.Item);
+        _formItemId = row.Item.Id;
+        _formIsParent = row.HasChildren;
+        _formTitle = $"İşi düzenle: {row.Item.Name}";
+    }
+
+    private void CloseInlineEditors()
+    {
+        _error = null;
+        _formError = null;
+        _editing = null;
+        _assigning = null;
+    }
+
+    private void CloseForm()
+    {
+        _form = null;
+        _formError = null;
+    }
+
+    private async Task SaveFormAsync()
+    {
+        if (_form is not { } request || _saving)
+            return;
+        _saving = true;
+        _formError = null;
+        try
+        {
+            var projectId = Overview.Project.Id;
+            if (_formItemId is { } id)
+                await Scope.RunAsync<WorkItemService, WorkItemResponse>(s => s.UpdateAsync(projectId, id, request, CancellationToken.None));
+            else
+                await Scope.RunAsync<WorkItemService, WorkItemResponse>(s => s.CreateAsync(projectId, request, CancellationToken.None));
+            if (request.ParentId is { } parentId)
+                _expanded.Add(parentId);   // yeni / taşınan alt iş görünsün
+            _form = null;
+            await OnDataChanged.InvokeAsync();
+        }
+        catch (Exception ex) when (ex is BusinessRuleException or NotFoundException)
+        {
+            _formError = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    /// <summary>
+    /// Silmeden önce servis ne olacağını söyler: iş (alt işleri ve bağımlılıklarıyla) silinir ya da baseline'da ilerlemesi
+    /// olduğu için İptal'e alınır (D27). Onay metni buna göre değişir.
+    /// </summary>
+    private async Task DeleteAsync(WorkItemTreeRow row)
+    {
+        if (_saving)
+            return;
+        CloseInlineEditors();
+        var item = row.Item;
+        _saving = true;
+        try
+        {
+            var removal = await Scope.RunAsync<WorkItemService, WorkItemRemoval>(
+                s => s.PreviewDeleteAsync(item.ProjectId, item.Id, CancellationToken.None));
+            var message = removal == WorkItemRemoval.Cancelled
+                ? $"'{item.Name}' son baseline'da ve ilerlemesi var; silinmez, bitmemiş kısmı İptal durumuna alınır (kapsam dışı sayılır). Devam edilsin mi?"
+                : row.HasChildren
+                    ? $"'{item.Name}', tüm alt işleri ve bunlara bağlı bağımlılıklar silinecek. Emin misiniz?"
+                    : $"'{item.Name}' ve bağlı bağımlılıkları silinecek. Emin misiniz?";
+            if (!await JS.InvokeAsync<bool>("confirm", message))
+                return;
+            await Scope.RunAsync<WorkItemService, WorkItemRemoval>(s => s.DeleteAsync(item.ProjectId, item.Id, CancellationToken.None));
+            await OnDataChanged.InvokeAsync();
+        }
+        catch (Exception ex) when (ex is BusinessRuleException or NotFoundException)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    // ---- Bağımlılıklar ----
+
+    private async Task AddDependencyAsync()
+    {
+        if (_depFrom is not { } from || _depTo is not { } to || _saving)
+            return;
+        _saving = true;
+        _depError = null;
+        try
+        {
+            var request = new DependencyRequest { PredecessorId = from, SuccessorId = to };
+            await Scope.RunAsync<DependencyService, DependencyResponse>(
+                s => s.CreateAsync(Overview.Project.Id, request, CancellationToken.None));
+            _depFrom = _depTo = null;
+            await OnDataChanged.InvokeAsync();
+        }
+        catch (Exception ex) when (ex is BusinessRuleException or NotFoundException)
+        {
+            _depError = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task RemoveDependencyAsync(int dependencyId)
+    {
+        if (_saving)
+            return;
+        _saving = true;
+        _depError = null;
+        try
+        {
+            await Scope.RunAsync<DependencyService>(s => s.DeleteAsync(Overview.Project.Id, dependencyId, CancellationToken.None));
+            await OnDataChanged.InvokeAsync();
+        }
+        catch (NotFoundException ex)
+        {
+            _depError = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private static decimal ParseNumber(string value, string label) =>
+        decimal.TryParse(value.Replace(',', '.'), System.Globalization.NumberStyles.Number,
+            System.Globalization.CultureInfo.InvariantCulture, out var number) && number >= 0
+            ? number
+            : throw new BusinessRuleException($"{label} için geçerli bir sayı girin.");
+}

@@ -188,6 +188,22 @@ public class ServiceTests : ServiceTestBase
         Assert.DoesNotContain(Db.People, p => p.ProjectId == project.Id);
     }
 
+    [Fact]
+    public async Task Dependency_is_removed_only_within_its_own_project()
+    {
+        var p1 = await _projects.CreateAsync(NewProject(), _ct);
+        var p2 = await _projects.CreateAsync(NewProject(), _ct);
+        var a = await _workItems.CreateAsync(p1.Id, WorkItem("A", Skill.Backend, null), _ct);
+        var b = await _workItems.CreateAsync(p1.Id, WorkItem("B", Skill.Backend, null), _ct);
+        var dependency = await _dependencies.CreateAsync(p1.Id, new DependencyRequest { PredecessorId = a.Id, SuccessorId = b.Id }, _ct);
+
+        await Assert.ThrowsAsync<NotFoundException>(() => _dependencies.DeleteAsync(p2.Id, dependency.Id, _ct));
+        await _dependencies.DeleteAsync(p1.Id, dependency.Id, _ct);
+
+        Assert.Empty(await _dependencies.ListAsync(p1.Id, _ct));
+        Assert.Equal(2, (await _workItems.ListAsync(p1.Id, _ct)).Count);   // işler kalır
+    }
+
     private static WorkItemRequest WorkItem(string name, Skill skill, int? assigneeId) => new()
     {
         Name = name, RequiredSkill = skill, EstimatedHours = 16, AssigneeIds = assigneeId is { } id ? [id] : []

@@ -1,0 +1,148 @@
+@* İş formu (elle ekleme / düzenleme / durum girişi, D33). Kayıt üst bileşende WorkItemService ile yapılır.
+   Üst işin eforu ve ilerlemesi alt işlerinden hesaplandığı için bu alanlar yalnız yaprak işte görünür. *@
+<EditForm Model="Model" OnValidSubmit="SubmitAsync">
+    <div class="form-grid">
+        <label class="form-field form-wide">İş adı
+            <InputText @bind-Value="Model.Name" />
+        </label>
+        <label class="form-field form-wide">Açıklama
+            <InputTextArea @bind-Value="Model.Description" rows="2" />
+        </label>
+        <label class="form-field">Faz
+            <InputSelect @bind-Value="Model.Phase">
+                @foreach (var phase in Enum.GetValues<WorkPhase>())
+                {
+                    <option value="@phase">@Format.Name(phase)</option>
+                }
+            </InputSelect>
+        </label>
+        <label class="form-field">Gereken beceri
+            <InputSelect @bind-Value="Model.RequiredSkill">
+                @foreach (var skill in SingleSkills)
+                {
+                    <option value="@skill">@Format.Name(skill)</option>
+                }
+            </InputSelect>
+        </label>
+        <label class="form-field">Öncelik
+            <InputSelect @bind-Value="Model.Priority">
+                @foreach (var priority in Enum.GetValues<Priority>())
+                {
+                    <option value="@priority">@Format.Name(priority)</option>
+                }
+            </InputSelect>
+        </label>
+        <label class="form-field">Üst iş
+            <InputSelect @bind-Value="Model.ParentId">
+                <option value="">— (en üst seviye)</option>
+                @foreach (var row in ParentOptions())
+                {
+                    <option value="@row.Item.Id">@($"{row.Code} {row.Item.Name}")</option>
+                }
+            </InputSelect>
+        </label>
+
+        @if (IsParent)
+        {
+            <p class="form-note muted small">Bu işin alt işleri var: eforu, ilerlemesi ve kişileri alt işlerinden hesaplanır.</p>
+        }
+        else
+        {
+            <label class="form-field">Tahmini efor (saat)
+                <InputNumber @bind-Value="Model.EstimatedHours" min="0.5" step="0.5" ParsingErrorMessage="Efor için geçerli bir sayı girin." />
+            </label>
+            <label class="form-field">Durum
+                <InputSelect @bind-Value="Model.Status" @bind-Value:after="OnStatusChanged">
+                    @foreach (var status in Enum.GetValues<WorkItemStatus>())
+                    {
+                        <option value="@status">@Format.Name(status)</option>
+                    }
+                </InputSelect>
+            </label>
+            <label class="form-field">Tamamlanma (%)
+                <InputNumber @bind-Value="Model.PercentComplete" min="0" max="100" ParsingErrorMessage="Tamamlanma için geçerli bir sayı girin." />
+            </label>
+            <label class="form-field">Harcanan saat
+                <InputNumber @bind-Value="Model.ActualHours" min="0" step="0.5" ParsingErrorMessage="Harcanan saat için geçerli bir sayı girin." />
+            </label>
+            <div class="form-field form-wide">Atanan kişiler <span class="small">(birden çok kişi işi birlikte yapar)</span>
+                @if (Overview.People.Count == 0)
+                {
+                    <span class="small">Önce ekibe kişi ekleyin.</span>
+                }
+                else
+                {
+                    <div class="check-list">
+                        @foreach (var person in Overview.People)
+                        {
+                            var personId = person.Id;
+                            <label>
+                                <input type="checkbox" checked="@Model.AssigneeIds.Contains(personId)" @onchange="e => TogglePerson(personId, e)" />
+                                @person.Name
+                                @if (!person.Skills.HasFlag(Model.RequiredSkill))
+                                {
+                                    <span class="muted small">(beceri yok)</span>
+                                }
+                            </label>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    </div>
+    <FormActions Errors="_errors" Error="Error" Saving="Saving" OnCancel="OnCancel" />
+</EditForm>
+
+@code {
+    private static readonly Skill[] SingleSkills = Enum.GetValues<Skill>().Where(SkillRules.IsSingle).ToArray();
+
+    /// <summary>Üst işte formda görünmeyen (alt işlerden hesaplanan) alanlar doğrulanmaz.</summary>
+    private static readonly string[] ParentHiddenFields =
+        [nameof(WorkItemRequest.EstimatedHours), nameof(WorkItemRequest.PercentComplete), nameof(WorkItemRequest.ActualHours)];
+
+    private const int FullyComplete = 100;
+
+    [Parameter, EditorRequired] public WorkItemRequest Model { get; set; } = default!;
+    [Parameter, EditorRequired] public ProjectOverview Overview { get; set; } = default!;
+
+    /// <summary>Düzenlenen işin id'si (yeni işte boş); üst iş listesinden kendisi ve alt işleri çıkarılır.</summary>
+    [Parameter] public int? ItemId { get; set; }
+
+    [Parameter] public bool IsParent { get; set; }
+    [Parameter] public string? Error { get; set; }
+    [Parameter] public bool Saving { get; set; }
+    [Parameter] public EventCallback OnSubmit { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private IReadOnlyList<string> _errors = [];
+
+    private IEnumerable<WorkItemTreeRow> ParentOptions()
+    {
+        if (ItemId is not { } id)
+            return Overview.WorkItemTreeRows;
+        var excluded = WorkItemTree.SubtreeIds(Overview.WorkItems.ToDictionary(w => w.Id, w => w.ParentId), id);
+        return Overview.WorkItemTreeRows.Where(r => !excluded.Contains(r.Item.Id));
+    }
+
+    /// <summary>"Bitti" seçilince ilerleme %100 yapılır (servis kuralı: tamamlanan iş %100 olmalı).</summary>
+    private void OnStatusChanged()
+    {
+        if (Model.Status == WorkItemStatus.Done)
+            Model.PercentComplete = FullyComplete;
+    }
+
+    private void TogglePerson(int personId, ChangeEventArgs e)
+    {
+        Model.AssigneeIds.Remove(personId);
+        if (e.Value is true)
+            Model.AssigneeIds.Add(personId);
+        Model.AssigneeIds.Sort();
+    }
+
+    private async Task SubmitAsync()
+    {
+        _errors = RequestValidation.Errors(Model, IsParent ? ParentHiddenFields : []);
+        if (_errors.Count == 0)
+            await OnSubmit.InvokeAsync();
+    }
+}
