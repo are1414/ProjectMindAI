@@ -341,4 +341,75 @@ public class ProjectCommentServiceTests : ServiceTestBase
         Assert.Equal(AnalysisCommentStatus.NotConfigured, result.Status);
         Assert.Null(result.LogId);
     }
+
+    [Fact]
+    public async Task Comment_history_lists_saved_comments_newest_first_and_marks_ones_from_older_data_as_stale()
+    {
+        var status = await SeedStatusAsync(Nov4);
+        var n = 0;
+        var model = new ScriptedJsonModel(_ => Comment($"Yorum {++n}", [], []));
+        var service = NewService(model);
+        await service.GenerateProjectCommentAsync(status, _ct);                                   // Yorum 1 (4 Kasım verisi)
+        await service.GenerateProjectCommentAsync(status, _ct);                                   // Yorum 2 (4 Kasım verisi)
+        await NewService(new ScriptedJsonModel(_ => "{}")).GenerateProjectCommentAsync(status, _ct);  // şemasız: geçmişe girmez
+
+        var nextDay = await NewStatusService(Nov4.AddDays(1)).GetAsync(status.Overview.Project.Id, _ct);
+        await service.GenerateProjectCommentAsync(nextDay, _ct);                                  // Yorum 3 (5 Kasım verisi)
+
+        // Ölçüm koşusu yorumu kullanıcı geçmişine girmez (D31).
+        await NewService(new ScriptedJsonModel(_ => Comment("Ölçüm yorumu", [], []))).GenerateProjectCommentAsync(nextDay, _ct);
+        var run = new ProjectMind.Domain.Entities.EvaluationRun
+        {
+            TaskSetVersion = "eval-v1", Providers = "scripted-json", Repeats = 1, StartedAt = DateTime.UtcNow
+        };
+        Db.EvaluationRuns.Add(run);
+        await Db.SaveChangesAsync(_ct);
+        var evaluationLog = await Db.AiAnalysisLogs.OrderByDescending(l => l.Id).FirstAsync(_ct);
+        evaluationLog.EvaluationRunId = run.Id;
+        await Db.SaveChangesAsync(_ct);
+        Db.ChangeTracker.Clear();
+        var calls = model.Requests.Count;
+
+        var today = await service.GetProjectCommentHistoryAsync(nextDay, _ct);
+
+        Assert.Equal(calls, model.Requests.Count);                                                 // LLM çağrılmaz
+        Assert.Equal(["Yorum 3", "Yorum 2", "Yorum 1"], today.Select(h => h.Comment!.Summary));
+        Assert.Equal([false, true, true], today.Select(h => h.IsStale));
+        Assert.All(today, h => Assert.True(h.FromCache && h.Status == AnalysisCommentStatus.Ready && h.LogId is not null));
+
+        // Aynı geçmiş 4 Kasım verisiyle bakıldığında: ilk iki yorum güncel, 5 Kasım yorumu eski.
+        var before = await service.GetProjectCommentHistoryAsync(status, _ct);
+        Assert.Equal([true, false, false], before.Select(h => h.IsStale));
+    }
+
+    [Fact]
+    public async Task Comment_history_is_limited_to_the_newest_items()
+    {
+        var status = await SeedStatusAsync(Nov4);
+        var n = 0;
+        var service = NewService(new ScriptedJsonModel(_ => Comment($"Yorum {++n}", [], [])));
+        for (var i = 0; i < ProjectCommentService.MaxHistoryItems + 2; i++)
+            await service.GenerateProjectCommentAsync(status, _ct);
+
+        var history = await service.GetProjectCommentHistoryAsync(status, _ct);
+
+        Assert.Equal(ProjectCommentService.MaxHistoryItems, history.Count);
+        Assert.Equal($"Yorum {ProjectCommentService.MaxHistoryItems + 2}", history[0].Comment!.Summary);
+        Assert.Equal("Yorum 3", history[^1].Comment!.Summary);
+    }
+
+    [Fact]
+    public async Task Scenario_comment_history_marks_comments_of_a_different_comparison_as_stale()
+    {
+        var (projectId, comparison) = await SeedComparisonAsync();
+        var service = NewService(ScenarioModel());
+        await service.GenerateScenarioCommentAsync(projectId, comparison, _ct);
+
+        var same = await service.GetScenarioCommentHistoryAsync(projectId, comparison, _ct);
+        var onlyFirstScenario = comparison with { Scenarios = comparison.Scenarios.Take(1).ToList() };
+        var other = await service.GetScenarioCommentHistoryAsync(projectId, onlyFirstScenario, _ct);
+
+        Assert.False(Assert.Single(same).IsStale);
+        Assert.True(Assert.Single(other).IsStale);
+    }
 }

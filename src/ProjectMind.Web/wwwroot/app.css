@@ -328,6 +328,12 @@ h1:focus { outline: none; }
 .ai-comment ul { margin: 0; padding-left: 1.2rem; line-height: 1.5; }
 .ai-comment-summary { margin: .5rem 0 0; line-height: 1.55; }
 .ai-comment-warning { margin: .5rem 0; padding: .4rem .6rem; background: #fffbeb; color: var(--text); border-left: 3px solid var(--warning); border-radius: 6px; font-size: .88rem; }
+.ai-comment-history { margin-top: .75rem; border-top: 1px solid var(--border); padding-top: .5rem; }
+.ai-comment-history summary { cursor: pointer; color: var(--muted); font-size: .85rem; font-weight: 600; }
+.ai-comment .ai-comment-history ul { list-style: none; padding: 0; margin: .5rem 0 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: .35rem; }
+.ai-comment-history li { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; min-width: 0; padding: .35rem .5rem; border-radius: 6px; font-size: .85rem; }
+.ai-comment-history li.active { background: var(--bg); }
+.ai-comment-history .history-summary { flex-basis: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Değerlendirme (Faz 9) */
 .eval-section { margin: 1.25rem 0 1.75rem; }

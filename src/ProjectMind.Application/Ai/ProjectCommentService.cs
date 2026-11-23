@@ -34,7 +34,8 @@ public sealed record AnalysisCommentResult(
     bool FromCache = false,
     int? LogId = null,
     bool? Helpful = null,
-    int? ClarityRating = null);
+    int? ClarityRating = null,
+    bool IsStale = false);   // kayıtlı yorum, bugünkü girdiden (veri, senaryo veya sağlayıcı) farklı bir girdiyle üretildi
 
 /// <summary>Yorum kartı geri bildirimi: "Bu açıklama anlaşılır mıydı?" (Evet/Hayır) + isteğe bağlı 1–5 puan (RQ4).</summary>
 public sealed record CommentRating(bool Helpful, int? ClarityRating = null)
@@ -48,7 +49,8 @@ public sealed record CommentRating(bool Helpful, int? ClarityRating = null)
 /// araçların ürettiği deterministik JSON'dur (<see cref="AnalysisPayloads"/>); cevap JSON şemasıyla istenir ve C#'ta
 /// doğrulanır, geçersizse gösterilmez. Yorumdaki her sayı NumberGuard ile yalnız bu girdiye karşı kontrol edilir.
 /// Yorum yalnız istek üzerine üretilir; her çağrı <see cref="AiAnalysisLog"/>'a yazılır ve girdi değişmediyse son
-/// başarılı yorum yeniden gösterilir. Yorum veriyi değiştirmez.
+/// başarılı yorum yeniden gösterilir. Önceki yorumlar (geçmiş) LLM çağrılmadan kayıttan okunur; girdisi bugünkünden
+/// farklı olanlar "eski" diye işaretlenir. Yorum veriyi değiştirmez.
 /// </summary>
 public sealed class ProjectCommentService(IAppDbContext db, IChatModel model, Evaluation.EvaluationRunContext? evaluation = null)
 {
@@ -70,6 +72,21 @@ public sealed class ProjectCommentService(IAppDbContext db, IChatModel model, Ev
     public async Task<AnalysisCommentResult> GenerateScenarioCommentAsync(int projectId, WhatIfComparison comparison, CancellationToken ct) =>
         await GenerateAsync(projectId, AiAnalysisKind.ScenarioComment, ChatPrompts.ScenarioCommentSystem,
             await ScenarioInputAsync(projectId, comparison, ct), ct);
+
+    /// <summary>En fazla bu kadar eski yorum listelenir (yorum geçmişi).</summary>
+    public const int MaxHistoryItems = 20;
+
+    /// <summary>
+    /// Projenin durum yorumu geçmişi, en yeni önce. Bugünkü durum verisinden farklı girdiyle üretilenler
+    /// <see cref="AnalysisCommentResult.IsStale"/> ile işaretlenir. LLM çağrılmaz.
+    /// </summary>
+    public Task<IReadOnlyList<AnalysisCommentResult>> GetProjectCommentHistoryAsync(ProjectStatusReport report, CancellationToken ct) =>
+        HistoryAsync(report.Overview.Project.Id, AiAnalysisKind.ProjectComment, ProjectInput(report), ct);
+
+    /// <summary>Projenin senaryo yorumu geçmişi, en yeni önce; bu karşılaştırmadan farklı girdiler eski sayılır. LLM çağrılmaz.</summary>
+    public async Task<IReadOnlyList<AnalysisCommentResult>> GetScenarioCommentHistoryAsync(
+        int projectId, WhatIfComparison comparison, CancellationToken ct) =>
+        await HistoryAsync(projectId, AiAnalysisKind.ScenarioComment, await ScenarioInputAsync(projectId, comparison, ct), ct);
 
     private static string ProjectInput(ProjectStatusReport report) =>
         JsonSerializer.Serialize(AnalysisPayloads.ProjectStatus(report), AiJson.Options);
@@ -98,9 +115,28 @@ public sealed class ProjectCommentService(IAppDbContext db, IChatModel model, Ev
                         && l.Outcome == AiAnalysisOutcome.Success && l.ResultJson != null && l.EvaluationRunId == null)
             .OrderByDescending(l => l.Id)
             .FirstOrDefaultAsync(ct);
-        if (log is null)
-            return null;
+        return log is null ? null : FromLog(log, isStale: false);
+    }
 
+    /// <summary>Başarılı yorum kayıtları (ölçüm koşuları hariç), en yeni önce; girdi özeti farklı olanlar eski sayılır.</summary>
+    private async Task<IReadOnlyList<AnalysisCommentResult>> HistoryAsync(int projectId, AiAnalysisKind kind, string input, CancellationToken ct)
+    {
+        var hash = InputHash(kind, input, model.ProviderKey);
+        var logs = await db.AiAnalysisLogs.AsNoTracking()
+            .Where(l => l.ProjectId == projectId && l.Kind == kind
+                        && l.Outcome == AiAnalysisOutcome.Success && l.ResultJson != null && l.EvaluationRunId == null)
+            .OrderByDescending(l => l.Id)
+            .Take(MaxHistoryItems)
+            .ToListAsync(ct);
+        return logs
+            .Select(l => FromLog(l, isStale: l.InputHash != hash))
+            .OfType<AnalysisCommentResult>()
+            .ToList();
+    }
+
+    /// <summary>Kayıttaki yorumu yeniden gösterilecek sonuca çevirir; şemaya artık uymayan kayıt atlanır (null).</summary>
+    private static AnalysisCommentResult? FromLog(AiAnalysisLog log, bool isStale)
+    {
         var comment = AnalysisCommentSchema.TryParse(log.ResultJson, out _);
         if (comment is null)
             return null;
@@ -108,7 +144,7 @@ public sealed class ProjectCommentService(IAppDbContext db, IChatModel model, Ev
             ? []
             : JsonSerializer.Deserialize<List<string>>(log.UnverifiedNumbers) ?? [];
         return new AnalysisCommentResult(AnalysisCommentStatus.Ready, comment, unverified, null, log.Model, log.CreatedAt, FromCache: true,
-            LogId: log.Id, Helpful: log.Helpful, ClarityRating: log.ClarityRating);
+            LogId: log.Id, Helpful: log.Helpful, ClarityRating: log.ClarityRating, IsStale: isStale);
     }
 
     private async Task<AnalysisCommentResult> GenerateAsync(

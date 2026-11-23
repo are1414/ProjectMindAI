@@ -122,6 +122,8 @@
   saat alamayan üye planda 0 saatle görünür ve uyarı verilir; kullanım kılavuzunun atama bölümleri güncellendi (D32)
 - [x] (Kullanıcı isteği, 2026-11-15) Elle yönetim: proje oluştur / düzenle, iş ekle / alt iş / düzenle (durum, harcanan
   saat dahil) / sil, kişi ekle / düzenle / sil, bağımlılık ekle / kaldır — sohbetsiz, açılır pencere formlarıyla (D33)
+- [x] (Kullanıcı isteği, 2026-11-23) AI yorumu geçmişi: kayıtlı yorum varsa buton önce **Son yorumu göster** (LLM yok),
+  sonra **Yeni yorum al**; Durum ve What-if kartında "Yorum geçmişi" listesi, eski veriye göre üretilen yorumda uyarı (D34)
 
 ### FAZ 10 — Rapor ve sunum
 - [ ] Rapor bölümleri, sunum, demo videosu

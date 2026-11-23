@@ -128,7 +128,7 @@
             </table>
         </div>
 
-        <AiCommentCard Result="_comment" Busy="_commentBusy" OnGenerate="GenerateCommentAsync"
+        <AiCommentCard Result="_comment" History="_commentHistory" Busy="_commentBusy" OnGenerate="GenerateCommentAsync"
                        Hint="Senaryo farklarının (P80 bitiş, hedefe yetişme olasılığı, maliyet) sade Türkçe açıklaması için butona basın." />
 
         var chart = BuildChart(all);
@@ -209,6 +209,7 @@
     private bool _busy;
     private int? _hover;
     private AnalysisCommentResult? _comment;
+    private IReadOnlyList<AnalysisCommentResult> _commentHistory = [];
     private bool _commentBusy;
 
     private sealed class ScenarioDraft
@@ -250,11 +251,10 @@
         {
             var scenarios = _drafts.Select(d => new WhatIfScenario(d.Name, d.Changes.Select(c => c.ToChange()).ToList())).ToList();
             _comment = null;
+            _commentHistory = [];
             _result = await Scope.RunAsync<WhatIfService, WhatIfComparison>(s => s.CompareAsync(Overview.Project.Id, scenarios, CancellationToken.None));
-            var result = _result;
-            // Aynı karşılaştırma daha önce yorumlandıysa (girdi aynı) kaydedilen yorum gösterilir; LLM çağrılmaz.
-            _comment = await Scope.RunAsync<ProjectCommentService, AnalysisCommentResult?>(c =>
-                c.FindScenarioCommentAsync(Overview.Project.Id, result, CancellationToken.None));
+            // Kayıtlı senaryo yorumları okunur (LLM çağrılmaz); aynı karşılaştırma daha önce yorumlandıysa o yorum gösterilir.
+            await LoadCommentHistoryAsync(_result);
         }
         catch (BusinessRuleException ex)
         {
@@ -266,6 +266,10 @@
         }
     }
 
+    private async Task LoadCommentHistoryAsync(WhatIfComparison comparison) =>
+        _commentHistory = await Scope.RunAsync<ProjectCommentService, IReadOnlyList<AnalysisCommentResult>>(c =>
+            c.GetScenarioCommentHistoryAsync(Overview.Project.Id, comparison, CancellationToken.None));
+
     private async Task GenerateCommentAsync()
     {
         if (_result is not { } result)
@@ -275,6 +279,7 @@
         {
             _comment = await Scope.RunAsync<ProjectCommentService, AnalysisCommentResult>(c =>
                 c.GenerateScenarioCommentAsync(Overview.Project.Id, result, CancellationToken.None));
+            await LoadCommentHistoryAsync(result);
         }
         catch (BusinessRuleException ex)
         {

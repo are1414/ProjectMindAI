@@ -1,29 +1,46 @@
-@* AI analiz yorumu kartı (Durum ve What-if sekmeleri). Sadece gösterim: üretim/önbellek ProjectCommentService'te.
-   "Anlaşılır mıydı?" geri bildirimi ProjectCommentService.RateAsync ile yorumun AiAnalysisLog kaydına yazılır (RQ4). *@
+@* AI analiz yorumu kartı (Durum ve What-if sekmeleri). Sadece gösterim: üretim/önbellek/geçmiş ProjectCommentService'te.
+   Buton: kayıtlı yorum varsa önce "Son yorumu göster" (LLM çağrılmaz), ardından "Yeni yorum al" (LLM). Geçmiş listesinden
+   önceki yorumlar açılabilir; bugünkü veriden farklı girdiyle üretilenler "eski veri" uyarısıyla gösterilir.
+   "Anlaşılır mıydı?" geri bildirimi ProjectCommentService.RateAsync ile gösterilen yorumun AiAnalysisLog kaydına yazılır (RQ4). *@
 @inject AppScope Scope
 
 <section class="ai-comment" aria-live="polite">
     <div class="section-head">
         <h2>AI yorumu</h2>
-        <button class="btn btn-sm" disabled="@Busy" @onclick="OnGenerate">
-            @(Busy ? "Yorum hazırlanıyor…" : Result?.Status == AnalysisCommentStatus.Ready ? "Yeniden üret" : "AI yorumu üret")
-        </button>
+        @if (ShowsLatestFirst)
+        {
+            <button class="btn btn-sm" disabled="@Busy" @onclick="ShowLatest"
+                    title="Kaydedilmiş son yorumu açar; AI çağrılmaz.">Son yorumu göster</button>
+        }
+        else
+        {
+            <button class="btn btn-sm" disabled="@Busy" @onclick="OnGenerate">
+                @(Busy ? "Yorum hazırlanıyor…" : History.Count > 0 || Shown?.Comment is not null ? "Yeni yorum al" : "AI yorumu üret")
+            </button>
+        }
     </div>
 
-    @if (Result is null)
+    @if (Shown is null)
     {
         <p class="muted small">@Hint</p>
     }
-    else if (Result.Status == AnalysisCommentStatus.NotConfigured)
+    else if (Shown.Status == AnalysisCommentStatus.NotConfigured)
     {
-        <div class="ai-comment-warning">▲ @Result.Message</div>
+        <div class="ai-comment-warning">▲ @Shown.Message</div>
     }
-    else if (Result.Status == AnalysisCommentStatus.Failed)
+    else if (Shown.Status == AnalysisCommentStatus.Failed)
     {
-        <div class="inline-error">@Result.Message</div>
+        <div class="inline-error">@Shown.Message</div>
     }
-    else if (Result.Comment is { } c)
+    else if (Shown.Comment is { } c)
     {
+        @if (Shown.IsStale)
+        {
+            <div class="ai-comment-warning">
+                ▲ Bu yorum @Date(Shown.CreatedAt) tarihindeki verilere göre üretildi; veriler o zamandan beri değişti.
+                Güncel yorum için "Yeni yorum al"a basın.
+            </div>
+        }
         <p class="ai-comment-summary">@c.Summary</p>
         @if (c.KeyFindings.Count > 0)
         {
@@ -40,17 +57,17 @@
             <h3>Varsayımlar ve sınırlar</h3>
             <ul class="muted">@foreach (var x in c.Caveats) { <li>@x</li> }</ul>
         }
-        @if (Result.UnverifiedNumbers is { Count: > 0 } unverified)
+        @if (Shown.UnverifiedNumbers is { Count: > 0 } unverified)
         {
             <div class="ai-comment-warning">
                 ▲ Doğrulanamayan sayılar: @string.Join(", ", unverified) — bu değerler sistem verisinde yok, kontrol edin.
             </div>
         }
         <p class="muted small">
-            @Result.Model@(Result.CreatedAt is { } at ? $" · {at.ToLocalTime():dd.MM.yyyy HH:mm}" : "")@(Result.FromCache ? " · kaydedilmiş yorum (veri değişmedi)" : "")
+            @Shown.Model@(Shown.CreatedAt is { } at ? $" · {Date(at)}" : "")@(Shown.FromCache ? Shown.IsStale ? " · kaydedilmiş yorum" : " · kaydedilmiş yorum (veri değişmedi)" : "")
             · Sayılar sistem hesaplarından alınır; yorum veriyi değiştirmez.
         </p>
-        @if (Result.LogId is not null)
+        @if (Shown.LogId is not null)
         {
             <div class="comment-rating">
                 <span>Bu açıklama anlaşılır mıydı?</span>
@@ -74,33 +91,103 @@
             }
         }
     }
+
+    @if (History.Count > 0)
+    {
+        <details class="ai-comment-history">
+            <summary>Yorum geçmişi (@History.Count)</summary>
+            <ul>
+                @foreach (var h in History)
+                {
+                    var item = h;
+                    var active = item.LogId is not null && item.LogId == Shown?.LogId;
+                    <li class="@(active ? "active" : "")">
+                        <button class="btn btn-sm" disabled="@active" @onclick="() => Select(item)">@(active ? "Gösteriliyor" : "Göster")</button>
+                        <span>@Date(item.CreatedAt) · @item.Model</span>
+                        <span class="badge">@(item.IsStale ? "eski veri" : "güncel veri")</span>
+                        <span class="muted small history-summary">@item.Comment?.Summary</span>
+                    </li>
+                }
+            </ul>
+        </details>
+    }
 </section>
 
 @code {
+    /// <summary>Son üretme denemesinin sonucu (yeni yorum, hata veya Mock uyarısı); yoksa null.</summary>
     [Parameter] public AnalysisCommentResult? Result { get; set; }
+
+    /// <summary>Kayıtlı başarılı yorumlar, en yeni önce (ProjectCommentService geçmiş sorgusu).</summary>
+    [Parameter] public IReadOnlyList<AnalysisCommentResult> History { get; set; } = [];
+
     [Parameter] public bool Busy { get; set; }
     [Parameter] public EventCallback OnGenerate { get; set; }
     [Parameter] public string Hint { get; set; } = "Sonuçların sade Türkçe açıklaması için butona basın.";
 
-    private AnalysisCommentResult? _ratingFor;
+    private AnalysisCommentResult? _lastResult;
+    private IReadOnlyList<AnalysisCommentResult>? _lastHistory;
+    private AnalysisCommentResult? _selected;          // "Son yorumu göster" veya geçmişten seçilen
+    private int? _ratingLogId;
+    private readonly Dictionary<int, (bool? Helpful, int? Clarity)> _savedRatings = [];
     private bool? _helpful;
     private int? _clarity;
     private bool _rating;
     private string? _rateError;
 
+    /// <summary>
+    /// Gösterilen yorum: seçilen geçmiş kaydı, yoksa son üretme sonucu, yoksa girdisi bugünkü veriyle aynı olan en yeni
+    /// kayıt (veri değişmediyse son yorum kendiliğinden açılır).
+    /// </summary>
+    private AnalysisCommentResult? Shown => _selected ?? Result ?? History.FirstOrDefault(h => !h.IsStale);
+
+    /// <summary>Ekranda yorum yokken kayıtlı yorum varsa buton önce onu açar (AI çağrılmaz).</summary>
+    private bool ShowsLatestFirst => !Busy && Shown is null && History.Count > 0;
+
     protected override void OnParametersSet()
     {
-        if (ReferenceEquals(_ratingFor, Result))
+        // Yeni bir üretme sonucu geldiyse (yorum/hata) seçili geçmiş kaydı yerine o gösterilir.
+        if (!ReferenceEquals(_lastResult, Result))
+        {
+            _lastResult = Result;
+            if (Result is not null)
+                _selected = null;
+        }
+        // Geçmiş yeniden yüklendiyse (veri değişti, yeni senaryo) seçili kayıt güncel haliyle eşlenir ("eski veri" bilgisi dahil).
+        if (!ReferenceEquals(_lastHistory, History))
+        {
+            _lastHistory = History;
+            if (_selected?.LogId is { } id)
+                _selected = History.FirstOrDefault(h => h.LogId == id);
+        }
+        SyncRating();
+    }
+
+    private void ShowLatest() => Select(History[0]);
+
+    private void Select(AnalysisCommentResult item)
+    {
+        _selected = item;
+        SyncRating();
+    }
+
+    /// <summary>Puan düğmeleri gösterilen yorumun kaydını izler; bu oturumda verilen puan kayıttaki eski değerin önüne geçer.</summary>
+    private void SyncRating()
+    {
+        var shown = Shown;
+        if (shown?.LogId == _ratingLogId)
             return;
-        _ratingFor = Result;
-        _helpful = Result?.Helpful;
-        _clarity = Result?.ClarityRating;
+        _ratingLogId = shown?.LogId;
+        (_helpful, _clarity) = shown?.LogId is { } id && _savedRatings.TryGetValue(id, out var saved)
+            ? saved
+            : (shown?.Helpful, shown?.ClarityRating);
         _rateError = null;
     }
 
+    private static string Date(DateTime? utc) => utc is { } at ? at.ToLocalTime().ToString("dd.MM.yyyy HH:mm") : "";
+
     private async Task RateAsync(bool helpful, int? clarity)
     {
-        if (Result?.LogId is not { } logId)
+        if (Shown?.LogId is not { } logId)
             return;
         _rating = true;
         _rateError = null;
@@ -110,6 +197,7 @@
                 s.RateAsync(logId, new CommentRating(helpful, clarity), CancellationToken.None));
             _helpful = saved.Helpful;
             _clarity = saved.ClarityRating;
+            _savedRatings[logId] = (saved.Helpful, saved.ClarityRating);
         }
         catch (Exception ex) when (ex is BusinessRuleException or NotFoundException)
         {

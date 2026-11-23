@@ -4,6 +4,47 @@ Her oturum sonunda en üste yeni kayıt eklenir. Format: yapılanlar · varsayı
 
 ---
 
+## 2026-11-23 (30) — AI yorumu geçmişi ve "Son yorumu göster"
+
+Kapsam: Kullanıcı isteği ("butona basınca önceki son yorum gelsin, geçmiş tutulsun, tekrar basınca yeni yorum alsın");
+aktif faz (Faz 9) dışında, PLAN'a ayrı madde. Karar: D34 (D25'i genişletir).
+
+- **Önceki durum**: Kart açılınca yalnız girdisi (durum verisi) birebir aynı olan son yorum gösteriliyordu. Durum her gün
+  yeniden hesaplandığı için çoğu zaman hiçbir yorum görünmüyordu ve her basış yeni bir LLM çağrısıydı. Eski yorumlar
+  `AiAnalysisLog`'da duruyordu ama arayüzde yoktu.
+- **Application**: `ProjectCommentService.GetProjectCommentHistoryAsync` / `GetScenarioCommentHistoryAsync`. Başarılı
+  kayıtları okur (ölçüm koşuları hariç, en yeni önce, en fazla 20) ve LLM çağırmaz. `AnalysisCommentResult.IsStale`:
+  girdi özeti bugünkünden farklı. `Find…` metotları aynı eşlemeyi (`FromLog`) kullanır.
+- **Arayüz**:
+  - `AiCommentCard` geçmiş parametresi alır.
+    - Buton: kayıt var ama ekranda yorum yoksa **Son yorumu göster**; yorum ekrandayken **Yeni yorum al**.
+    - "Yorum geçmişi (N)" açılır listesi (tarih · model · güncel/eski veri · özet).
+    - Eski yorumda uyarı.
+    - Puan, gösterilen yorumun kaydına yazılır.
+  - `StatusPanel` ve `WhatIfPanel` açılışta ve her yeni yorumdan sonra geçmişi yükler.
+  - `app.css`: geçmiş listesi stili (uzun özet tek satırda "…" ile kesilir).
+- **Testler (+3)**: sıra ve "eski" işareti (şemasız ve ölçüm koşusu kaydı hariç, LLM çağrısı yok), 20 kayıt sınırı,
+  farklı senaryo karşılaştırmasında eski işareti.
+- **Test**: `dotnet build` 0 uyarı / 0 hata, `dotnet test` 335/335 yeşil (ayrı `--artifacts-path`; VS uygulaması çıktıyı
+  kilitliyor). Yeni derleme 5199 portunda açılıp `/chat/2` Durum sekmesinde headless Edge ile denendi:
+  - Güncel yorum kendiliğinden açıldı ve buton "Yeni yorum al" oldu.
+  - Geçmişte 3 yorum listelendi.
+  - Eski yorum "Göster" ile uyarısıyla açıldı.
+  - Özet taşması bulunup düzeltildi.
+  - Yeni yorum üretilmedi (LLM çağrısı yapılmadı).
+- **Paket / DB**: yeni paket yok, şema ve migration değişmedi.
+
+**Varsayımlar**:
+- "Son yorum" = projenin o türdeki en yeni başarılı yorumu. Sağlayıcıdan bağımsızdır; model adı satırda yazar.
+- Senaryo yorumunda farklı bir karşılaştırmanın yorumu da "eski" olarak listelenir.
+
+**Bilinen sorunlar**: "Son yorumu göster" yolu (ekranda güncel yorum yokken) tarayıcıda denenmedi; denenen projede en yeni
+yorum güncel veriye aitti. Mantığı basit, servis tarafı testli.
+
+**Sıradaki adım**: Uygulamayı yeniden başlatıp kartı denemek; Faz 9 açık maddeleri.
+
+---
+
 ## 2026-11-15 (29) — Elle yönetim: proje, iş, kişi ve bağımlılık formları
 
 Kapsam: Kullanıcı isteği ("yalnız AI değil elle de yönetim olsun"); aktif faz (Faz 9) dışında, kullanıcı onayıyla PLAN'a
